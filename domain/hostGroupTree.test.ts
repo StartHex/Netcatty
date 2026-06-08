@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 
 import { buildHostGroupTree } from './hostGroupTree';
 import type { Host } from '../types';
@@ -24,9 +25,9 @@ describe('buildHostGroupTree', () => {
       ['prod/web'],
     );
 
-    expect(groupTree).toHaveLength(1);
-    expect(groupTree[0].name).toBe('prod');
-    expect(ungroupedHosts).toHaveLength(1);
-    expect(ungroupedHosts[0].id).toBe('3');
+    assert.equal(groupTree.length, 1);
+    assert.equal(groupTree[0].name, 'prod');
+    assert.equal(ungroupedHosts.length, 1);
+    assert.equal(ungroupedHosts[0].id, '3');
   });
 });

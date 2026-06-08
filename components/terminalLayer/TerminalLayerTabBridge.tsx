@@ -110,6 +110,25 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     return sameEndpoint ? session.id : null;
   }, [activeSession?.id, activeWorkspace, focusedSessionId, isSftpOpenForCurrentTab, sessions, sessionHostsMap, sftpActiveHost]);
 
+  const linkedTerminalSessionIdForSftp = useMemo((): string | null => {
+    if (!isSftpOpenForCurrentTab) return null;
+    if (activeTerminalSessionIdForSftp) return activeTerminalSessionIdForSftp;
+    return activeWorkspace ? (focusedSessionId ?? null) : (activeSession?.id ?? null);
+  }, [
+    activeSession?.id,
+    activeTerminalSessionIdForSftp,
+    activeWorkspace,
+    focusedSessionId,
+    isSftpOpenForCurrentTab,
+  ]);
+
+  const activeTerminalCwd = useMemo(() => {
+    if (!linkedTerminalSessionIdForSftp) return null;
+    return s.terminalRendererCwdBySessionRef.current.get(linkedTerminalSessionIdForSftp) ?? null;
+    // terminalCwdRevision bumps when any session cwd changes so linked SFTP can react.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedTerminalSessionIdForSftp, s.terminalCwdRevision]);
+
   const themeState = useTerminalThemePanelState({
     accentMode: s.accentMode,
     activeSession,
@@ -224,6 +243,7 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     activeResizers,
     activeSidePanelTab,
     activeTabId,
+    activeTerminalCwd,
     activeTerminalSessionIdForSftp,
     activeWorkspace,
     AIChatPanelsHost: s.AIChatPanelsHost,
@@ -335,11 +355,13 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     setIsComposeBarOpen: s.setIsComposeBarOpen,
     setResizing,
     setSidePanelPosition: s.setSidePanelPosition,
+    setSftpFollowTerminalCwd: s.setSftpFollowTerminalCwd,
     sftpActiveHost,
     sftpHostForTab,
     sftpAutoSync: s.sftpAutoSync,
     sftpDefaultViewMode: s.sftpDefaultViewMode,
     sftpDoubleClickBehavior: s.sftpDoubleClickBehavior,
+    sftpFollowTerminalCwd: s.sftpFollowTerminalCwd,
     sftpInitialLocationForTab: s.sftpInitialLocationForTab,
     sftpPendingUploadsForTab: s.sftpPendingUploadsForTab,
     sftpShowHiddenFiles: s.sftpShowHiddenFiles,
@@ -382,6 +404,7 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     activeResizers,
     activeSidePanelTab,
     activeTabId,
+    activeTerminalCwd,
     activeTerminalSessionIdForSftp,
     activeWorkspace,
     aiContextsByTabId,

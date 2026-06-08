@@ -38,6 +38,7 @@ function TerminalLayerSidePanelTabBody({ ctx }: { ctx: SidePanelContext }) {
   const activeSidePanelTab = activeTabId ? sidePanelOpenTabs.get(activeTabId) ?? null : null;
 
   const {
+    activeTerminalCwd,
     activeTerminalSessionIdForSftp,
     activeWorkspace,
     AIChatPanelsHost,
@@ -91,12 +92,14 @@ function TerminalLayerSidePanelTabBody({ ctx }: { ctx: SidePanelContext }) {
     setEditorWordWrap,
     setSidePanelPosition,
     setSidePanelWidth,
+    setSftpFollowTerminalCwd,
     persistSidePanelWidth,
     sftpActiveHost,
     sftpHostForTab,
     sftpAutoSync,
     sftpDefaultViewMode,
     sftpDoubleClickBehavior,
+    sftpFollowTerminalCwd,
     sftpInitialLocationForTab,
     sftpPendingUploadsForTab,
     sftpShowHiddenFiles,
@@ -381,6 +384,9 @@ function TerminalLayerSidePanelTabBody({ ctx }: { ctx: SidePanelContext }) {
                   editorWordWrap={editorWordWrap}
                   setEditorWordWrap={setEditorWordWrap}
                   onGetTerminalCwd={getTerminalCwd}
+                  activeTerminalCwd={activeTerminalCwd}
+                  sftpFollowTerminalCwd={sftpFollowTerminalCwd}
+                  onSftpFollowTerminalCwdChange={setSftpFollowTerminalCwd}
                   onRequestTerminalFocus={refocusActiveTerminalSession}
                   terminalSettings={terminalSettings}
                 />
