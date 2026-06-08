@@ -249,6 +249,7 @@ export function useSettingsIpcSync({
     setSessionLogsTimestampsEnabled,
     setSshDebugLogsEnabled,
     setSftpAutoOpenSidebar,
+    setSftpFollowTerminalCwd,
     setSftpDefaultViewMode,
     setSftpTransferConcurrencyState,
     setTerminalFontFamilyId,

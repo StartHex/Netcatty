@@ -1,5 +1,5 @@
 import { FolderTree, MessageSquare, PanelLeft, PanelRight, Palette, X, Zap } from 'lucide-react';
-import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useActiveTabId } from '../application/state/activeTabStore';
 import { canReuseTerminalConnection } from '../application/state/terminalConnectionReuse';
 import { resolveTerminalSessionExitIntent, type TerminalSessionExitEvent } from '../application/state/resolveTerminalSessionExitIntent';
@@ -47,7 +47,8 @@ import { useTerminalFocusSidebar } from './terminalLayer/useTerminalFocusSidebar
 import { useTerminalWorkspaceLayout } from './terminalLayer/useTerminalWorkspaceLayout';
 import { useTerminalThemePanelState } from './terminalLayer/useTerminalThemePanelState';
 import { useTerminalAiContexts } from './terminalLayer/useTerminalAiContexts';
-import { resolvePreferredTerminalCwd } from './terminal/sftpCwd';
+import { resolvePreferredTerminalCwd, scheduleBackendCwdProbeAfterCommand } from './terminal/sftpCwd';
+import { classifyDistroId, shouldProbeSessionCwd } from '../domain/host';
 
 import {
   AIChatPanelsHost,
@@ -136,7 +137,9 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   const isSftpActive = activeTabId === 'sftp';
   const isVisible = (!isVaultActive && !isSftpActive) || !!draggingSessionId;
   const terminalRendererCwdBySessionRef = useRef<Map<string, string>>(new Map());
+  const terminalCwdRevisionRef = useRef(0);
   const [terminalCwdRevision, setTerminalCwdRevision] = useState(0);
+  const cwdProbeCancelersRef = useRef<Map<string, () => void>>(new Map());
 
   const handleTerminalCwdChange = useCallback((sessionId: string, cwd: string | null) => {
     if (cwd && cwd.trim().length > 0) {
@@ -144,7 +147,8 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     } else {
       terminalRendererCwdBySessionRef.current.delete(sessionId);
     }
-    setTerminalCwdRevision((revision) => revision + 1);
+    terminalCwdRevisionRef.current += 1;
+    setTerminalCwdRevision(terminalCwdRevisionRef.current);
   }, []);
 
   // Stable callback references for Terminal components
@@ -154,6 +158,8 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
 
   const sftpAutoOpenSidebarRef = useRef(sftpAutoOpenSidebar);
   sftpAutoOpenSidebarRef.current = sftpAutoOpenSidebar;
+  const sftpFollowTerminalCwdRef = useRef(sftpFollowTerminalCwd);
+  sftpFollowTerminalCwdRef.current = sftpFollowTerminalCwd;
 
   const handleStatusChange = useCallback((sessionId: string, status: TerminalSession['status']) => {
     onUpdateSessionStatus(sessionId, status);
@@ -225,10 +231,6 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   const handleAddKnownHost = useCallback((knownHost: KnownHost) => {
     onAddKnownHost?.(knownHost);
   }, [onAddKnownHost]);
-
-  const handleCommandExecuted = useCallback((command: string, hostId: string, hostLabel: string, sessionId: string) => {
-    onCommandExecuted?.(command, hostId, hostLabel, sessionId);
-  }, [onCommandExecuted]);
 
   const handleTerminalDataCapture = useCallback((sessionId: string, data: string) => {
     onTerminalDataCapture?.(sessionId, data);
@@ -608,6 +610,49 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   }, [sessions, sessionHostsMap, hostMap, groupConfigs, proxyProfileIdSet, proxyProfiles]);
   const sessionHostsMapRef = useRef(sessionHostsMap);
   sessionHostsMapRef.current = sessionHostsMap;
+
+  const handleCommandExecuted = useCallback((command: string, hostId: string, hostLabel: string, sessionId: string) => {
+    onCommandExecuted?.(command, hostId, hostLabel, sessionId);
+
+    if (!sftpFollowTerminalCwdRef.current) return;
+
+    const session = sessionsRef.current.find((candidate) => candidate.id === sessionId);
+    if (!session || !canReuseTerminalConnection(session)) return;
+
+    const revisionAtCommand = terminalCwdRevisionRef.current;
+    cwdProbeCancelersRef.current.get(sessionId)?.();
+    const cancelProbe = scheduleBackendCwdProbeAfterCommand({
+      sessionId,
+      cwdRevisionAtCommand: revisionAtCommand,
+      getCwdRevision: () => terminalCwdRevisionRef.current,
+      getSessionPwd: (id) => terminalBackend.getSessionPwd(id),
+      canProbe: async () => {
+        const host = sessionHostsMapRef.current.get(sessionId);
+        if (!host) return false;
+        const detectedDeviceClass = classifyDistroId(host.distro);
+        const isNetworkDevice =
+          host.deviceType === 'network' || detectedDeviceClass === 'network-device';
+        const info = await terminalBackend.getSessionRemoteInfo?.(sessionId);
+        return shouldProbeSessionCwd({
+          isNetworkDevice,
+          remoteSshVersion: info?.remoteSshVersion,
+        });
+      },
+      onProbedCwd: (cwd) => {
+        const existing = terminalRendererCwdBySessionRef.current.get(sessionId);
+        if (existing === cwd) return;
+        handleTerminalCwdChange(sessionId, cwd);
+      },
+    });
+    cwdProbeCancelersRef.current.set(sessionId, cancelProbe);
+  }, [handleTerminalCwdChange, onCommandExecuted, terminalBackend]);
+
+  useEffect(() => () => {
+    for (const cancel of cwdProbeCancelersRef.current.values()) {
+      cancel();
+    }
+    cwdProbeCancelersRef.current.clear();
+  }, []);
   const sessionSudoAutofillPasswordsMap = useMemo(() => {
     const map = new Map<string, string | undefined>();
     for (const session of sessions) {

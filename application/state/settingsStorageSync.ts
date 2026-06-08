@@ -428,6 +428,7 @@ export function useSettingsStorageSync({
     setSessionLogsTimestampsEnabled,
     setSshDebugLogsEnabled,
     setSftpAutoOpenSidebar,
+    setSftpFollowTerminalCwd,
     setSftpAutoSync,
     setSftpDefaultViewMode,
     setSftpDoubleClickBehavior,
