@@ -119,18 +119,52 @@ export function useTerminalWorkspaceLayout({
     return patchWorkspaceSplitSizes(workspace, resizing.splitId, previewSizes);
   }, [resizePreviewDelta, resizing]);
 
+  const workspaceRectsCacheRef = useRef(new Map<string, {
+    root: Workspace['root'];
+    previewKey: string;
+    width: number;
+    height: number;
+    rects: Record<string, WorkspaceRect>;
+  }>());
+
   const workspaceRectsById = useMemo(
       () => {
         const map = new Map<string, Record<string, WorkspaceRect>>();
+        const previewKey = resizing
+          ? `${resizing.workspaceId}:${resizing.splitId}:${resizePreviewDelta}`
+          : 'still';
+        const liveWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+        for (const workspaceId of workspaceRectsCacheRef.current.keys()) {
+          if (!liveWorkspaceIds.has(workspaceId)) {
+            workspaceRectsCacheRef.current.delete(workspaceId);
+          }
+        }
         for (const workspace of workspaces) {
-          map.set(
-            workspace.id,
-            computeWorkspaceRects(workspaceForLayout(workspace), workspaceArea),
-          );
+          const layoutWorkspace = workspaceForLayout(workspace);
+          const cached = workspaceRectsCacheRef.current.get(workspace.id);
+          if (
+            cached
+            && cached.root === layoutWorkspace.root
+            && cached.previewKey === previewKey
+            && cached.width === workspaceArea.width
+            && cached.height === workspaceArea.height
+          ) {
+            map.set(workspace.id, cached.rects);
+            continue;
+          }
+          const rects = computeWorkspaceRects(layoutWorkspace, workspaceArea);
+          workspaceRectsCacheRef.current.set(workspace.id, {
+            root: layoutWorkspace.root,
+            previewKey,
+            width: workspaceArea.width,
+            height: workspaceArea.height,
+            rects,
+          });
+          map.set(workspace.id, rects);
         }
         return map;
       },
-      [computeWorkspaceRects, workspaceArea, workspaceForLayout, workspaces],
+      [computeWorkspaceRects, resizePreviewDelta, resizing, workspaceArea, workspaceForLayout, workspaces],
     );
   
   const activeWorkspaceRects = useMemo<Record<string, WorkspaceRect>>(

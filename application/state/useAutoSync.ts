@@ -109,11 +109,16 @@ interface RemoteVersionCheckOptions {
 
 export const useAutoSync = (config: AutoSyncConfig) => {
   const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const sync = useCloudSync();
   const { onApplyPayload } = config;
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncedDataRef = useRef<string>('');
   const hasCheckedRemoteRef = useRef(false);
+  const inspectFailureToastShownRef = useRef(false);
   /** True once checkRemoteVersion has completed (success or failure). Until
    *  this is set, the debounced auto-sync effect will not fire, preventing
    *  an empty local vault from racing ahead and overwriting a non-empty
@@ -637,14 +642,13 @@ export const useAutoSync = (config: AutoSyncConfig) => {
       }
     } catch (error) {
       console.error('[AutoSync] Failed to check remote version:', error);
-      if (notifyOnFailure) {
-        // Surface a degraded-sync hint to the user rather than silently
-        // opening the auto-sync gate. Auto-sync will still retry on next
-        // data change (see finally block), but without this toast the user
-        // has no visible signal that startup reconciliation failed.
+      if (notifyOnFailure && !inspectFailureToastShownRef.current) {
+        // Surface a degraded-sync hint once per session. Retries and
+        // incidental re-triggers (e.g. effect restarts) must not spam toasts.
+        inspectFailureToastShownRef.current = true;
         notify.error(
-          t('sync.autoSync.inspectFailedMessage'),
-          t('sync.autoSync.inspectFailedTitle'),
+          tRef.current('sync.autoSync.inspectFailedMessage'),
+          tRef.current('sync.autoSync.inspectFailedTitle'),
         );
       }
       // Leave hasCheckedRemoteRef=false so the next startup (or the next
@@ -677,7 +681,14 @@ export const useAutoSync = (config: AutoSyncConfig) => {
     // identity flips (every vault edit produces a fresh `buildPayload`
     // and a fresh AutoSyncConfig literal) cannot re-memoize this
     // callback and restart the retry-timer's exponential backoff.
-  }, [t]);
+    // `t` is read through tRef so locale updates don't rebuild this
+    // callback and re-fire the startup retry effect on unrelated renders.
+  }, []);
+
+  const checkRemoteVersionRef = useRef(checkRemoteVersion);
+  useEffect(() => {
+    checkRemoteVersionRef.current = checkRemoteVersion;
+  }, [checkRemoteVersion]);
   
   // Debounced auto-sync when data changes
   useEffect(() => {
@@ -789,7 +800,10 @@ export const useAutoSync = (config: AutoSyncConfig) => {
     const tick = () => {
       if (cancelled) return;
       void (async () => {
-        await checkRemoteVersion();
+        const notifyOnFailure = attempt === 0;
+        await checkRemoteVersionRef.current(
+          notifyOnFailure ? undefined : { notifyOnFailure: false },
+        );
         if (cancelled || hasCheckedRemoteRef.current) return;
         // Cap retries at ~5 minutes total (30s + 60s + 120s + 240s). A
         // persistent failure beyond that is almost certainly a
@@ -824,7 +838,7 @@ export const useAutoSync = (config: AutoSyncConfig) => {
       cancelled = true;
       if (timerId) clearTimeout(timerId);
     };
-  }, [sync.hasAnyConnectedProvider, sync.isUnlocked, config.startupReady, checkRemoteVersion]);
+  }, [sync.hasAnyConnectedProvider, sync.isUnlocked, config.startupReady]);
 
   const runRuntimeRemoteCheck = useCallback(async (options?: { force?: boolean }) => {
     const now = Date.now();

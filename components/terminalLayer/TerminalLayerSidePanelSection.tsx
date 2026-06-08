@@ -55,6 +55,8 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
     keys,
     mountedAiTabIds,
     mountedSftpTabIds,
+    scriptsMountedTabIds,
+    themeMountedTabIds,
     pendingTerminalSelectionForAI,
     previewedOrVisibleThemeId,
     refocusActiveTerminalSession,
@@ -66,6 +68,7 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
     setSidePanelWidth,
     persistSidePanelWidth,
     sftpActiveHost,
+    sftpHostForTab,
     sftpAutoSync,
     sftpDefaultViewMode,
     sftpDoubleClickBehavior,
@@ -131,7 +134,13 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
     sidePanelWidth,
   ]);
 
-  if (!isSidePanelOpenForCurrentTab && mountedSftpTabIds.length === 0 && mountedAiTabIds.length === 0) {
+  if (
+    !isSidePanelOpenForCurrentTab
+    && mountedSftpTabIds.length === 0
+    && mountedAiTabIds.length === 0
+    && scriptsMountedTabIds.length === 0
+    && themeMountedTabIds.length === 0
+  ) {
     return null;
   }
 
@@ -316,16 +325,23 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
           <div className="flex-1 min-h-0 relative">
             {mountedSftpTabIds.map((tabId: string) => {
               const isVisibleSftpPanel = activeTabId === tabId && activeSidePanelTab === 'sftp';
+              const storedSftpHost = sftpHostForTab.get(tabId) ?? null;
+              const panelActiveHost = isVisibleSftpPanel
+                ? (sftpActiveHost ?? storedSftpHost)
+                : (activeTabId === tabId ? storedSftpHost : null);
               return (
-                <SftpSidePanel
+                <div
                   key={tabId}
+                  className={cn('absolute inset-0 z-10', !isVisibleSftpPanel && 'hidden')}
+                >
+                <SftpSidePanel
                   hosts={effectiveHosts}
                   writableHosts={hosts}
                   keys={keys}
                   identities={identities}
                   updateHosts={updateHosts}
                   sftpDefaultViewMode={sftpDefaultViewMode}
-                  activeHost={isVisibleSftpPanel ? sftpActiveHost : null}
+                  activeHost={panelActiveHost}
                   activeSessionId={isVisibleSftpPanel ? activeTerminalSessionIdForSftp : null}
                   initialLocation={
                     isVisibleSftpPanel
@@ -350,45 +366,60 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
                   onRequestTerminalFocus={refocusActiveTerminalSession}
                   terminalSettings={terminalSettings}
                 />
+                </div>
               );
             })}
 
-            {activeSidePanelTab === 'scripts' && (
-              <div className="absolute inset-0 z-10">
-                <ScriptsSidePanel
-                  snippets={snippets}
-                  packages={snippetPackages}
-                  onSnippetClick={handleSnippetFromPanel}
-                />
-              </div>
-            )}
+            {scriptsMountedTabIds.map((tabId: string) => {
+              const isVisibleScriptsPanel = activeTabId === tabId && activeSidePanelTab === 'scripts';
+              return (
+                <div
+                  key={`scripts-${tabId}`}
+                  className={cn('absolute inset-0 z-10', !isVisibleScriptsPanel && 'hidden')}
+                >
+                  <ScriptsSidePanel
+                    snippets={snippets}
+                    packages={snippetPackages}
+                    onSnippetClick={handleSnippetFromPanel}
+                    isVisible={isVisibleScriptsPanel}
+                  />
+                </div>
+              );
+            })}
 
-            {activeSidePanelTab === 'theme' && (
-              <div className="absolute inset-0 z-10">
-                <ThemeSidePanel
-                  followAppTerminalTheme={followAppTerminalTheme}
-                  currentThemeId={previewedOrVisibleThemeId}
-                  globalThemeId={terminalTheme.id}
-                  currentFontFamilyId={focusedFontFamilyId}
-                  globalFontFamilyId={terminalFontFamilyId}
-                  currentFontSize={focusedFontSize}
-                  currentFontWeight={focusedFontWeight}
-                  canResetTheme={focusedThemeOverridden}
-                  canResetFontFamily={focusedFontFamilyOverridden}
-                  canResetFontSize={focusedFontSizeOverridden}
-                  canResetFontWeight={focusedFontWeightOverridden}
-                  onThemeChange={handleThemeChangeForFocusedSession}
-                  onThemeReset={handleThemeResetForFocusedSession}
-                  onFontFamilyChange={handleFontFamilyChangeForFocusedSession}
-                  onFontFamilyReset={handleFontFamilyResetForFocusedSession}
-                  onFontSizeChange={handleFontSizeChangeForFocusedSession}
-                  onFontSizeReset={handleFontSizeResetForFocusedSession}
-                  onFontWeightChange={handleFontWeightChangeForFocusedSession}
-                  onFontWeightReset={handleFontWeightResetForFocusedSession}
-                  previewColors={resolvedPreviewTheme.colors}
-                />
-              </div>
-            )}
+            {themeMountedTabIds.map((tabId: string) => {
+              const isVisibleThemePanel = activeTabId === tabId && activeSidePanelTab === 'theme';
+              return (
+                <div
+                  key={`theme-${tabId}`}
+                  className={cn('absolute inset-0 z-10', !isVisibleThemePanel && 'hidden')}
+                >
+                  <ThemeSidePanel
+                    followAppTerminalTheme={followAppTerminalTheme}
+                    currentThemeId={previewedOrVisibleThemeId}
+                    globalThemeId={terminalTheme.id}
+                    currentFontFamilyId={focusedFontFamilyId}
+                    globalFontFamilyId={terminalFontFamilyId}
+                    currentFontSize={focusedFontSize}
+                    currentFontWeight={focusedFontWeight}
+                    canResetTheme={focusedThemeOverridden}
+                    canResetFontFamily={focusedFontFamilyOverridden}
+                    canResetFontSize={focusedFontSizeOverridden}
+                    canResetFontWeight={focusedFontWeightOverridden}
+                    onThemeChange={handleThemeChangeForFocusedSession}
+                    onThemeReset={handleThemeResetForFocusedSession}
+                    onFontFamilyChange={handleFontFamilyChangeForFocusedSession}
+                    onFontFamilyReset={handleFontFamilyResetForFocusedSession}
+                    onFontSizeChange={handleFontSizeChangeForFocusedSession}
+                    onFontSizeReset={handleFontSizeResetForFocusedSession}
+                    onFontWeightChange={handleFontWeightChangeForFocusedSession}
+                    onFontWeightReset={handleFontWeightResetForFocusedSession}
+                    previewColors={resolvedPreviewTheme.colors}
+                    isVisible={isVisibleThemePanel}
+                  />
+                </div>
+              );
+            })}
 
             <AIChatPanelsHost
               mountedTabIds={mountedAiTabIds}

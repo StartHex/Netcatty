@@ -18,20 +18,27 @@ export const fromEditorTabId = (tabId: string): string => tabId.slice(EDITOR_PRE
 class ActiveTabStore {
   private activeTabId: string = 'vault';
   private listeners = new Set<Listener>();
-  private pendingNotify = false;
+  private notifyRafId: number | null = null;
 
   getActiveTabId = () => this.activeTabId;
+
+  private scheduleNotify = () => {
+    if (this.notifyRafId !== null) return;
+    const schedule = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (cb: () => void) => window.setTimeout(cb, 0) as unknown as number;
+    this.notifyRafId = schedule(() => {
+      this.notifyRafId = null;
+      this.listeners.forEach((listener) => listener());
+    });
+  };
 
   setActiveTabId = (id: string) => {
     if (this.activeTabId !== id) {
       this.activeTabId = id;
-      // Defer listener notification to avoid "setState during render" if called from a render phase
-      if (this.pendingNotify) return;
-      this.pendingNotify = true;
-      Promise.resolve().then(() => {
-        this.pendingNotify = false;
-        this.listeners.forEach(listener => listener());
-      });
+      // Coalesce rapid tab switches into one notification per frame and avoid
+      // "setState during render" if called from a render phase.
+      this.scheduleNotify();
     }
   };
 

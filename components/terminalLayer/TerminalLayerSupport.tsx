@@ -1,4 +1,4 @@
-import React, { Suspense, createContext, lazy, memo, useCallback, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
+import React, { createContext, memo, useCallback, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { activeTabStore } from '../../application/state/activeTabStore';
 import { useTerminalLayoutSuppressActive } from '../../application/state/terminalLayoutSuppressStore';
@@ -11,18 +11,14 @@ import { cn } from '../../lib/utils';
 import type { DropEntry } from '../../lib/sftpFileUtils';
 import type { GroupConfig, Host, Identity, KnownHost, ProxyProfile, SSHKey, Snippet, TerminalSession, TerminalTheme, Workspace } from '../../types';
 import type { ExecutorContext } from '../../infrastructure/ai/cattyAgent/executor';
+import { AIChatSidePanel } from '../AIChatSidePanel';
 import Terminal from '../Terminal';
 import {
-  getTerminalPaneFocusSnapshot,
-  getTerminalPaneSnapshot,
-  parseTerminalPaneSnapshot,
+  getTerminalPaneRenderSnapshot,
+  parseTerminalPaneRenderSnapshot,
 } from '../terminalPaneVisibility';
 
 export type SidePanelTab = 'sftp' | 'scripts' | 'theme' | 'ai';
-
-const LazyAIChatSidePanel = lazy(() =>
-  import('../AIChatSidePanel').then((m) => ({ default: m.AIChatSidePanel })),
-);
 
 export type WorkspaceRect = { x: number; y: number; w: number; h: number };
 
@@ -362,9 +358,7 @@ const AIChatPanelsHostInner: React.FC<AIChatPanelsHostProps> = ({
             key={tabId}
             className={cn("absolute inset-0 z-10", !isVisible && "hidden")}
           >
-            {isVisible && (
-              <Suspense fallback={null}>
-                <LazyAIChatSidePanel
+            <AIChatSidePanel
                   sessions={aiState.sessions}
                   activeSessionIdMap={aiState.activeSessionIdMap}
                   draftsByScope={aiState.draftsByScope}
@@ -408,8 +402,6 @@ const AIChatPanelsHostInner: React.FC<AIChatPanelsHostProps> = ({
                   resolveExecutorContext={resolveExecutorContext}
                   isVisible={isVisible}
                 />
-              </Suspense>
-            )}
           </div>
         );
       })}
@@ -666,8 +658,8 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   const layoutSuppressActive = useTerminalLayoutSuppressActive();
   const deferPaneLayoutUpdate = isResizing || layoutSuppressActive;
 
-  const getPaneSnapshot = useCallback(
-    () => getTerminalPaneSnapshot({
+  const getRenderSnapshot = useCallback(
+    () => getTerminalPaneRenderSnapshot({
       activeTabId: activeTabStore.getActiveTabId(),
       sessionId: session.id,
       sessionWorkspaceId: session.workspaceId,
@@ -676,24 +668,13 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
     }),
     [isTerminalLayerVisible, session.id, session.workspaceId, workspaceById],
   );
-  const paneSnapshot = useSyncExternalStore(activeTabStore.subscribe, getPaneSnapshot);
-  const paneState = parseTerminalPaneSnapshot(paneSnapshot);
+  const renderSnapshot = useSyncExternalStore(activeTabStore.subscribe, getRenderSnapshot);
+  const { paneState, isFocusedPane } = parseTerminalPaneRenderSnapshot(renderSnapshot);
   const activeWorkspaceId = paneState.workspaceId;
   const isVisible = paneState.isVisible;
   const inActiveWorkspace = !!activeWorkspaceId;
   const isFocusMode = paneState.mode === 'focus';
   const isSplitViewVisible = paneState.mode === 'split';
-
-  const getFocusSnapshot = useCallback(
-    () => getTerminalPaneFocusSnapshot({
-      sessionId: session.id,
-      sessionWorkspaceId: session.workspaceId,
-      workspaceById,
-    }),
-    [session.id, session.workspaceId, workspaceById],
-  );
-  const focusSnapshot = useSyncExternalStore(activeTabStore.subscribe, getFocusSnapshot);
-  const isFocusedPane = focusSnapshot === 'focused';
   const rect = activeWorkspaceId && isSplitViewVisible
     ? workspaceRectsById.get(activeWorkspaceId)?.[session.id] ?? null
     : null;

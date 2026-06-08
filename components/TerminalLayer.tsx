@@ -1,5 +1,5 @@
 import { FolderTree, MessageSquare, PanelLeft, PanelRight, Palette, X, Zap } from 'lucide-react';
-import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import React, { memo, startTransition, useCallback, useMemo, useRef, useState } from 'react';
 import { activeTabStore } from '../application/state/activeTabStore';
 import { resolveTerminalSessionExitIntent, type TerminalSessionExitEvent } from '../application/state/resolveTerminalSessionExitIntent';
 import {
@@ -59,6 +59,16 @@ import {
   type SnippetExecutor,
   type TerminalLayerProps,
 } from './terminalLayer/TerminalLayerSupport';
+
+const addMountedSidePanelTabId = (
+  tabIds: string[],
+  tabId: string,
+): string[] => (tabIds.includes(tabId) ? tabIds : [...tabIds, tabId]);
+
+const removeMountedSidePanelTabId = (
+  tabIds: string[],
+  tabId: string,
+): string[] => tabIds.filter((id) => id !== tabId);
 
 const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   hosts,
@@ -273,6 +283,10 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   // Side panel state - per-tab tracking of which sub-panel is active
   // Maps tab IDs to the active sub-panel type (sftp/scripts/theme), absent = closed
   const [sidePanelOpenTabs, setSidePanelOpenTabs] = useState<Map<string, SidePanelTab>>(new Map());
+  // Keep AI/scripts/theme panels mounted while switching sub-tabs (like SFTP).
+  const [aiMountedTabIds, setAiMountedTabIds] = useState<string[]>([]);
+  const [scriptsMountedTabIds, setScriptsMountedTabIds] = useState<string[]>([]);
+  const [themeMountedTabIds, setThemeMountedTabIds] = useState<string[]>([]);
   const [sidePanelWidth, setSidePanelWidth, persistSidePanelWidth] = useStoredNumber(
     STORAGE_KEY_SIDE_PANEL_WIDTH, 420, { min: 280, max: 800 },
   );
@@ -593,13 +607,19 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     () => Array.from(sftpHostForTab.keys()),
     [sftpHostForTab],
   );
-  const mountedAiTabIds = useMemo(
-    () =>
-      Array.from(sidePanelOpenTabs.entries())
-        .filter(([, panel]) => panel === 'ai')
-        .map(([tabId]) => tabId),
-    [sidePanelOpenTabs],
-  );
+  const markSidePanelSubTabOpened = useCallback((tabId: string, panel: SidePanelTab) => {
+    if (panel === 'ai') {
+      setAiMountedTabIds((prev) => addMountedSidePanelTabId(prev, tabId));
+      return;
+    }
+    if (panel === 'scripts') {
+      setScriptsMountedTabIds((prev) => addMountedSidePanelTabId(prev, tabId));
+      return;
+    }
+    if (panel === 'theme') {
+      setThemeMountedTabIds((prev) => addMountedSidePanelTabId(prev, tabId));
+    }
+  }, []);
 
   const getActiveTerminalSessionId = useCallback((): string | null => {
     const activeWorkspace = activeWorkspaceRef.current;
@@ -669,6 +689,9 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
       next.delete(activeTabId);
       return next;
     });
+    setAiMountedTabIds((prev) => removeMountedSidePanelTabId(prev, activeTabId));
+    setScriptsMountedTabIds((prev) => removeMountedSidePanelTabId(prev, activeTabId));
+    setThemeMountedTabIds((prev) => removeMountedSidePanelTabId(prev, activeTabId));
     refocusTerminalSession(sessionIdToRefocus);
   }, [getActiveTerminalSessionId, refocusTerminalSession, syncWorkspaceFocusIfNeeded]);
 
@@ -714,12 +737,15 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     // so the SftpSidePanel stays mounted (hidden) and preserves connections.
     // SFTP state is only cleaned up when the panel is fully closed.
 
-    setSidePanelOpenTabs(prev => {
-      const next = new Map(prev);
-      next.set(tabId, tab);
-      return next;
+    markSidePanelSubTabOpened(tabId, tab);
+    startTransition(() => {
+      setSidePanelOpenTabs(prev => {
+        const next = new Map(prev);
+        next.set(tabId, tab);
+        return next;
+      });
     });
-  }, [resolveSftpHostForTab]);
+  }, [markSidePanelSubTabOpened, resolveSftpHostForTab]);
 
   // Toggle SFTP from activity bar header
   const handleToggleSftpFromBar = useCallback(() => {
@@ -744,12 +770,15 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
       return;
     }
 
-    setSidePanelOpenTabs(prev => {
-      const next = new Map(prev);
-      next.set(tabId, 'scripts');
-      return next;
+    markSidePanelSubTabOpened(tabId, 'scripts');
+    startTransition(() => {
+      setSidePanelOpenTabs(prev => {
+        const next = new Map(prev);
+        next.set(tabId, 'scripts');
+        return next;
+      });
     });
-  }, [handleCloseSidePanel]);
+  }, [handleCloseSidePanel, markSidePanelSubTabOpened]);
 
   // Toggle the whole side panel (new ⌘/Ctrl+\ shortcut). Close if open; if
   // closed, reopen the tab's last sub-panel, defaulting to SFTP (when a host is
@@ -967,8 +996,10 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     keys,
     knownHosts,
     lastSidePanelTabRef,
-    mountedAiTabIds,
+    mountedAiTabIds: aiMountedTabIds,
     mountedSftpTabIds,
+    scriptsMountedTabIds,
+    themeMountedTabIds,
     onAddSessionToWorkspace,
     onConnectToHost,
     onCreateLocalTerminal,
@@ -1005,6 +1036,9 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     setEditorWordWrap,
     setIsComposeBarOpen,
     setPendingTerminalSelectionForAI,
+    setAiMountedTabIds,
+    setScriptsMountedTabIds,
+    setThemeMountedTabIds,
     setSidePanelOpenTabs,
     setSidePanelWidth,
     setSftpHostForTab,

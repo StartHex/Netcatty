@@ -201,11 +201,12 @@ const AIChatSidePanelInner: React.FC<AIChatSidePanelProps> = ({
   }, [terminalSessions, scopeType, scopeTargetId]);
 
   useEffect(() => {
+    if (!isVisible) return;
     const bridge = getNetcattyBridge();
     if (bridge?.aiMcpUpdateSessions) {
       void bridge.aiMcpUpdateSessions(terminalSessions, activeSessionId ?? undefined);
     }
-  }, [terminalSessions, scopeKey, activeSessionId]);
+  }, [isVisible, terminalSessions, scopeKey, activeSessionId]);
 
   useEffect(() => {
     if (!explicitPanelView || normalizedPanelView === explicitPanelView) return;
@@ -342,18 +343,20 @@ const AIChatSidePanelInner: React.FC<AIChatSidePanelProps> = ({
   }, [isVisible, scopeKey, toolIntegrationMode, updateScopeDraft]);
 
   useEffect(() => {
+    if (!isVisible) return;
     const bridge = getNetcattyBridge();
     if (bridge?.aiSyncProviders && providers.length > 0) {
       void bridge.aiSyncProviders(providers);
     }
-  }, [providers]);
+  }, [isVisible, providers]);
 
   useEffect(() => {
+    if (!isVisible) return;
     const bridge = getNetcattyBridge();
     if (bridge?.aiSyncWebSearch) {
       void bridge.aiSyncWebSearch(webSearchConfig?.apiHost || null, webSearchConfig?.apiKey || null);
     }
-  }, [webSearchConfig?.apiHost, webSearchConfig?.apiKey, webSearchConfig?.enabled]);
+  }, [isVisible, webSearchConfig?.apiHost, webSearchConfig?.apiKey, webSearchConfig?.enabled]);
 
   useEffect(() => {
     return () => {
@@ -365,7 +368,7 @@ const AIChatSidePanelInner: React.FC<AIChatSidePanelProps> = ({
     isDiscovering,
     rediscover,
     enableAgent,
-  } = useAgentDiscovery(externalAgents, setExternalAgents);
+  } = useAgentDiscovery(externalAgents, setExternalAgents, { enabled: isVisible });
 
   const handleEnableDiscoveredAgent = useCallback(
     (agent: DiscoveredAgent) => {

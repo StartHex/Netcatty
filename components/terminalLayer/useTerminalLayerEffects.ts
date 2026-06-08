@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
-import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import { terminalLayoutSuppressStore } from '../../application/state/terminalLayoutSuppressStore';
 
 type TerminalLayerEffectsContext = Record<string, any>;
 
 export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
-  const { activeSidePanelTab, activeTabId, activeTabIdRef, activeTopTabsThemeId, activeWorkspace, activityTrackedSessions, appliedPreviewSessionRef, applyTerminalPreviewVars, applyTopTabsPreviewVars, cancelAnimationFrame, ChunkedEscapeFilter, clearTerminalPreviewVars, clearTimeout, clearTopTabsPreviewVars, document, dropHint, filterTabsMap, focusedSessionId, followAppTerminalTheme, getSessionActivityIdsToClear, handleToggleAiFromTopBar, handleToggleScriptsSidePanel, handleToggleSidePanel, hasNotifiableTerminalOutput, isFocusMode, isTerminalLayerVisible, lastSidePanelTabRef, Map, Math, onSessionData, onSplitSessionRef, onToggleBroadcastRef, onToggleWorkspaceViewModeRef, prevFocusedSessionIdRef, previewTargetSessionId, requestAnimationFrame, ResizeObserver, sessionActivityStore, sessions, Set, setDropHint, setSftpHostForTab, setSftpInitialLocationForTab, setSftpPendingUploadsForTab, setSidePanelOpenTabs, setThemePreview, setTimeout, setupMcpApprovalBridge, setWorkspaceArea, sftpActiveHost, sftpHostForTab, shouldMarkSessionActivity, sidePanelOpenTabs, splitHorizontalHandlersRef, splitVerticalHandlersRef, terminalRendererCwdBySessionRef, themeCommitTimerRef, themePreview, toggleScriptsSidePanelRef, toggleSidePanelRef, validAIScopeTargetIds, validSessionActivityIds, visibleFocusedThemeId, window, workspaceBroadcastHandlersRef, workspaceFocusHandlersRef, workspaceInnerRef, workspaces } = ctx;
+  const { activeSidePanelTab, activeTabId, activeTabIdRef, activeTopTabsThemeId, activeWorkspace, activityTrackedSessions, appliedPreviewSessionRef, applyTerminalPreviewVars, applyTopTabsPreviewVars, cancelAnimationFrame, ChunkedEscapeFilter, clearTerminalPreviewVars, clearTimeout, clearTopTabsPreviewVars, document, dropHint, filterTabsMap, focusedSessionId, followAppTerminalTheme, getSessionActivityIdsToClear, handleToggleAiFromTopBar, handleToggleScriptsSidePanel, handleToggleSidePanel, hasNotifiableTerminalOutput, isFocusMode, isTerminalLayerVisible, lastSidePanelTabRef, Map, Math, onSessionData, onSplitSessionRef, onToggleBroadcastRef, onToggleWorkspaceViewModeRef, prevFocusedSessionIdRef, previewTargetSessionId, requestAnimationFrame, ResizeObserver, sessionActivityStore, sessions, Set, setAiMountedTabIds, setDropHint, setScriptsMountedTabIds, setSftpHostForTab, setSftpInitialLocationForTab, setSftpPendingUploadsForTab, setSidePanelOpenTabs, setThemeMountedTabIds, setThemePreview, setTimeout, setupMcpApprovalBridge, setWorkspaceArea, sftpActiveHost, sftpHostForTab, shouldMarkSessionActivity, sidePanelOpenTabs, splitHorizontalHandlersRef, splitVerticalHandlersRef, terminalRendererCwdBySessionRef, themeCommitTimerRef, themePreview, toggleScriptsSidePanelRef, toggleSidePanelRef, validAIScopeTargetIds, validSessionActivityIds, visibleFocusedThemeId, window, workspaceBroadcastHandlersRef, workspaceFocusHandlersRef, workspaceInnerRef, workspaces } = ctx;
 
   useEffect(() => {
       const liveSessionIds = new Set(sessions.map((session) => session.id));
@@ -84,6 +84,9 @@ export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
       setSftpHostForTab(prev => filterTabsMap(prev, validAIScopeTargetIds));
       setSftpInitialLocationForTab(prev => filterTabsMap(prev, validAIScopeTargetIds));
       setSftpPendingUploadsForTab(prev => filterTabsMap(prev, validAIScopeTargetIds));
+      setAiMountedTabIds((prev) => prev.filter((tabId) => validAIScopeTargetIds.has(tabId)));
+      setScriptsMountedTabIds((prev) => prev.filter((tabId) => validAIScopeTargetIds.has(tabId)));
+      setThemeMountedTabIds((prev) => prev.filter((tabId) => validAIScopeTargetIds.has(tabId)));
       sessionActivityStore.prune(validSessionActivityIds);
     }, [validSessionActivityIds, validAIScopeTargetIds]);
   
@@ -115,7 +118,7 @@ export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
         unsubscribeSuppress();
         observer.disconnect();
       };
-    }, [activeWorkspace, activeTabId, isTerminalLayerVisible]);
+    }, [isTerminalLayerVisible]);
 
   useEffect(() => {
       if (!isTerminalLayerVisible || !workspaceInnerRef.current) return;
@@ -132,7 +135,7 @@ export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
       };
       updateSize();
       requestAnimationFrame(updateSize);
-    }, [activeTabId, isTerminalLayerVisible]);
+    }, [activeTabId, activeWorkspace, isTerminalLayerVisible]);
   
   // Keep sftpHostForTab in sync with focus changes in workspace mode
     // so that the toggle check uses the currently displayed host.
@@ -301,15 +304,22 @@ export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
       }
     }, [isFocusMode, dropHint]);
   
+  const wasTerminalLayerVisibleRef = useRef(false);
+
   // When focusedSessionId changes or terminal layer becomes visible,
     // focus the corresponding terminal to restore :focus-within CSS state
     useEffect(() => {
       // Only handle split view mode (not focus mode)
-      if (isFocusMode || !focusedSessionId || !activeWorkspace) return;
+      if (isFocusMode || !focusedSessionId || !activeWorkspace) {
+        wasTerminalLayerVisibleRef.current = isTerminalLayerVisible;
+        return;
+      }
   
       // Trigger on focusedSessionId change OR when layer becomes visible again
       const sessionChanged = prevFocusedSessionIdRef.current !== focusedSessionId;
-      if (!sessionChanged && !isTerminalLayerVisible) return;
+      const layerBecameVisible = isTerminalLayerVisible && !wasTerminalLayerVisibleRef.current;
+      wasTerminalLayerVisibleRef.current = isTerminalLayerVisible;
+      if (!sessionChanged && !layerBecameVisible) return;
       const prevFocusedId = sessionChanged ? prevFocusedSessionIdRef.current : undefined;
       prevFocusedSessionIdRef.current = focusedSessionId;
   
@@ -324,29 +334,28 @@ export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
         }
       }
   
-      // Focus the new terminal multiple times to fight against xterm's focus restoration
       const focusTarget = () => {
         const targetPane = document.querySelector(`[data-session-id="${focusedSessionId}"]`);
         if (targetPane) {
           const textarea = targetPane.querySelector('textarea.xterm-helper-textarea') as HTMLTextAreaElement | null;
-          if (textarea) {
+          if (textarea && document.activeElement !== textarea) {
             textarea.focus();
           }
         }
       };
   
-      // Focus immediately
       focusTarget();
-  
-      // Focus again after short delays to override any competing focus attempts
-      const timer1 = setTimeout(focusTarget, 10);
-      const timer2 = setTimeout(focusTarget, 50);
-      const timer3 = setTimeout(focusTarget, 100);
+      let rafId: number | null = null;
+      if (typeof requestAnimationFrame === 'function') {
+        rafId = requestAnimationFrame(focusTarget);
+      }
+      const timerId = setTimeout(focusTarget, 50);
   
       return () => {
-        clearTimeout(timer1);
-        clearTimeout(timer2);
-        clearTimeout(timer3);
+        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(rafId);
+        }
+        clearTimeout(timerId);
       };
     }, [focusedSessionId, isFocusMode, activeWorkspace, isTerminalLayerVisible]);
 }
