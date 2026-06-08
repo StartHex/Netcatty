@@ -38,6 +38,7 @@ import { useSftpViewTabs } from "./sftp/hooks/useSftpViewTabs";
 import { useSftpKeyboardShortcuts } from "./sftp/hooks/useSftpKeyboardShortcuts";
 import { sftpFocusStore } from "./sftp/hooks/useSftpFocusedPane";
 import { keepOnlyPaneSelections } from "./sftp/hooks/selectionScope";
+import { shouldFollowTerminalCwdNavigate } from "./sftp/sftpFollowTerminalCwd";
 import { KeyBinding, HotkeyScheme } from "../domain/models";
 
 interface SftpSidePanelProps {
@@ -73,6 +74,9 @@ interface SftpSidePanelProps {
   editorWordWrap: boolean;
   setEditorWordWrap: (value: boolean) => void;
   onGetTerminalCwd?: () => Promise<string | null>;
+  activeTerminalCwd?: string | null;
+  sftpFollowTerminalCwd?: boolean;
+  onSftpFollowTerminalCwdChange?: (enabled: boolean) => void;
   onRequestTerminalFocus?: () => void;
   terminalSettings?: { keepaliveInterval: number; keepaliveCountMax: number };
 }
@@ -102,6 +106,9 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
   editorWordWrap,
   setEditorWordWrap,
   onGetTerminalCwd,
+  activeTerminalCwd = null,
+  sftpFollowTerminalCwd = false,
+  onSftpFollowTerminalCwdChange,
   onRequestTerminalFocus,
   terminalSettings,
 }) => {
@@ -346,6 +353,22 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
     }
   }, [onGetTerminalCwd]);
 
+  const canFollowTerminalCwd = useMemo(() => {
+    if (!onGetTerminalCwd || !activeHost) return false;
+    const proto = activeHost.protocol;
+    if (proto === "local" || proto === "serial") return false;
+    if (activeHost.id?.startsWith("local-") || activeHost.id?.startsWith("serial-")) return false;
+    return true;
+  }, [activeHost, onGetTerminalCwd]);
+
+  const handleToggleFollowTerminalCwd = useCallback(() => {
+    const next = !sftpFollowTerminalCwd;
+    onSftpFollowTerminalCwdChange?.(next);
+    if (next) {
+      void handleGoToTerminalCwd();
+    }
+  }, [handleGoToTerminalCwd, onSftpFollowTerminalCwdChange, sftpFollowTerminalCwd]);
+
   // Track whether there's active work that should block connection switching.
   // Computed outside the effect so it can be in the dependency array.
   // Block host-following while any connection-sensitive interactive UI is
@@ -355,6 +378,33 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
   // independent of the active tab, and forceNewTab preserves old connections.
   const hasActiveWork = showTextEditor || !!permissionsState || showFileOpenerDialog
     || (sftp.activeFileWatchCountRef?.current ?? 0) > 0;
+
+  useEffect(() => {
+    if (!canFollowTerminalCwd) return;
+
+    const connection = sftpRef.current.leftPane.connection;
+    if (!shouldFollowTerminalCwdNavigate({
+      followEnabled: sftpFollowTerminalCwd,
+      isVisible,
+      terminalCwd: activeTerminalCwd,
+      currentPath: connection?.currentPath,
+      hasActiveWork,
+      isConnected: connection?.status === "connected" && !connection.isLocal,
+    })) {
+      return;
+    }
+
+    sftpRef.current.navigateTo("left", activeTerminalCwd!);
+  }, [
+    activeTerminalCwd,
+    canFollowTerminalCwd,
+    hasActiveWork,
+    isVisible,
+    sftpFollowTerminalCwd,
+    sftp.leftPane.connection?.currentPath,
+    sftp.leftPane.connection?.status,
+    sftp.leftPane.connection?.isLocal,
+  ]);
 
   useEffect(() => {
     if (!activeHost) return;
@@ -736,6 +786,8 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
                   forceActive
                   onToggleShowHiddenFiles={() => handleToggleHiddenFiles(pane.id)}
                   onGoToTerminalCwd={onGetTerminalCwd ? handleGoToTerminalCwd : undefined}
+                  followTerminalCwd={canFollowTerminalCwd ? sftpFollowTerminalCwd : undefined}
+                  onToggleFollowTerminalCwd={canFollowTerminalCwd ? handleToggleFollowTerminalCwd : undefined}
                 />
               </div>
             );
@@ -822,6 +874,9 @@ const sidePanelAreEqual = (prev: SftpSidePanelProps, next: SftpSidePanelProps): 
   prev.editorWordWrap === next.editorWordWrap &&
   prev.setEditorWordWrap === next.setEditorWordWrap &&
   prev.onGetTerminalCwd === next.onGetTerminalCwd &&
+  prev.activeTerminalCwd === next.activeTerminalCwd &&
+  prev.sftpFollowTerminalCwd === next.sftpFollowTerminalCwd &&
+  prev.onSftpFollowTerminalCwdChange === next.onSftpFollowTerminalCwdChange &&
   prev.onRequestTerminalFocus === next.onRequestTerminalFocus &&
   prev.initialLocation?.hostId === next.initialLocation?.hostId &&
   prev.initialLocation?.path === next.initialLocation?.path &&
