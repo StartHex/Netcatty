@@ -338,6 +338,8 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   const activeSidePanelTab = activeTabId ? sidePanelOpenTabs.get(activeTabId) ?? null : null;
   // Legacy compatibility helpers for SFTP-specific logic
   const isSftpOpenForCurrentTab = activeSidePanelTab === 'sftp';
+  const isSftpOpenForCurrentTabRef = useRef(isSftpOpenForCurrentTab);
+  isSftpOpenForCurrentTabRef.current = isSftpOpenForCurrentTab;
 
   // The host to pass to the SFTP panel - stored when the user opens SFTP
   const [sftpHostForTab, setSftpHostForTab] = useState<Map<string, Host>>(new Map());
@@ -615,7 +617,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   const handleCommandExecuted = useCallback((command: string, hostId: string, hostLabel: string, sessionId: string) => {
     onCommandExecuted?.(command, hostId, hostLabel, sessionId);
 
-    if (!sftpFollowTerminalCwdRef.current) return;
+    if (!sftpFollowTerminalCwdRef.current || !isSftpOpenForCurrentTabRef.current) return;
 
     const session = sessionsRef.current.find((candidate) => candidate.id === sessionId);
     if (!session || !canReuseTerminalConnection(session)) return;

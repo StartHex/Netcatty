@@ -39,6 +39,7 @@ import { useSftpKeyboardShortcuts } from "./sftp/hooks/useSftpKeyboardShortcuts"
 import { sftpFocusStore } from "./sftp/hooks/useSftpFocusedPane";
 import { keepOnlyPaneSelections } from "./sftp/hooks/selectionScope";
 import { KeyBinding, HotkeyScheme } from "../domain/models";
+import { shouldFollowTerminalCwdNavigate } from "./sftp/sftpFollowTerminalCwd";
 
 interface SftpSidePanelProps {
   hosts: Host[];
@@ -371,17 +372,28 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
     || (sftp.activeFileWatchCountRef?.current ?? 0) > 0;
 
   const syncFollowToTerminalCwd = useCallback(async () => {
-    if (!onGetTerminalCwd || !sftpFollowTerminalCwd || !canFollowTerminalCwd || !isVisible || hasActiveWork) {
+    if (!onGetTerminalCwd || !sftpFollowTerminalCwd || !canFollowTerminalCwd) {
       return;
     }
 
+    let terminalCwd = activeTerminalCwd;
+    if (!terminalCwd) {
+      terminalCwd = await onGetTerminalCwd({ preferFreshBackend: true });
+    }
+
     const connection = sftpRef.current.leftPane.connection;
-    if (!connection || connection.isLocal || connection.status !== "connected") return;
+    if (!shouldFollowTerminalCwdNavigate({
+      followEnabled: sftpFollowTerminalCwd,
+      isVisible,
+      terminalCwd,
+      currentPath: connection?.currentPath,
+      hasActiveWork,
+      isConnected: Boolean(connection && !connection.isLocal && connection.status === "connected"),
+    })) {
+      return;
+    }
 
-    const cwd = activeTerminalCwd ?? await onGetTerminalCwd({ preferFreshBackend: true });
-    if (!cwd || connection.currentPath === cwd) return;
-
-    await sftpRef.current.navigateTo("left", cwd);
+    await sftpRef.current.navigateTo("left", terminalCwd!);
   }, [
     activeTerminalCwd,
     canFollowTerminalCwd,
@@ -392,12 +404,8 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
   ]);
 
   const handleToggleFollowTerminalCwd = useCallback(() => {
-    const next = !sftpFollowTerminalCwd;
-    onSftpFollowTerminalCwdChange?.(next);
-    if (next) {
-      void handleGoToTerminalCwd();
-    }
-  }, [handleGoToTerminalCwd, onSftpFollowTerminalCwdChange, sftpFollowTerminalCwd]);
+    onSftpFollowTerminalCwdChange?.(!sftpFollowTerminalCwd);
+  }, [onSftpFollowTerminalCwdChange, sftpFollowTerminalCwd]);
 
   useEffect(() => {
     if (!sftpFollowTerminalCwd || !canFollowTerminalCwd || !isVisible || hasActiveWork) return;
