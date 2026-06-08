@@ -47,5 +47,6 @@ export const useHostTreeInlineGroupEdit = () => {
   return useSyncExternalStore(
     hostTreeInlineGroupEditStore.subscribe,
     hostTreeInlineGroupEditStore.getEdit,
+    hostTreeInlineGroupEditStore.getEdit,
   );
 };

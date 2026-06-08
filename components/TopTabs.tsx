@@ -1,10 +1,14 @@
 import { Folder, FolderLock, Menu, Moon, MoreHorizontal, Plus, Settings, Sparkles, Sun } from 'lucide-react';
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fromEditorTabId, isEditorTabId, useActiveTabId } from '../application/state/activeTabStore';
 import type { EditorTab } from '../application/state/editorTabStore';
 import { buildWorkspaceActivityMap } from '../application/state/sessionActivity';
 import { useSessionActivityMap } from '../application/state/sessionActivityStore';
-import { useTerminalHostTreeOpen, useToggleTerminalHostTree } from '../application/state/terminalHostTreeStore';
+import {
+  useTerminalHostTreeLayoutWidth,
+  useTerminalHostTreeOpen,
+  useToggleTerminalHostTree,
+} from '../application/state/terminalHostTreeStore';
 import type { LogView } from '../application/state/logViewState';
 import { useWindowControls } from '../application/state/useWindowControls';
 import { useI18n } from '../application/i18n/I18nProvider';
@@ -104,10 +108,13 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
   const { maximize, isFullscreen, onFullscreenChanged } = useWindowControls();
   const sessionActivityMap = useSessionActivityMap();
   const isHostTreeOpen = useTerminalHostTreeOpen();
+  const hostTreeLayoutWidth = useTerminalHostTreeLayoutWidth();
   const toggleHostTree = useToggleTerminalHostTree();
   const activeTabId = useActiveTabId();
   const { getTabAnimationClass } = useTopTabLifecycleAnimations(orderedTabs);
   const [hostTreeTogglePop, setHostTreeTogglePop] = useState(false);
+  const hostTreeToggleSlotRef = useRef<HTMLDivElement>(null);
+  const [hostTreeTabGutter, setHostTreeTabGutter] = useState(0);
 
   // Tab reorder drag state
   const [dropIndicator, setDropIndicator] = useState<{ tabId: string; position: 'before' | 'after' } | null>(null);
@@ -215,6 +222,44 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
   const hasTerminalOrWorkspaceTabs = sessions.length > 0 || workspaces.length > 0;
   const isActiveTerminalOrWorkspaceTab = orphanSessionMap.has(activeTabId) || workspaceMap.has(activeTabId);
   const showHostTreeToggle = hasTerminalOrWorkspaceTabs && isActiveTerminalOrWorkspaceTab;
+
+  const updateHostTreeTabGutter = useCallback(() => {
+    if (!showHostTreeToggle || hostTreeLayoutWidth <= 0) {
+      setHostTreeTabGutter(0);
+      return;
+    }
+    const root = tabsContainerRef.current?.closest('[data-top-tabs-root]') as HTMLElement | null;
+    const toggleSlot = hostTreeToggleSlotRef.current;
+    if (!root || !toggleSlot) {
+      setHostTreeTabGutter(Math.max(0, hostTreeLayoutWidth));
+      return;
+    }
+    const rootLeft = root.getBoundingClientRect().left;
+    const toggleRight = toggleSlot.getBoundingClientRect().right - rootLeft;
+    setHostTreeTabGutter(Math.max(0, hostTreeLayoutWidth - toggleRight));
+  }, [hostTreeLayoutWidth, showHostTreeToggle]);
+
+  useLayoutEffect(() => {
+    updateHostTreeTabGutter();
+    const root = tabsContainerRef.current?.closest('[data-top-tabs-root]') as HTMLElement | null;
+    if (!root) return;
+    const ro = new ResizeObserver(() => updateHostTreeTabGutter());
+    ro.observe(root);
+    if (tabsContainerRef.current) ro.observe(tabsContainerRef.current);
+    if (hostTreeToggleSlotRef.current) ro.observe(hostTreeToggleSlotRef.current);
+    window.addEventListener('resize', updateHostTreeTabGutter);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', updateHostTreeTabGutter);
+    };
+  }, [
+    updateHostTreeTabGutter,
+    orderedTabs.length,
+    showSftpTab,
+    isWindowFullscreen,
+    showHostTreeToggle,
+    isHostTreeOpen,
+  ]);
 
   useEffect(() => {
     if (!showHostTreeToggle) return;
@@ -574,6 +619,7 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
           >
             {hasTerminalOrWorkspaceTabs && (
               <div
+                ref={hostTreeToggleSlotRef}
                 className="top-tab-host-tree-toggle-slot mb-0"
                 data-visible={showHostTreeToggle ? 'true' : 'false'}
               >
@@ -604,6 +650,13 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
                   </TooltipContent>
                 </Tooltip>
               </div>
+            )}
+            {showHostTreeToggle && (
+              <div
+                className="top-tab-host-tree-gutter flex-shrink-0"
+                style={{ width: hostTreeTabGutter }}
+                aria-hidden
+              />
             )}
             {renderOrderedTabs()}
             {/* Add new tab button - follows last tab when not overflowing */}

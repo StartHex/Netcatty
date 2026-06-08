@@ -35,5 +35,6 @@ export function useTerminalLayoutSuppressActive(): boolean {
   return useSyncExternalStore(
     terminalLayoutSuppressStore.subscribe,
     terminalLayoutSuppressStore.getActive,
+    terminalLayoutSuppressStore.getActive,
   );
 }

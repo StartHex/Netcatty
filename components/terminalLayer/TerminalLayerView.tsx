@@ -11,8 +11,6 @@ type TerminalLayerViewContext = Record<string, any>;
 
 function TerminalLayerViewInner({ ctx }: { ctx: TerminalLayerViewContext }) {
   const {
-    AIStateMaintenanceHost,
-    AIStateProvider,
     activeWorkspace,
     composeBarThemeColors,
     focusedSessionId,
@@ -23,43 +21,39 @@ function TerminalLayerViewInner({ ctx }: { ctx: TerminalLayerViewContext }) {
     refocusTerminalSession,
     setIsComposeBarOpen,
     TerminalComposeBar,
-    validAIScopeTargetIds,
     workspaceOuterRef,
   } = ctx;
 
   return (
-    <AIStateProvider>
-      <AIStateMaintenanceHost validAIScopeTargetIds={validAIScopeTargetIds} />
-      <div
-        ref={workspaceOuterRef}
-        className="absolute inset-0 bg-background flex flex-col"
-        data-section="terminal-workspace"
-        style={{
-          visibility: isTerminalLayerVisible ? 'visible' : 'hidden',
-          pointerEvents: isTerminalLayerVisible ? 'auto' : 'none',
-          zIndex: isTerminalLayerVisible ? 10 : 0,
-        }}
-      >
-        <div className="flex-1 flex min-h-0 relative">
-          <TerminalLayerHostTreeSection ctx={ctx} />
-          <TerminalLayerSidePanelSection ctx={ctx} />
-          <TerminalLayerFocusSidebarSection ctx={ctx} />
-          <TerminalLayerWorkspaceSection ctx={ctx} />
-        </div>
-
-        {activeWorkspace && isComposeBarOpen && (
-          <TerminalComposeBar
-            onSend={handleComposeSend}
-            onClose={() => {
-              setIsComposeBarOpen(false);
-              refocusTerminalSession(focusedSessionId);
-            }}
-            isBroadcastEnabled={isBroadcastEnabled?.(activeWorkspace.id)}
-            themeColors={composeBarThemeColors}
-          />
-        )}
+    <div
+      ref={workspaceOuterRef}
+      className="absolute inset-0 bg-background flex flex-col"
+      data-section="terminal-workspace"
+      style={{
+        visibility: isTerminalLayerVisible ? 'visible' : 'hidden',
+        pointerEvents: isTerminalLayerVisible ? 'auto' : 'none',
+        zIndex: isTerminalLayerVisible ? 10 : 0,
+      }}
+    >
+      <div className="flex-1 flex min-h-0 relative">
+        <TerminalLayerHostTreeSection ctx={ctx} />
+        <TerminalLayerSidePanelSection ctx={ctx} />
+        <TerminalLayerFocusSidebarSection ctx={ctx} />
+        <TerminalLayerWorkspaceSection ctx={ctx} />
       </div>
-    </AIStateProvider>
+
+      {activeWorkspace && isComposeBarOpen && (
+        <TerminalComposeBar
+          onSend={handleComposeSend}
+          onClose={() => {
+            setIsComposeBarOpen(false);
+            refocusTerminalSession(focusedSessionId);
+          }}
+          isBroadcastEnabled={isBroadcastEnabled?.(activeWorkspace.id)}
+          themeColors={composeBarThemeColors}
+        />
+      )}
+    </div>
   );
 }
 

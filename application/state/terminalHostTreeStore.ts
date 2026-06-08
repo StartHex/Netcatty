@@ -15,17 +15,31 @@ function readIsOpen(): boolean {
 
 class TerminalHostTreeStore {
   private isOpen = readIsOpen();
+  /** Live sidebar width (0 when collapsed) for top-tab alignment. */
+  private layoutWidth = 0;
   private listeners = new Set<Listener>();
 
   getIsOpen = () => this.isOpen;
 
+  getLayoutWidth = () => this.layoutWidth;
+
   setIsOpen = (open: boolean) => {
     if (this.isOpen === open) return;
     this.isOpen = open;
+    if (!open) {
+      this.layoutWidth = 0;
+    }
     localStorageAdapter.writeString(
       STORAGE_KEY_TERMINAL_HOST_TREE_COLLAPSED,
       open ? 'false' : 'true',
     );
+    this.listeners.forEach((listener) => listener());
+  };
+
+  setLayoutWidth = (width: number) => {
+    const next = Math.max(0, width);
+    if (this.layoutWidth === next) return;
+    this.layoutWidth = next;
     this.listeners.forEach((listener) => listener());
   };
 
@@ -45,9 +59,18 @@ export const useTerminalHostTreeOpen = () => {
   return useSyncExternalStore(
     terminalHostTreeStore.subscribe,
     terminalHostTreeStore.getIsOpen,
+    terminalHostTreeStore.getIsOpen,
   );
 };
 
 export const useToggleTerminalHostTree = () => {
   return useCallback(() => terminalHostTreeStore.toggle(), []);
+};
+
+export const useTerminalHostTreeLayoutWidth = () => {
+  return useSyncExternalStore(
+    terminalHostTreeStore.subscribe,
+    terminalHostTreeStore.getLayoutWidth,
+    terminalHostTreeStore.getLayoutWidth,
+  );
 };

@@ -13,7 +13,10 @@ export const terminalPropsAreEqual = (
   && prev.chainHosts === next.chainHosts
   && getThemePreviewId(prev) === getThemePreviewId(next)
   && prev.knownHosts === next.knownHosts
-  && prev.isVisible === next.isVisible
+  // TerminalPane owns the actual visibility style and publishes per-session
+  // visibility to paneVisibilityStore. Let Terminal skip visibility-only tab
+  // switches so the expensive terminal subtree is not re-rendered for every
+  // pane when returning to a workspace.
   && prev.paneLayoutKey === next.paneLayoutKey
   && prev.inWorkspace === next.inWorkspace
   && prev.isResizing === next.isResizing

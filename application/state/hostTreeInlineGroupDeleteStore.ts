@@ -31,5 +31,6 @@ export const useHostTreeInlineGroupDeleteTarget = () => {
   return useSyncExternalStore(
     hostTreeInlineGroupDeleteStore.subscribe,
     hostTreeInlineGroupDeleteStore.getTargetPath,
+    hostTreeInlineGroupDeleteStore.getTargetPath,
   );
 };

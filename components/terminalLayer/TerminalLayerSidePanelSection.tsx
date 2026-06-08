@@ -2,20 +2,46 @@
 import { FolderTree, MessageSquare, Palette, PanelLeft, PanelRight, X, Zap } from 'lucide-react';
 import React, { memo, useCallback, useState } from 'react';
 
+import { useActiveTabId } from '../../application/state/activeTabStore';
 import { terminalLayoutSuppressStore } from '../../application/state/terminalLayoutSuppressStore';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import type { SidePanelTab } from './TerminalLayerSupport';
 import { terminalLayerSidePanelCtxEqual } from './terminalLayerViewMemo';
 
 type SidePanelContext = Record<string, any>;
 
-function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) {
+function TerminalLayerSidePanelShell({ ctx }: { ctx: SidePanelContext }) {
   const {
-    activeSidePanelTab,
-    activeTabId,
+    mountedAiTabIds,
+    mountedSftpTabIds,
+    scriptsMountedTabIds,
+    themeMountedTabIds,
+  } = ctx;
+
+  if (
+    mountedSftpTabIds.length === 0
+    && mountedAiTabIds.length === 0
+    && scriptsMountedTabIds.length === 0
+    && themeMountedTabIds.length === 0
+  ) {
+    return null;
+  }
+
+  return <TerminalLayerSidePanelTabBody ctx={ctx} />;
+}
+
+function TerminalLayerSidePanelTabBody({ ctx }: { ctx: SidePanelContext }) {
+  const activeTabId = useActiveTabId();
+  const sidePanelOpenTabs = ctx.sidePanelOpenTabs as Map<string, SidePanelTab>;
+  const isSidePanelOpenForCurrentTab = activeTabId ? sidePanelOpenTabs.has(activeTabId) : false;
+  const activeSidePanelTab = activeTabId ? sidePanelOpenTabs.get(activeTabId) ?? null : null;
+
+  const {
     activeTerminalSessionIdForSftp,
     activeWorkspace,
     AIChatPanelsHost,
+    AISidePanelStateRoot,
     aiContextsByTabId,
     Button: Btn,
     cn,
@@ -50,7 +76,6 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
     hosts,
     hotkeyScheme,
     identities,
-    isSidePanelOpenForCurrentTab,
     keyBindings,
     keys,
     mountedAiTabIds,
@@ -87,6 +112,7 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
     terminalTheme,
     ThemeSidePanel,
     updateHosts,
+    validAIScopeTargetIds,
   } = ctx;
 
   const [resizePreviewWidth, setResizePreviewWidth] = useState<number | null>(null);
@@ -134,16 +160,6 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
     sidePanelWidth,
   ]);
 
-  if (
-    !isSidePanelOpenForCurrentTab
-    && mountedSftpTabIds.length === 0
-    && mountedAiTabIds.length === 0
-    && scriptsMountedTabIds.length === 0
-    && themeMountedTabIds.length === 0
-  ) {
-    return null;
-  }
-
   return (
     <>
       <div
@@ -167,6 +183,8 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
         <div
           className={cn(
             'h-full flex flex-col overflow-hidden',
+            isSidePanelOpenForCurrentTab && sidePanelPosition === 'left' && 'border-r',
+            isSidePanelOpenForCurrentTab && sidePanelPosition === 'right' && 'border-l',
             !isSidePanelOpenForCurrentTab && 'pointer-events-none',
           )}
           data-section="terminal-side-panel"
@@ -328,7 +346,7 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
               const storedSftpHost = sftpHostForTab.get(tabId) ?? null;
               const panelActiveHost = isVisibleSftpPanel
                 ? (sftpActiveHost ?? storedSftpHost)
-                : (activeTabId === tabId ? storedSftpHost : null);
+                : storedSftpHost;
               return (
                 <div
                   key={tabId}
@@ -421,15 +439,19 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
               );
             })}
 
-            <AIChatPanelsHost
-              mountedTabIds={mountedAiTabIds}
-              activeTabId={activeTabId}
-              activeSidePanelTab={activeSidePanelTab}
-              contextsByTabId={aiContextsByTabId}
-              resolveExecutorContext={resolveAIExecutorContext}
-              pendingTerminalSelection={pendingTerminalSelectionForAI}
-              onPendingTerminalSelectionConsumed={handlePendingTerminalSelectionConsumed}
-            />
+            {mountedAiTabIds.length > 0 && (
+              <AISidePanelStateRoot validAIScopeTargetIds={validAIScopeTargetIds}>
+                <AIChatPanelsHost
+                  mountedTabIds={mountedAiTabIds}
+                  activeTabId={activeTabId}
+                  activeSidePanelTab={activeSidePanelTab}
+                  contextsByTabId={aiContextsByTabId}
+                  resolveExecutorContext={resolveAIExecutorContext}
+                  pendingTerminalSelection={pendingTerminalSelectionForAI}
+                  onPendingTerminalSelectionConsumed={handlePendingTerminalSelectionConsumed}
+                />
+              </AISidePanelStateRoot>
+            )}
           </div>
         </div>
       </div>
@@ -438,7 +460,7 @@ function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) 
 }
 
 export const TerminalLayerSidePanelSection = memo(
-  TerminalLayerSidePanelSectionInner,
+  TerminalLayerSidePanelShell,
   (prev, next) => terminalLayerSidePanelCtxEqual(prev.ctx, next.ctx),
 );
 TerminalLayerSidePanelSection.displayName = 'TerminalLayerSidePanelSection';

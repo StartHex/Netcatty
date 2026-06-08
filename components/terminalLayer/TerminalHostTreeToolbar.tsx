@@ -1,4 +1,4 @@
-import { Check, FolderPlus, Search, Tag, TerminalSquare, X } from 'lucide-react';
+import { Check, Expand, FolderPlus, Minimize2, Search, Tag, TerminalSquare, X } from 'lucide-react';
 import React, { useEffect, useRef } from 'react';
 
 import { useI18n } from '../../application/i18n/I18nProvider';
@@ -29,10 +29,13 @@ interface TerminalHostTreeToolbarProps {
   canNewGroup?: boolean;
   onCreateLocalTerminal: () => void;
   canCreateLocalTerminal?: boolean;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
+  canExpandCollapse?: boolean;
   onCollapse: () => void;
 }
 
-const iconButtonClass = 'h-7 w-7 p-0 flex-shrink-0 hover:bg-transparent';
+const iconButtonClass = 'netcatty-tab h-7 w-7 shrink-0 rounded-md p-0 hover:bg-transparent';
 
 export const TerminalHostTreeToolbar: React.FC<TerminalHostTreeToolbarProps> = ({
   theme,
@@ -47,6 +50,9 @@ export const TerminalHostTreeToolbar: React.FC<TerminalHostTreeToolbarProps> = (
   canNewGroup = true,
   onCreateLocalTerminal,
   canCreateLocalTerminal = true,
+  onExpandAll,
+  onCollapseAll,
+  canExpandCollapse = true,
   onCollapse,
 }) => {
   const { t } = useI18n();
@@ -76,8 +82,11 @@ export const TerminalHostTreeToolbar: React.FC<TerminalHostTreeToolbarProps> = (
   };
 
   return (
-    <div className="flex-shrink-0" style={{ borderBottom: `1px solid ${theme.separator}` }}>
-      <div className="h-9 flex items-center gap-0.5 px-1.5">
+    <div className="flex-shrink-0">
+      <div
+        className="flex h-9 shrink-0 items-center gap-1 px-1.5 py-1"
+        style={{ borderBottom: `1px solid ${theme.separator}` }}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -90,7 +99,7 @@ export const TerminalHostTreeToolbar: React.FC<TerminalHostTreeToolbarProps> = (
               <Search size={14} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('terminal.layer.hostTree.searchButton')}</TooltipContent>
+          <TooltipContent side="bottom">{t('terminal.layer.hostTree.searchButton')}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -105,7 +114,7 @@ export const TerminalHostTreeToolbar: React.FC<TerminalHostTreeToolbarProps> = (
               <Tag size={14} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('terminal.layer.hostTree.tagsButton')}</TooltipContent>
+          <TooltipContent side="bottom">{t('terminal.layer.hostTree.tagsButton')}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -121,7 +130,7 @@ export const TerminalHostTreeToolbar: React.FC<TerminalHostTreeToolbarProps> = (
               <FolderPlus size={14} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('terminal.layer.hostTree.newGroup')}</TooltipContent>
+          <TooltipContent side="bottom">{t('terminal.layer.hostTree.newGroup')}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -137,7 +146,39 @@ export const TerminalHostTreeToolbar: React.FC<TerminalHostTreeToolbarProps> = (
               <TerminalSquare size={14} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('terminal.layer.hostTree.localShell')}</TooltipContent>
+          <TooltipContent side="bottom">{t('terminal.layer.hostTree.localShell')}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={iconButtonClass}
+              style={{ color: theme.mutedFg }}
+              disabled={!canExpandCollapse}
+              onClick={onExpandAll}
+            >
+              <Expand size={14} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t('vault.tree.expandAll')}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={iconButtonClass}
+              style={{ color: theme.mutedFg }}
+              disabled={!canExpandCollapse}
+              onClick={onCollapseAll}
+            >
+              <Minimize2 size={14} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t('vault.tree.collapseAll')}</TooltipContent>
         </Tooltip>
 
         <div className="flex-1 min-w-0" />
@@ -154,7 +195,7 @@ export const TerminalHostTreeToolbar: React.FC<TerminalHostTreeToolbarProps> = (
               <X size={15} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('terminal.layer.hostTree.collapse')}</TooltipContent>
+          <TooltipContent side="bottom">{t('terminal.layer.hostTree.collapse')}</TooltipContent>
         </Tooltip>
       </div>
 

@@ -285,24 +285,15 @@ const SftpSidePanelInner: React.FC<SftpSidePanelProps> = ({
   }, [activeHost, activeSessionId, interactiveWorkActive]);
 
   useEffect(() => {
-    if (!activeHost) return;
+    if (!activeHost || !isVisible) return;
 
     let cancelled = false;
-    const schedule = () => {
+    const frameId = requestAnimationFrame(() => {
       if (!cancelled) runAutoConnect();
-    };
-
-    if (isVisible) {
-      const frameId = requestAnimationFrame(schedule);
-      return () => {
-        cancelled = true;
-        cancelAnimationFrame(frameId);
-      };
-    }
-
-    schedule();
+    });
     return () => {
       cancelled = true;
+      cancelAnimationFrame(frameId);
     };
   }, [activeHost, activeSessionId, interactiveWorkActive, isVisible, runAutoConnect]);
 
@@ -491,8 +482,6 @@ const SftpSidePanelInteractiveBody: React.FC<SftpSidePanelInteractiveBodyProps> 
   activeHost,
   showWorkspaceHostHeader,
   renderOverlays,
-  sftpDoubleClickBehavior,
-  sftpAutoSync,
   hotkeyScheme,
   keyBindings,
   editorWordWrap,
@@ -535,7 +524,7 @@ const SftpSidePanelInteractiveBody: React.FC<SftpSidePanelInteractiveBodyProps> 
     const pane = sftpRef.current.leftTabs.tabs.find((tab) => tab.id === paneId);
     if (!pane) return;
     sftpRef.current.setShowHiddenFiles("left", paneId, !pane.showHiddenFiles);
-  }, []);
+  }, [sftpRef]);
 
   const syncFocusedSelection = useCallback((tabId: string | null) => {
     if (tabId) {
@@ -543,13 +532,13 @@ const SftpSidePanelInteractiveBody: React.FC<SftpSidePanelInteractiveBodyProps> 
       return;
     }
     keepOnlyPaneSelections(sftpRef.current, null);
-  }, []);
+  }, [sftpRef]);
 
   const handlePaneFocus = useCallback(() => {
     sftpFocusStore.setFocusedSide("left");
     setHasPaneFocus(true);
     syncFocusedSelection(sftpRef.current.getActiveTabId("left"));
-  }, [syncFocusedSelection]);
+  }, [sftpRef, syncFocusedSelection]);
 
   // NOTE: We intentionally do NOT sync to activeTabStore here.
   // activeTabStore is a global singleton shared with SftpView.
@@ -580,7 +569,7 @@ const SftpSidePanelInteractiveBody: React.FC<SftpSidePanelInteractiveBodyProps> 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
     };
-  }, [syncFocusedSelection]);
+  }, [sftpRef, syncFocusedSelection]);
 
   const {
     leftCallbacks,
@@ -645,7 +634,7 @@ const SftpSidePanelInteractiveBody: React.FC<SftpSidePanelInteractiveBodyProps> 
     if (cwd) {
       sftpRef.current.navigateTo("left", cwd);
     }
-  }, [onGetTerminalCwd]);
+  }, [onGetTerminalCwd, sftpRef]);
 
   const MAX_VISIBLE_TRANSFERS = 5;
   const visibleTransfers = useMemo(() => {
@@ -684,7 +673,7 @@ const SftpSidePanelInteractiveBody: React.FC<SftpSidePanelInteractiveBodyProps> 
 
       await sftpRef.current.navigateTo("left", revealPath, { force: true });
     },
-    [openPath, t],
+    [openPath, sftpRef, t],
   );
 
   const canRevealTransferTarget = useCallback(
@@ -711,7 +700,7 @@ const SftpSidePanelInteractiveBody: React.FC<SftpSidePanelInteractiveBodyProps> 
 
       return connection.id === task.targetConnectionId;
     },
-    [sftp.leftPane.connection],
+    [connectedKeyRef, sftp.leftPane.connection],
   );
 
   const canCopyTransferTargetPath = useCallback(
@@ -747,7 +736,7 @@ const SftpSidePanelInteractiveBody: React.FC<SftpSidePanelInteractiveBodyProps> 
       return hosts.find((h) => h.id === conn.hostId) ?? activeHost;
     }
     return activeHost;
-  }, [sftp.leftPane.connection, hosts, activeHost]);
+  }, [activeHost, connectedHostObjRef, hosts, sftp.leftPane.connection]);
 
   // Determine the active pane to render (without using global activeTabStore)
   const activeLeftPaneId = sftp.leftTabs.activeTabId;

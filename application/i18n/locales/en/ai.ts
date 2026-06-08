@@ -174,6 +174,8 @@ export const enAiMessages: Messages = {
   'ai.chat.daysAgo': '{n}d ago',
   'ai.chat.newChat': 'New Chat',
   'ai.chat.allSessions': 'All Sessions',
+  'ai.chat.loadEarlierMessages': 'Load earlier messages ({n} more)',
+  'ai.chat.loadMoreSessions': 'Load more sessions ({n} more)',
   'ai.chat.noSessions': 'No previous sessions',
   'ai.chat.retryHint': 'You can retry by sending your message again.',
   'ai.chat.approvalTimeout': 'Tool approval timed out after 5 minutes. You can retry by sending your message again.',

@@ -7,12 +7,15 @@ import {
   useHostTreeInlineGroupEdit,
 } from '../../application/state/hostTreeInlineGroupEditStore';
 import { useVaultHostTreeActions } from '../../application/state/vaultHostTreeActionsStore';
-import { terminalHostTreeStore, useTerminalHostTreeOpen } from '../../application/state/terminalHostTreeStore';
+import {
+  terminalHostTreeStore,
+  useTerminalHostTreeOpen,
+} from '../../application/state/terminalHostTreeStore';
 import { terminalLayoutSuppressStore } from '../../application/state/terminalLayoutSuppressStore';
 import { useStoredNumber } from '../../application/state/useStoredNumber';
 import { useTreeExpandedState } from '../../application/state/useTreeExpandedState';
 import { ensureAncestorPathsExpanded } from '../../domain/hostGroupPathMutations';
-import { buildHostGroupTree } from '../../domain/hostGroupTree';
+import { buildHostGroupTree, collectGroupTreePaths } from '../../domain/hostGroupTree';
 import {
   flattenHostGroupTree,
   hostTreeFlatRowContainsHost,
@@ -373,7 +376,7 @@ const TerminalHostTreeSidebarInner: React.FC<TerminalHostTreeSidebarProps> = ({
     SIDEBAR_DEFAULT_WIDTH,
     { min: SIDEBAR_MIN_WIDTH, max: SIDEBAR_MAX_WIDTH },
   );
-  const { expandedPaths, togglePath, ensurePathExpanded } = useTreeExpandedState(
+  const { expandedPaths, togglePath, ensurePathExpanded, expandAll, collapseAll } = useTreeExpandedState(
     STORAGE_KEY_VAULT_HOSTS_TREE_EXPANDED,
   );
   const menuActions = useVaultHostTreeActions();
@@ -473,6 +476,18 @@ const TerminalHostTreeSidebarInner: React.FC<TerminalHostTreeSidebarProps> = ({
   const handleCreateLocalTerminal = useCallback(() => {
     onCreateLocalTerminal?.();
   }, [onCreateLocalTerminal]);
+
+  const allGroupPaths = useMemo(() => collectGroupTreePaths(groupTree), [groupTree]);
+
+  const handleExpandAll = useCallback(() => {
+    expandAll(allGroupPaths);
+  }, [allGroupPaths, expandAll]);
+
+  const handleCollapseAll = useCallback(() => {
+    collapseAll();
+  }, [collapseAll]);
+
+  const canExpandCollapse = allGroupPaths.length > 0 && !searchActive && !tagsActive;
 
   const handleCollapse = useCallback(() => {
     terminalHostTreeStore.setIsOpen(false);
@@ -662,6 +677,10 @@ const TerminalHostTreeSidebarInner: React.FC<TerminalHostTreeSidebarProps> = ({
 
   const displayWidth = resizePreviewWidth ?? sidebarWidth;
 
+  useEffect(() => {
+    terminalHostTreeStore.setLayoutWidth(isOpen ? displayWidth : 0);
+  }, [displayWidth, isOpen]);
+
   return (
     <div
       ref={shellRef}
@@ -706,6 +725,9 @@ const TerminalHostTreeSidebarInner: React.FC<TerminalHostTreeSidebarProps> = ({
           canNewGroup={Boolean(menuActions)}
           onCreateLocalTerminal={handleCreateLocalTerminal}
           canCreateLocalTerminal={Boolean(onCreateLocalTerminal)}
+          onExpandAll={handleExpandAll}
+          onCollapseAll={handleCollapseAll}
+          canExpandCollapse={canExpandCollapse}
           onCollapse={handleCollapse}
         />
 

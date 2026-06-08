@@ -45,6 +45,7 @@ import { resolvePreferredTerminalCwd } from './terminal/sftpCwd';
 
 import {
   AIChatPanelsHost,
+  AISidePanelStateRoot,
   AIStateMaintenanceHost,
   AIStateProvider,
   ChunkedEscapeFilter,
@@ -930,6 +931,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     accentMode,
     activityTrackedSessions,
     AIChatPanelsHost,
+    AISidePanelStateRoot,
     AIStateMaintenanceHost,
     AIStateProvider,
     Array,

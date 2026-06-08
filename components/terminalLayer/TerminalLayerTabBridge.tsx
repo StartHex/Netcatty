@@ -218,8 +218,6 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     workspaces: s.workspaces,
   });
 
-  // stableRef fields are intentionally omitted from deps — they update every parent render.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const ctx = useMemo(() => ({
     accentMode: s.accentMode,
     activeHostIdForSidebar,
@@ -229,9 +227,8 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     activeTerminalSessionIdForSftp,
     activeWorkspace,
     AIChatPanelsHost: s.AIChatPanelsHost,
+    AISidePanelStateRoot: s.AISidePanelStateRoot,
     aiContextsByTabId,
-    AIStateMaintenanceHost: s.AIStateMaintenanceHost,
-    AIStateProvider: s.AIStateProvider,
     Array: s.Array,
     Button: s.Button,
     cn,
@@ -350,6 +347,7 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     sftpUseCompressedUpload: s.sftpUseCompressedUpload,
     sidePanelPosition: s.sidePanelPosition,
     sidePanelWidth: s.sidePanelWidth,
+    sidePanelOpenTabs,
     snippetPackages: s.snippetPackages,
     snippets: s.snippets,
     splitHorizontalHandlersRef: s.splitHorizontalHandlersRef,
@@ -377,6 +375,8 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     workspaceRectsById,
     X: s.X,
     Zap: s.Zap,
+    // stableRef fields are intentionally omitted from deps — they update every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [
     activeHostIdForSidebar,
     activeResizers,

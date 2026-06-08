@@ -41,5 +41,6 @@ export const useVaultHostTreeActions = () => {
   return useSyncExternalStore(
     vaultHostTreeActionsStore.subscribe,
     vaultHostTreeActionsStore.getActions,
+    vaultHostTreeActionsStore.getActions,
   );
 };

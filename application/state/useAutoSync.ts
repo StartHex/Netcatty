@@ -518,7 +518,7 @@ export const useAutoSync = (config: AutoSyncConfig) => {
           });
           skipNextSyncRef.current = true;
           startupConsistent = true;
-          notify.success(t('sync.autoSync.restoredMessage'), t('sync.autoSync.restoredTitle'));
+          notify.success(tRef.current('sync.autoSync.restoredMessage'), tRef.current('sync.autoSync.restoredTitle'));
         } else {
           // User chose to keep the empty vault. Deliberately do NOT advance
           // the anchor or base — the next sync must still treat remote as
@@ -526,7 +526,7 @@ export const useAutoSync = (config: AutoSyncConfig) => {
           // keeps protecting the cloud copy. startupConsistent stays false
           // so hasCheckedRemoteRef is not latched and the next startup will
           // re-prompt if the user still has not added anything.
-          notify.info(t('sync.autoSync.keptLocalMessage'), t('sync.autoSync.keptLocalTitle'));
+          notify.info(tRef.current('sync.autoSync.keptLocalMessage'), tRef.current('sync.autoSync.keptLocalTitle'));
         }
         return;
       }
@@ -560,7 +560,7 @@ export const useAutoSync = (config: AutoSyncConfig) => {
         } else if (!roundTripFullySynced) {
           console.warn('[AutoSync] Cloud-wins round-trip did not update every provider; leaving next auto-sync enabled for retry.');
         }
-        notify.success(t('sync.autoSync.syncedMessage'), t('sync.autoSync.syncedTitle'));
+        notify.success(tRef.current('sync.autoSync.syncedMessage'), tRef.current('sync.autoSync.syncedTitle'));
         return;
       }
 
@@ -595,7 +595,7 @@ export const useAutoSync = (config: AutoSyncConfig) => {
       await manager.commitRemoteInspection(connectedProvider, remoteFile, remotePayload);
       startupConsistent = true;
       markCurrentDataSynced = false;
-      notify.success(t('sync.autoSync.syncedMessage'), t('sync.autoSync.syncedTitle'));
+      notify.success(tRef.current('sync.autoSync.syncedMessage'), tRef.current('sync.autoSync.syncedTitle'));
 
       // If the three-way merge introduced any local-only additions that the
       // remote does not yet have, we MUST round-trip those to the cloud.
