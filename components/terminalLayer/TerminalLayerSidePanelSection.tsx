@@ -1,0 +1,413 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { FolderTree, MessageSquare, Palette, PanelLeft, PanelRight, X, Zap } from 'lucide-react';
+import React, { memo, useCallback, useState } from 'react';
+
+import { terminalLayoutSuppressStore } from '../../application/state/terminalLayoutSuppressStore';
+
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { terminalLayerSidePanelCtxEqual } from './terminalLayerViewMemo';
+
+type SidePanelContext = Record<string, any>;
+
+function TerminalLayerSidePanelSectionInner({ ctx }: { ctx: SidePanelContext }) {
+  const {
+    activeSidePanelTab,
+    activeTabId,
+    activeTerminalSessionIdForSftp,
+    activeWorkspace,
+    AIChatPanelsHost,
+    aiContextsByTabId,
+    Button: Btn,
+    cn,
+    editorWordWrap,
+    effectiveHosts,
+    focusedFontFamilyId,
+    focusedFontFamilyOverridden,
+    focusedFontSize,
+    focusedFontSizeOverridden,
+    focusedFontWeight,
+    focusedFontWeightOverridden,
+    focusedThemeOverridden,
+    followAppTerminalTheme,
+    getTerminalCwd,
+    handleCloseSidePanel,
+    handleFontFamilyChangeForFocusedSession,
+    handleFontFamilyResetForFocusedSession,
+    handleFontSizeChangeForFocusedSession,
+    handleFontSizeResetForFocusedSession,
+    handleFontWeightChangeForFocusedSession,
+    handleFontWeightResetForFocusedSession,
+    handleOpenAI,
+    handleOpenScripts,
+    handleOpenTheme,
+    handlePendingTerminalSelectionConsumed,
+    handleSftpInitialLocationApplied,
+    handleSnippetFromPanel,
+    handleThemeChangeForFocusedSession,
+    handleThemeResetForFocusedSession,
+    handleToggleSftpFromBar,
+    handlePendingUploadHandled,
+    hosts,
+    hotkeyScheme,
+    identities,
+    isSidePanelOpenForCurrentTab,
+    keyBindings,
+    keys,
+    mountedAiTabIds,
+    mountedSftpTabIds,
+    pendingTerminalSelectionForAI,
+    previewedOrVisibleThemeId,
+    refocusActiveTerminalSession,
+    resolveAIExecutorContext,
+    resolvedPreviewTheme,
+    ScriptsSidePanel,
+    setEditorWordWrap,
+    setSidePanelPosition,
+    setSidePanelWidth,
+    persistSidePanelWidth,
+    sftpActiveHost,
+    sftpAutoSync,
+    sftpDefaultViewMode,
+    sftpDoubleClickBehavior,
+    sftpInitialLocationForTab,
+    sftpPendingUploadsForTab,
+    sftpShowHiddenFiles,
+    SftpSidePanel,
+    sftpUseCompressedUpload,
+    sidePanelPosition,
+    sidePanelWidth,
+    snippetPackages,
+    snippets,
+    t,
+    terminalFontFamilyId,
+    terminalSettings,
+    terminalTheme,
+    ThemeSidePanel,
+    updateHosts,
+  } = ctx;
+
+  const [resizePreviewWidth, setResizePreviewWidth] = useState<number | null>(null);
+  const shellWidth = isSidePanelOpenForCurrentTab
+    ? (resizePreviewWidth ?? sidePanelWidth)
+    : 0;
+
+  const handleSidePanelResizeStart = useCallback((event: React.MouseEvent) => {
+    if (!isSidePanelOpenForCurrentTab) return;
+    event.preventDefault();
+    terminalLayoutSuppressStore.begin();
+    const startX = event.clientX;
+    const startWidth = sidePanelWidth;
+    let lastWidth = startWidth;
+    let rafId: number | null = null;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      lastWidth = Math.max(
+        280,
+        Math.min(800, startWidth + (sidePanelPosition === 'left' ? delta : -delta)),
+      );
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        setResizePreviewWidth(lastWidth);
+      });
+    };
+    const onMouseUp = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      setSidePanelWidth(lastWidth);
+      persistSidePanelWidth(lastWidth);
+      setResizePreviewWidth(null);
+      terminalLayoutSuppressStore.end();
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [
+    isSidePanelOpenForCurrentTab,
+    persistSidePanelWidth,
+    setSidePanelWidth,
+    sidePanelPosition,
+    sidePanelWidth,
+  ]);
+
+  if (!isSidePanelOpenForCurrentTab && mountedSftpTabIds.length === 0 && mountedAiTabIds.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <div
+        style={{ width: shellWidth }}
+        className={cn(
+          'flex-shrink-0 h-full relative z-20',
+          sidePanelPosition === 'right' && 'order-last',
+        )}
+        data-section="terminal-side-panel-shell"
+        data-side-panel-position={sidePanelPosition}
+      >
+        {isSidePanelOpenForCurrentTab && (
+          <div
+            className={cn(
+              'absolute top-0 h-full w-2 cursor-ew-resize z-30',
+              sidePanelPosition === 'left' ? 'right-[-3px]' : 'left-[-3px]',
+            )}
+            onMouseDown={handleSidePanelResizeStart}
+          />
+        )}
+        <div
+          className={cn(
+            'h-full flex flex-col overflow-hidden',
+            !isSidePanelOpenForCurrentTab && 'pointer-events-none',
+          )}
+          data-section="terminal-side-panel"
+          data-side-panel-tab={isSidePanelOpenForCurrentTab ? (activeSidePanelTab ?? undefined) : undefined}
+          style={{
+            ['--terminal-sidepanel-bg' as never]: resolvedPreviewTheme.colors.background,
+            ['--terminal-sidepanel-fg' as never]: resolvedPreviewTheme.colors.foreground,
+            ['--terminal-sidepanel-accent' as never]: resolvedPreviewTheme.colors.cursor,
+            ['--terminal-sidepanel-muted' as never]: `color-mix(in srgb, ${resolvedPreviewTheme.colors.foreground} 62%, ${resolvedPreviewTheme.colors.background} 38%)`,
+            ['--terminal-sidepanel-border' as never]: `color-mix(in srgb, ${resolvedPreviewTheme.colors.foreground} 12%, ${resolvedPreviewTheme.colors.background} 88%)`,
+            backgroundColor: 'var(--terminal-sidepanel-bg)',
+            color: 'var(--terminal-sidepanel-fg)',
+            borderColor: 'var(--terminal-sidepanel-border)',
+          }}
+        >
+          {isSidePanelOpenForCurrentTab && (
+            <div
+              className="flex h-9 items-center px-1.5 py-1 flex-shrink-0 gap-1"
+              style={{
+                borderBottom: '1px solid var(--terminal-sidepanel-border)',
+              }}
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Btn
+                    variant="ghost"
+                    size="icon"
+                    data-tab-id="sftp"
+                    data-tab-type="sidepanel"
+                    data-state={activeSidePanelTab === 'sftp' ? 'active' : 'inactive'}
+                    className="netcatty-tab h-7 w-7 rounded-md p-0 hover:bg-transparent"
+                    style={{
+                      backgroundColor: activeSidePanelTab === 'sftp'
+                        ? 'color-mix(in srgb, var(--terminal-sidepanel-accent) 24%, transparent)'
+                        : 'transparent',
+                      color: activeSidePanelTab === 'sftp'
+                        ? 'var(--terminal-sidepanel-fg)'
+                        : 'var(--terminal-sidepanel-muted)',
+                    }}
+                    onClick={handleToggleSftpFromBar}
+                  >
+                    <FolderTree size={15} />
+                  </Btn>
+                </TooltipTrigger>
+                <TooltipContent>{t('terminal.layer.sftp')}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Btn
+                    variant="ghost"
+                    size="icon"
+                    data-tab-id="scripts"
+                    data-tab-type="sidepanel"
+                    data-state={activeSidePanelTab === 'scripts' ? 'active' : 'inactive'}
+                    className="netcatty-tab h-7 w-7 rounded-md p-0 hover:bg-transparent"
+                    style={{
+                      backgroundColor: activeSidePanelTab === 'scripts'
+                        ? 'color-mix(in srgb, var(--terminal-sidepanel-accent) 24%, transparent)'
+                        : 'transparent',
+                      color: activeSidePanelTab === 'scripts'
+                        ? 'var(--terminal-sidepanel-fg)'
+                        : 'var(--terminal-sidepanel-muted)',
+                    }}
+                    onClick={handleOpenScripts}
+                  >
+                    <Zap size={15} />
+                  </Btn>
+                </TooltipTrigger>
+                <TooltipContent>{t('terminal.layer.scripts')}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Btn
+                    variant="ghost"
+                    size="icon"
+                    data-tab-id="theme"
+                    data-tab-type="sidepanel"
+                    data-state={activeSidePanelTab === 'theme' ? 'active' : 'inactive'}
+                    className="netcatty-tab h-7 w-7 rounded-md p-0 hover:bg-transparent"
+                    style={{
+                      backgroundColor: activeSidePanelTab === 'theme'
+                        ? 'color-mix(in srgb, var(--terminal-sidepanel-accent) 24%, transparent)'
+                        : 'transparent',
+                      color: activeSidePanelTab === 'theme'
+                        ? 'var(--terminal-sidepanel-fg)'
+                        : 'var(--terminal-sidepanel-muted)',
+                    }}
+                    onClick={handleOpenTheme}
+                  >
+                    <Palette size={15} />
+                  </Btn>
+                </TooltipTrigger>
+                <TooltipContent>{t('terminal.layer.theme')}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Btn
+                    variant="ghost"
+                    size="icon"
+                    data-tab-id="ai"
+                    data-tab-type="sidepanel"
+                    data-state={activeSidePanelTab === 'ai' ? 'active' : 'inactive'}
+                    className="netcatty-tab h-7 w-7 rounded-md p-0 hover:bg-transparent"
+                    style={{
+                      backgroundColor: activeSidePanelTab === 'ai'
+                        ? 'color-mix(in srgb, var(--terminal-sidepanel-accent) 24%, transparent)'
+                        : 'transparent',
+                      color: activeSidePanelTab === 'ai'
+                        ? 'var(--terminal-sidepanel-fg)'
+                        : 'var(--terminal-sidepanel-muted)',
+                    }}
+                    onClick={handleOpenAI}
+                  >
+                    <MessageSquare size={15} />
+                  </Btn>
+                </TooltipTrigger>
+                <TooltipContent>{t('terminal.layer.aiChat')}</TooltipContent>
+              </Tooltip>
+              <div className="flex-1" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Btn
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-md p-0 hover:bg-transparent"
+                    style={{
+                      color: 'var(--terminal-sidepanel-muted)',
+                    }}
+                    onClick={() => setSidePanelPosition((p: 'left' | 'right') => (p === 'left' ? 'right' : 'left'))}
+                  >
+                    {sidePanelPosition === 'left' ? <PanelRight size={15} /> : <PanelLeft size={15} />}
+                  </Btn>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {sidePanelPosition === 'left' ? t('terminal.layer.movePanelRight') : t('terminal.layer.movePanelLeft')}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Btn
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-md p-0 hover:bg-transparent"
+                    style={{
+                      color: 'var(--terminal-sidepanel-muted)',
+                    }}
+                    onClick={handleCloseSidePanel}
+                  >
+                    <X size={15} />
+                  </Btn>
+                </TooltipTrigger>
+                <TooltipContent>{t('terminal.layer.closePanel')}</TooltipContent>
+              </Tooltip>
+            </div>
+          )}
+          <div className="flex-1 min-h-0 relative">
+            {mountedSftpTabIds.map((tabId: string) => {
+              const isVisibleSftpPanel = activeTabId === tabId && activeSidePanelTab === 'sftp';
+              return (
+                <SftpSidePanel
+                  key={tabId}
+                  hosts={effectiveHosts}
+                  writableHosts={hosts}
+                  keys={keys}
+                  identities={identities}
+                  updateHosts={updateHosts}
+                  sftpDefaultViewMode={sftpDefaultViewMode}
+                  activeHost={isVisibleSftpPanel ? sftpActiveHost : null}
+                  activeSessionId={isVisibleSftpPanel ? activeTerminalSessionIdForSftp : null}
+                  initialLocation={
+                    isVisibleSftpPanel
+                      ? (sftpInitialLocationForTab.get(tabId) ?? null)
+                      : null
+                  }
+                  onInitialLocationApplied={(location) => handleSftpInitialLocationApplied(tabId, location)}
+                  showWorkspaceHostHeader={isVisibleSftpPanel && !!activeWorkspace}
+                  isVisible={isVisibleSftpPanel}
+                  renderOverlays={isVisibleSftpPanel}
+                  pendingUpload={sftpPendingUploadsForTab.get(tabId) ?? null}
+                  onPendingUploadHandled={(requestId) => handlePendingUploadHandled(tabId, requestId)}
+                  sftpDoubleClickBehavior={sftpDoubleClickBehavior}
+                  sftpAutoSync={isVisibleSftpPanel ? sftpAutoSync : false}
+                  sftpShowHiddenFiles={sftpShowHiddenFiles}
+                  sftpUseCompressedUpload={sftpUseCompressedUpload}
+                  hotkeyScheme={hotkeyScheme}
+                  keyBindings={keyBindings}
+                  editorWordWrap={editorWordWrap}
+                  setEditorWordWrap={setEditorWordWrap}
+                  onGetTerminalCwd={getTerminalCwd}
+                  onRequestTerminalFocus={refocusActiveTerminalSession}
+                  terminalSettings={terminalSettings}
+                />
+              );
+            })}
+
+            {activeSidePanelTab === 'scripts' && (
+              <div className="absolute inset-0 z-10">
+                <ScriptsSidePanel
+                  snippets={snippets}
+                  packages={snippetPackages}
+                  onSnippetClick={handleSnippetFromPanel}
+                />
+              </div>
+            )}
+
+            {activeSidePanelTab === 'theme' && (
+              <div className="absolute inset-0 z-10">
+                <ThemeSidePanel
+                  followAppTerminalTheme={followAppTerminalTheme}
+                  currentThemeId={previewedOrVisibleThemeId}
+                  globalThemeId={terminalTheme.id}
+                  currentFontFamilyId={focusedFontFamilyId}
+                  globalFontFamilyId={terminalFontFamilyId}
+                  currentFontSize={focusedFontSize}
+                  currentFontWeight={focusedFontWeight}
+                  canResetTheme={focusedThemeOverridden}
+                  canResetFontFamily={focusedFontFamilyOverridden}
+                  canResetFontSize={focusedFontSizeOverridden}
+                  canResetFontWeight={focusedFontWeightOverridden}
+                  onThemeChange={handleThemeChangeForFocusedSession}
+                  onThemeReset={handleThemeResetForFocusedSession}
+                  onFontFamilyChange={handleFontFamilyChangeForFocusedSession}
+                  onFontFamilyReset={handleFontFamilyResetForFocusedSession}
+                  onFontSizeChange={handleFontSizeChangeForFocusedSession}
+                  onFontSizeReset={handleFontSizeResetForFocusedSession}
+                  onFontWeightChange={handleFontWeightChangeForFocusedSession}
+                  onFontWeightReset={handleFontWeightResetForFocusedSession}
+                  previewColors={resolvedPreviewTheme.colors}
+                />
+              </div>
+            )}
+
+            <AIChatPanelsHost
+              mountedTabIds={mountedAiTabIds}
+              activeTabId={activeTabId}
+              activeSidePanelTab={activeSidePanelTab}
+              contextsByTabId={aiContextsByTabId}
+              resolveExecutorContext={resolveAIExecutorContext}
+              pendingTerminalSelection={pendingTerminalSelectionForAI}
+              onPendingTerminalSelectionConsumed={handlePendingTerminalSelectionConsumed}
+            />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export const TerminalLayerSidePanelSection = memo(
+  TerminalLayerSidePanelSectionInner,
+  (prev, next) => terminalLayerSidePanelCtxEqual(prev.ctx, next.ctx),
+);
+TerminalLayerSidePanelSection.displayName = 'TerminalLayerSidePanelSection';

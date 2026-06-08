@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useEffect, useLayoutEffect } from 'react';
 
+import { terminalLayoutSuppressStore } from '../../application/state/terminalLayoutSuppressStore';
+
 type TerminalLayerEffectsContext = Record<string, any>;
 
 export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
-  const { activeSidePanelTab, activeTabId, activeTabIdRef, activeTopTabsThemeId, activeWorkspace, activityTrackedSessions, appliedPreviewSessionRef, applyTerminalPreviewVars, applyTopTabsPreviewVars, cancelAnimationFrame, ChunkedEscapeFilter, clearTerminalPreviewVars, clearTimeout, clearTopTabsPreviewVars, document, dropHint, filterTabsMap, focusedSessionId, followAppTerminalTheme, getSessionActivityIdsToClear, handleToggleAiFromTopBar, handleToggleScriptsSidePanel, handleToggleSidePanel, hasNotifiableTerminalOutput, isFocusMode, isTerminalLayerVisible, lastSidePanelTabRef, Map, Math, onSessionData, onSplitSessionRef, onToggleBroadcastRef, onToggleWorkspaceViewModeRef, onUpdateSplitSizes, prevFocusedSessionIdRef, previewTargetSessionId, requestAnimationFrame, ResizeObserver, resizing, sessionActivityStore, sessions, Set, setDropHint, setResizing, setSftpHostForTab, setSftpInitialLocationForTab, setSftpPendingUploadsForTab, setSidePanelOpenTabs, setThemePreview, setTimeout, setupMcpApprovalBridge, setWorkspaceArea, sftpActiveHost, sftpHostForTab, shouldMarkSessionActivity, sidePanelOpenTabs, splitHorizontalHandlersRef, splitVerticalHandlersRef, terminalRendererCwdBySessionRef, themeCommitTimerRef, themePreview, toggleScriptsSidePanelRef, toggleSidePanelRef, validAIScopeTargetIds, validSessionActivityIds, visibleFocusedThemeId, window, workspaceBroadcastHandlersRef, workspaceFocusHandlersRef, workspaceInnerRef, workspaces } = ctx;
+  const { activeSidePanelTab, activeTabId, activeTabIdRef, activeTopTabsThemeId, activeWorkspace, activityTrackedSessions, appliedPreviewSessionRef, applyTerminalPreviewVars, applyTopTabsPreviewVars, cancelAnimationFrame, ChunkedEscapeFilter, clearTerminalPreviewVars, clearTimeout, clearTopTabsPreviewVars, document, dropHint, filterTabsMap, focusedSessionId, followAppTerminalTheme, getSessionActivityIdsToClear, handleToggleAiFromTopBar, handleToggleScriptsSidePanel, handleToggleSidePanel, hasNotifiableTerminalOutput, isFocusMode, isTerminalLayerVisible, lastSidePanelTabRef, Map, Math, onSessionData, onSplitSessionRef, onToggleBroadcastRef, onToggleWorkspaceViewModeRef, prevFocusedSessionIdRef, previewTargetSessionId, requestAnimationFrame, ResizeObserver, sessionActivityStore, sessions, Set, setDropHint, setSftpHostForTab, setSftpInitialLocationForTab, setSftpPendingUploadsForTab, setSidePanelOpenTabs, setThemePreview, setTimeout, setupMcpApprovalBridge, setWorkspaceArea, sftpActiveHost, sftpHostForTab, shouldMarkSessionActivity, sidePanelOpenTabs, splitHorizontalHandlersRef, splitVerticalHandlersRef, terminalRendererCwdBySessionRef, themeCommitTimerRef, themePreview, toggleScriptsSidePanelRef, toggleSidePanelRef, validAIScopeTargetIds, validSessionActivityIds, visibleFocusedThemeId, window, workspaceBroadcastHandlersRef, workspaceFocusHandlersRef, workspaceInnerRef, workspaces } = ctx;
 
   useEffect(() => {
       const liveSessionIds = new Set(sessions.map((session) => session.id));
@@ -91,6 +93,9 @@ export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
       const updateSize = () => {
         const width = el.clientWidth;
         const height = el.clientHeight;
+        // Ignore zero-size reads while the layer is hidden so split rects are
+        // not recomputed from a 1×1 fallback until the real layout is available.
+        if (width <= 0 || height <= 0) return;
         setWorkspaceArea((prev) => (
           prev.width === width && prev.height === height
             ? prev
@@ -100,60 +105,34 @@ export function useTerminalLayerEffects(ctx: TerminalLayerEffectsContext) {
       updateSize();
       const observer = new ResizeObserver(() => updateSize());
       observer.observe(el);
-      return () => observer.disconnect();
-    }, [activeWorkspace]);
-  
-  useEffect(() => {
-      if (!resizing) return;
-      let rafId: number | null = null;
-      let lastDelta = 0;
-      const applySizes = () => {
-        const dimension = resizing.direction === 'vertical' ? resizing.startArea.w : resizing.startArea.h;
-        if (dimension <= 0) return;
-        const total = resizing.startSizes.reduce((acc, n) => acc + n, 0) || 1;
-        const pxSizes = resizing.startSizes.map(s => (s / total) * dimension);
-        const i = resizing.index;
-        let a = pxSizes[i] + lastDelta;
-        let b = pxSizes[i + 1] - lastDelta;
-        const minPx = Math.min(120, dimension / 2);
-        if (a < minPx) {
-          const diff = minPx - a;
-          a = minPx;
-          b -= diff;
+      // Re-measure when a drag ends so pane rects match the committed layout.
+      const unsubscribeSuppress = terminalLayoutSuppressStore.subscribe(() => {
+        if (!terminalLayoutSuppressStore.getActive()) {
+          updateSize();
         }
-        if (b < minPx) {
-          const diff = minPx - b;
-          b = minPx;
-          a -= diff;
-        }
-        const newPxSizes = [...pxSizes];
-        newPxSizes[i] = Math.max(minPx, a);
-        newPxSizes[i + 1] = Math.max(minPx, b);
-        const totalPx = newPxSizes.reduce((acc, n) => acc + n, 0) || 1;
-        const newSizes = newPxSizes.map(n => n / totalPx);
-        onUpdateSplitSizes(resizing.workspaceId, resizing.splitId, newSizes);
-      };
-      const onMove = (e: MouseEvent) => {
-        lastDelta = resizing.direction === 'vertical' ? e.clientX - resizing.startClient.x : e.clientY - resizing.startClient.y;
-        if (rafId !== null) return;
-        rafId = requestAnimationFrame(() => {
-          rafId = null;
-          applySizes();
-        });
-      };
-      const onUp = () => {
-        if (rafId !== null) cancelAnimationFrame(rafId);
-        applySizes();
-        setResizing(null);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      });
       return () => {
-        if (rafId !== null) cancelAnimationFrame(rafId);
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
+        unsubscribeSuppress();
+        observer.disconnect();
       };
-    }, [resizing, onUpdateSplitSizes]);
+    }, [activeWorkspace, activeTabId, isTerminalLayerVisible]);
+
+  useEffect(() => {
+      if (!isTerminalLayerVisible || !workspaceInnerRef.current) return;
+      const el = workspaceInnerRef.current;
+      const updateSize = () => {
+        const width = el.clientWidth;
+        const height = el.clientHeight;
+        if (width <= 0 || height <= 0) return;
+        setWorkspaceArea((prev) => (
+          prev.width === width && prev.height === height
+            ? prev
+            : { width, height }
+        ));
+      };
+      updateSize();
+      requestAnimationFrame(updateSize);
+    }, [activeTabId, isTerminalLayerVisible]);
   
   // Keep sftpHostForTab in sync with focus changes in workspace mode
     // so that the toggle check uses the currently displayed host.

@@ -1,7 +1,13 @@
-import { type DragEvent, useCallback, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { terminalLayoutSuppressStore } from '../../application/state/terminalLayoutSuppressStore';
 import type { TerminalSession, Workspace, WorkspaceNode } from '../../types';
 import type { ResizerHandle, SplitHint, WorkspaceRect } from './TerminalLayerSupport';
+import {
+  computeSplitSizesFromDelta,
+  patchWorkspaceSplitSizes,
+  type WorkspaceResizeSession,
+} from './workspaceSplitResize';
 
 interface UseTerminalWorkspaceLayoutOptions {
   activeSession: TerminalSession | undefined;
@@ -10,6 +16,7 @@ interface UseTerminalWorkspaceLayoutOptions {
   onAddSessionToWorkspace: (workspaceId: string, sessionId: string, hint: Exclude<SplitHint, null>) => void;
   onCreateWorkspaceFromSessions: (baseSessionId: string, joiningSessionId: string, hint: Exclude<SplitHint, null>) => void;
   onSetDraggingSessionId: (id: string | null) => void;
+  onUpdateSplitSizes: (workspaceId: string, splitId: string, sizes: number[]) => void;
   sessions: TerminalSession[];
   workspaces: Workspace[];
 }
@@ -21,6 +28,7 @@ export function useTerminalWorkspaceLayout({
   onAddSessionToWorkspace,
   onCreateWorkspaceFromSessions,
   onSetDraggingSessionId,
+  onUpdateSplitSizes,
   sessions,
   workspaces,
 }: UseTerminalWorkspaceLayoutOptions) {
@@ -34,15 +42,49 @@ export function useTerminalWorkspaceLayout({
   
   const [dropHint, setDropHint] = useState<SplitHint>(null);
   
-  const [resizing, setResizing] = useState<{
-      workspaceId: string;
-      splitId: string;
-      index: number;
-      direction: 'vertical' | 'horizontal';
-      startSizes: number[];
-      startArea: { w: number; h: number };
-      startClient: { x: number; y: number };
-    } | null>(null);
+  const [resizing, setResizing] = useState<WorkspaceResizeSession | null>(null);
+  const [resizePreviewDelta, setResizePreviewDelta] = useState(0);
+  const resizePreviewDeltaRef = useRef(0);
+
+  useEffect(() => {
+    if (!resizing) return;
+
+    terminalLayoutSuppressStore.begin();
+    resizePreviewDeltaRef.current = 0;
+    setResizePreviewDelta(0);
+
+    let rafId: number | null = null;
+    const onMove = (e: MouseEvent) => {
+      const delta = resizing.direction === 'vertical'
+        ? e.clientX - resizing.startClient.x
+        : e.clientY - resizing.startClient.y;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        resizePreviewDeltaRef.current = delta;
+        setResizePreviewDelta(delta);
+      });
+    };
+    const onUp = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      const finalSizes = computeSplitSizesFromDelta(resizing, resizePreviewDeltaRef.current);
+      onUpdateSplitSizes(resizing.workspaceId, resizing.splitId, finalSizes);
+      setResizing(null);
+    };
+
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = resizing.direction === 'vertical' ? 'ew-resize' : 'ns-resize';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      terminalLayoutSuppressStore.end();
+    };
+  }, [resizing, onUpdateSplitSizes]);
   
   const computeWorkspaceRects = useCallback((workspace?: Workspace, size?: { width: number; height: number }): Record<string, WorkspaceRect> => {
       if (!workspace) return {} as Record<string, WorkspaceRect>;
@@ -71,15 +113,24 @@ export function useTerminalWorkspaceLayout({
       return rects;
     }, []);
   
+  const workspaceForLayout = useCallback((workspace: Workspace): Workspace => {
+    if (!resizing || resizing.workspaceId !== workspace.id) return workspace;
+    const previewSizes = computeSplitSizesFromDelta(resizing, resizePreviewDelta);
+    return patchWorkspaceSplitSizes(workspace, resizing.splitId, previewSizes);
+  }, [resizePreviewDelta, resizing]);
+
   const workspaceRectsById = useMemo(
       () => {
         const map = new Map<string, Record<string, WorkspaceRect>>();
         for (const workspace of workspaces) {
-          map.set(workspace.id, computeWorkspaceRects(workspace, workspaceArea));
+          map.set(
+            workspace.id,
+            computeWorkspaceRects(workspaceForLayout(workspace), workspaceArea),
+          );
         }
         return map;
       },
-      [computeWorkspaceRects, workspaceArea, workspaces],
+      [computeWorkspaceRects, workspaceArea, workspaceForLayout, workspaces],
     );
   
   const activeWorkspaceRects = useMemo<Record<string, WorkspaceRect>>(
@@ -123,7 +174,13 @@ export function useTerminalWorkspaceLayout({
       return resizers;
     }, []);
   
-  const activeResizers = useMemo(() => collectResizers(activeWorkspace, workspaceArea), [activeWorkspace, workspaceArea, collectResizers]);
+  const activeResizers = useMemo(
+    () => collectResizers(
+      activeWorkspace ? workspaceForLayout(activeWorkspace) : undefined,
+      workspaceArea,
+    ),
+    [activeWorkspace, workspaceArea, collectResizers, workspaceForLayout],
+  );
   
   const computeSplitHint = (e: DragEvent): SplitHint => {
       if (isFocusMode) return null;

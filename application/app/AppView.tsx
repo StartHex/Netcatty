@@ -217,6 +217,7 @@ export function AppView({ ctx }: { ctx: AppViewContext }) {
 
         <TerminalLayerMount
           hosts={hosts}
+          customGroups={customGroups}
           groupConfigs={groupConfigs}
           proxyProfiles={proxyProfiles}
           keys={keys}
@@ -261,6 +262,8 @@ export function AppView({ ctx }: { ctx: AppViewContext }) {
           onSetWorkspaceFocusedSession={setWorkspaceFocusedSession}
           onReorderWorkspaceSessions={reorderWorkspaceSessions}
           onSplitSession={splitSessionWithCurrentShell}
+          onConnectToHost={handleConnectToHost}
+          onCreateLocalTerminal={handleCreateLocalTerminal}
           isBroadcastEnabled={isBroadcastEnabled}
           onToggleBroadcast={toggleBroadcast}
           updateHosts={updateHosts}

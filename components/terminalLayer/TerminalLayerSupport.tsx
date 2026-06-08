@@ -1,6 +1,7 @@
-import React, { Suspense, createContext, lazy, memo, useCallback, useContext, useEffect, useSyncExternalStore } from 'react';
+import React, { Suspense, createContext, lazy, memo, useCallback, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { activeTabStore } from '../../application/state/activeTabStore';
+import { useTerminalLayoutSuppressActive } from '../../application/state/terminalLayoutSuppressStore';
 import type { TerminalSessionExitEvent } from '../../application/state/resolveTerminalSessionExitIntent';
 import { createTerminalSelectionAttachment } from '../../application/state/terminalSelectionAttachment';
 import { useAIState } from '../../application/state/useAIState';
@@ -11,7 +12,11 @@ import type { DropEntry } from '../../lib/sftpFileUtils';
 import type { GroupConfig, Host, Identity, KnownHost, ProxyProfile, SSHKey, Snippet, TerminalSession, TerminalTheme, Workspace } from '../../types';
 import type { ExecutorContext } from '../../infrastructure/ai/cattyAgent/executor';
 import Terminal from '../Terminal';
-import { getTerminalPaneSnapshot, parseTerminalPaneSnapshot } from '../terminalPaneVisibility';
+import {
+  getTerminalPaneFocusSnapshot,
+  getTerminalPaneSnapshot,
+  parseTerminalPaneSnapshot,
+} from '../terminalPaneVisibility';
 
 export type SidePanelTab = 'sftp' | 'scripts' | 'theme' | 'ai';
 
@@ -417,6 +422,7 @@ AIChatPanelsHost.displayName = 'AIChatPanelsHost';
 
 export interface TerminalLayerProps {
   hosts: Host[];
+  customGroups: string[];
   groupConfigs: GroupConfig[];
   proxyProfiles: ProxyProfile[];
   keys: SSHKey[];
@@ -457,6 +463,8 @@ export interface TerminalLayerProps {
   onSetWorkspaceFocusedSession?: (workspaceId: string, sessionId: string) => void;
   onReorderWorkspaceSessions?: (workspaceId: string, draggedSessionId: string, targetSessionId: string, position: 'before' | 'after') => void;
   onSplitSession?: (sessionId: string, direction: SplitDirection) => void;
+  onConnectToHost: (host: Host) => void;
+  onCreateLocalTerminal?: () => void;
   // Broadcast mode
   isBroadcastEnabled?: (workspaceId: string) => boolean;
   onToggleBroadcast?: (workspaceId: string) => void;
@@ -655,6 +663,9 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   onSnippetExecutorChange,
   onAddSelectionToAI,
 }) => {
+  const layoutSuppressActive = useTerminalLayoutSuppressActive();
+  const deferPaneLayoutUpdate = isResizing || layoutSuppressActive;
+
   const getPaneSnapshot = useCallback(
     () => getTerminalPaneSnapshot({
       activeTabId: activeTabStore.getActiveTabId(),
@@ -672,7 +683,17 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   const inActiveWorkspace = !!activeWorkspaceId;
   const isFocusMode = paneState.mode === 'focus';
   const isSplitViewVisible = paneState.mode === 'split';
-  const isFocusedPane = inActiveWorkspace && !isFocusMode && session.id === paneState.focusedSessionId;
+
+  const getFocusSnapshot = useCallback(
+    () => getTerminalPaneFocusSnapshot({
+      sessionId: session.id,
+      sessionWorkspaceId: session.workspaceId,
+      workspaceById,
+    }),
+    [session.id, session.workspaceId, workspaceById],
+  );
+  const focusSnapshot = useSyncExternalStore(activeTabStore.subscribe, getFocusSnapshot);
+  const isFocusedPane = focusSnapshot === 'focused';
   const rect = activeWorkspaceId && isSplitViewVisible
     ? workspaceRectsById.get(activeWorkspaceId)?.[session.id] ?? null
     : null;
@@ -684,6 +705,14 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
       height: `${rect.h}px`,
     }
     : { left: 0, top: 0, width: '100%', height: '100%' };
+  const livePaneLayoutKey = isSplitViewVisible && rect
+    ? `${Math.round(rect.w)}x${Math.round(rect.h)}`
+    : 'full';
+  const committedPaneLayoutKeyRef = useRef(livePaneLayoutKey);
+  if (!deferPaneLayoutUpdate) {
+    committedPaneLayoutKeyRef.current = livePaneLayoutKey;
+  }
+  const paneLayoutKey = committedPaneLayoutKeyRef.current;
   const style: React.CSSProperties = { ...layoutStyle };
 
   if (!isVisible) {
@@ -739,6 +768,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         themePreviewId={themePreviewId}
         knownHosts={knownHosts}
         isVisible={isVisible}
+        paneLayoutKey={paneLayoutKey}
         inWorkspace={inActiveWorkspace}
         isResizing={isResizing}
         isFocusMode={isFocusMode}

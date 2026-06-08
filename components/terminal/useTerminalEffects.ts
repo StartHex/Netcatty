@@ -46,7 +46,7 @@ export function resolveSelectionOverlayPosition(term: any, container: HTMLElemen
 }
 
 export function useTerminalEffects(ctx: TerminalEffectsContext) {
-  const { CONNECTION_TIMEOUT, Error, XTERM_PERFORMANCE_CONFIG, applyUserCursorPreference, auth, autocompleteCloseRef, autocompleteInputRef, autocompleteKeyEventRef, captureTerminalLogData, clearTerminalCwd, commandBufferRef, connectionLogBufferRef, containerRef, createPromptLineBreakState, createReplaySafeTerminalLogSanitizer, createXTermRuntime, effectiveFontSize, effectiveFontWeight, effectiveTheme, error, executeSnippetCommand, fitAddonRef, fontFamilyId, fontSize, fontWeightFixupDoneRef, forceSyncRenderAfterResize, handleOsc52ReadRequest, handleTerminalDataCaptureOnce, hasConnectedRef, host, hotkeySchemeRef, identities, inWorkspace, isBroadcastEnabledRef, isFocusMode, isFocused, isLocalConnection, isNetworkDevice, isResizing, isRestoringSelectionRef, isSearchOpen, isSerialConnection, isVisible, isVisibleRef, keyBindingsRef, keys, knownCwdRef, lastFittedSizeRef, lastToastedErrorRef, logger, mouseTrackingRef, onBroadcastInputRef, onCommandExecuted, onHotkeyActionRef, onSnippetExecutorChange, onTerminalCwdChange, onTerminalFontSizeChange, pendingAuthRef, pendingOutputScrollRef, prevIsResizingRef, primaryFontFamily, promptLineBreakStateRef, resizeSession, resolveHostAuth, resolvedFontFamily, safeFit, searchAddonRef, serialConfig, serialLineBufferRef, serializeAddonRef, sessionId, sessionRef, sessionStarters, setError, setHasMouseTracking, setHasSelection, setIsCancelling, setIsDisconnectedDialogDismissed, setIsSearchOpen, setNeedsHostKeyVerification, setPendingHostKeyInfo, setPendingHostKeyRequestId, setProgressLogs, setProgressValue, setSelectionOverlayPosition, setShowLogs, setStatus, setTimeLeft, shouldEnableNativeUserInputAutoScroll, shouldProbeSessionCwd, onSnippetShortkeyRef, snippetsRef, status, statusRef, sudoAutofillRef, t, teardown, termRef, terminalAltKeyOptions, terminalBackend, terminalContextActionsRef, terminalCwdTracker, terminalDataCapturedRef, terminalLogSanitizerRef, terminalSettings, terminalSettingsRef, toHostKeyInfo, toast, updateStatus, useEffect, useLayoutEffect, xtermRuntimeRef, zmodem, zmodemToastedRef } = ctx;
+  const { CONNECTION_TIMEOUT, Error, XTERM_PERFORMANCE_CONFIG, applyUserCursorPreference, auth, autocompleteCloseRef, autocompleteInputRef, autocompleteKeyEventRef, captureTerminalLogData, clearTerminalCwd, commandBufferRef, connectionLogBufferRef, containerRef, createPromptLineBreakState, createReplaySafeTerminalLogSanitizer, createXTermRuntime, effectiveFontSize, effectiveFontWeight, effectiveTheme, error, executeSnippetCommand, fitAddonRef, fontFamilyId, fontSize, fontWeightFixupDoneRef, forceSyncRenderAfterResize, handleOsc52ReadRequest, handleTerminalDataCaptureOnce, hasConnectedRef, host, hotkeySchemeRef, identities, inWorkspace, isBroadcastEnabledRef, isFocusMode, isFocused, isLocalConnection, isNetworkDevice, isResizing, isRestoringSelectionRef, isSearchOpen, isSerialConnection, isVisible, isVisibleRef, keyBindingsRef, keys, knownCwdRef, lastFittedSizeRef, lastToastedErrorRef, logger, mouseTrackingRef, onBroadcastInputRef, onCommandExecuted, onHotkeyActionRef, onSnippetExecutorChange, onTerminalCwdChange, onTerminalFontSizeChange, paneLayoutKey, pendingAuthRef, pendingOutputScrollRef, prevIsResizingRef, primaryFontFamily, promptLineBreakStateRef, resizeSession, resolveHostAuth, resolvedFontFamily, safeFit, searchAddonRef, serialConfig, serialLineBufferRef, serializeAddonRef, sessionId, sessionRef, sessionStarters, setError, setHasMouseTracking, setHasSelection, setIsCancelling, setIsDisconnectedDialogDismissed, setIsSearchOpen, setNeedsHostKeyVerification, setPendingHostKeyInfo, setPendingHostKeyRequestId, setProgressLogs, setProgressValue, setSelectionOverlayPosition, setShowLogs, setStatus, setTimeLeft, shouldEnableNativeUserInputAutoScroll, shouldProbeSessionCwd, onSnippetShortkeyRef, snippetsRef, status, statusRef, sudoAutofillRef, t, teardown, termRef, terminalAltKeyOptions, terminalBackend, terminalContextActionsRef, terminalCwdTracker, terminalDataCapturedRef, terminalLogSanitizerRef, terminalSettings, terminalSettingsRef, toHostKeyInfo, toast, updateStatus, useEffect, useLayoutEffect, xtermRuntimeRef, zmodem, zmodemToastedRef } = ctx;
 
 
   useEffect(() => {
@@ -482,10 +482,29 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
   }, [effectiveFontSize, effectiveFontWeight, resolvedFontFamily, terminalSettings]);
 
 
+  // Refit synchronously when a split pane becomes visible or its bounds change.
+  // Tab switches move hidden panes off-screen without resizing xterm; becoming
+  // visible again does not always fire ResizeObserver, leaving a gap below content.
+  // Skip during split-divider drag — refit runs once when isResizing becomes false.
+  useLayoutEffect(() => {
+    if (!isVisible) {
+      lastFittedSizeRef.current = null;
+      return;
+    }
+    if (isResizing) return;
+    lastFittedSizeRef.current = null;
+    safeFit({ force: true, requireVisible: true });
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        safeFit({ force: true, requireVisible: true });
+      });
+    }
+  }, [isVisible, paneLayoutKey, isResizing]);
+
   useEffect(() => {
     if (!isVisible) return;
     const timer = setTimeout(() => {
-      safeFit({ requireVisible: true });
+      safeFit({ force: true, requireVisible: true });
       // A pane that mounted hidden deferred its WebGL renderer; create it now
       // that it's visible (no-op if already active or WebGL is disabled).
       xtermRuntimeRef.current?.ensureWebglRenderer();
@@ -604,14 +623,25 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
     };
   }, [isVisible, isResizing]);
 
-  useEffect(() => {
-    if (prevIsResizingRef.current && !isResizing && isVisible) {
-      const timer = setTimeout(() => {
-        safeFit({ force: true, requireVisible: true });
-      }, 100);
-      return () => clearTimeout(timer);
+  useLayoutEffect(() => {
+    if (isResizing) {
+      prevIsResizingRef.current = true;
+      return;
+    }
+    if (!prevIsResizingRef.current || !isVisible) {
+      prevIsResizingRef.current = isResizing;
+      return;
     }
     prevIsResizingRef.current = isResizing;
+    lastFittedSizeRef.current = null;
+    safeFit({ force: true, requireVisible: true });
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        safeFit({ force: true, requireVisible: true });
+        const term = termRef.current;
+        if (term) forceSyncRenderAfterResize(term);
+      });
+    }
   }, [isResizing, isVisible]);
 
 

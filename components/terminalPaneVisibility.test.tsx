@@ -77,7 +77,7 @@ test("terminal pane snapshot distinguishes solo, split workspace, and focus work
       workspaceById,
       isTerminalLayerVisible: true,
     }),
-    "workspace|split|ws-split|s-1",
+    "workspace|split|ws-split",
   );
   assert.equal(
     getTerminalPaneSnapshot({
