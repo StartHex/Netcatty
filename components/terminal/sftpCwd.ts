@@ -7,6 +7,8 @@ type ResolvePreferredTerminalCwdOptions = {
   rendererCwd?: string | null;
   sessionId?: string | null;
   getSessionPwd: (sessionId: string) => Promise<SessionPwdResult>;
+  /** When true, always probe the backend instead of trusting renderer cwd. */
+  preferFreshBackend?: boolean;
 };
 
 const normalizeCwd = (cwd?: string | null): string | null => {
@@ -39,9 +41,12 @@ export const resolvePreferredTerminalCwd = async ({
   rendererCwd,
   sessionId,
   getSessionPwd,
+  preferFreshBackend = false,
 }: ResolvePreferredTerminalCwdOptions): Promise<string | null> => {
-  const knownCwd = normalizeCwd(rendererCwd);
-  if (knownCwd) return knownCwd;
+  if (!preferFreshBackend) {
+    const knownCwd = normalizeCwd(rendererCwd);
+    if (knownCwd) return knownCwd;
+  }
   if (!sessionId) return null;
 
   try {

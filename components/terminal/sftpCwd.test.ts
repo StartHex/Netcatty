@@ -7,6 +7,23 @@ import {
   resolvePreferredTerminalCwd,
 } from "./sftpCwd";
 
+test("resolvePreferredTerminalCwd prefers fresh backend pwd when requested", async () => {
+  let backendCalls = 0;
+
+  const cwd = await resolvePreferredTerminalCwd({
+    rendererCwd: "/srv/app/current",
+    sessionId: "session-1",
+    preferFreshBackend: true,
+    getSessionPwd: async () => {
+      backendCalls += 1;
+      return { success: true, cwd: "/lost+found" };
+    },
+  });
+
+  assert.equal(cwd, "/lost+found");
+  assert.equal(backendCalls, 1);
+});
+
 test("resolvePreferredTerminalCwd returns the renderer cwd without probing the backend", async () => {
   let backendCalls = 0;
 

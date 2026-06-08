@@ -140,6 +140,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   const terminalCwdRevisionRef = useRef(0);
   const [terminalCwdRevision, setTerminalCwdRevision] = useState(0);
   const cwdProbeCancelersRef = useRef<Map<string, () => void>>(new Map());
+  const cwdProbeGenerationRef = useRef<Map<string, number>>(new Map());
 
   const handleTerminalCwdChange = useCallback((sessionId: string, cwd: string | null) => {
     if (cwd && cwd.trim().length > 0) {
@@ -620,6 +621,8 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     if (!session || !canReuseTerminalConnection(session)) return;
 
     const revisionAtCommand = terminalCwdRevisionRef.current;
+    const probeGeneration = (cwdProbeGenerationRef.current.get(sessionId) ?? 0) + 1;
+    cwdProbeGenerationRef.current.set(sessionId, probeGeneration);
     cwdProbeCancelersRef.current.get(sessionId)?.();
     const cancelProbe = scheduleBackendCwdProbeAfterCommand({
       sessionId,
@@ -627,6 +630,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
       getCwdRevision: () => terminalCwdRevisionRef.current,
       getSessionPwd: (id) => terminalBackend.getSessionPwd(id),
       canProbe: async () => {
+        if (cwdProbeGenerationRef.current.get(sessionId) !== probeGeneration) return false;
         const host = sessionHostsMapRef.current.get(sessionId);
         if (!host) return false;
         const detectedDeviceClass = classifyDistroId(host.distro);
@@ -639,6 +643,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
         });
       },
       onProbedCwd: (cwd) => {
+        if (cwdProbeGenerationRef.current.get(sessionId) !== probeGeneration) return;
         const existing = terminalRendererCwdBySessionRef.current.get(sessionId);
         if (existing === cwd) return;
         handleTerminalCwdChange(sessionId, cwd);
@@ -748,12 +753,24 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     return sameEndpoint ? session.id : null;
   }, [activeSession?.id, activeWorkspace, focusedSessionId, isSftpOpenForCurrentTab, sessions, sessionHostsMap, sftpActiveHost]);
 
+  const linkedTerminalSessionId = useMemo((): string | null => {
+    if (!isSftpOpenForCurrentTab) return null;
+    if (activeTerminalSessionIdForSftp) return activeTerminalSessionIdForSftp;
+    return activeWorkspace ? (focusedSessionId ?? null) : (activeSession?.id ?? null);
+  }, [
+    activeSession?.id,
+    activeTerminalSessionIdForSftp,
+    activeWorkspace,
+    focusedSessionId,
+    isSftpOpenForCurrentTab,
+  ]);
+
   const activeTerminalCwd = useMemo(() => {
-    if (!activeTerminalSessionIdForSftp) return null;
-    return terminalRendererCwdBySessionRef.current.get(activeTerminalSessionIdForSftp) ?? null;
+    if (!linkedTerminalSessionId) return null;
+    return terminalRendererCwdBySessionRef.current.get(linkedTerminalSessionId) ?? null;
     // terminalCwdRevision bumps when any session cwd changes so linked SFTP can react.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTerminalSessionIdForSftp, terminalCwdRevision]);
+  }, [linkedTerminalSessionId, terminalCwdRevision]);
 
   const mountedSftpTabIds = useMemo(
     () => Array.from(sftpHostForTab.keys()),
@@ -785,14 +802,15 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   }, [activeWorkspace, onSetWorkspaceFocusedSession]);
 
   // Get the focused terminal's current working directory
-  const getTerminalCwd = useCallback(async (): Promise<string | null> => {
-    const sessionId = getActiveTerminalSessionId();
+  const getTerminalCwd = useCallback(async (options?: { preferFreshBackend?: boolean }): Promise<string | null> => {
+    const sessionId = linkedTerminalSessionId ?? getActiveTerminalSessionId();
     return resolvePreferredTerminalCwd({
       rendererCwd: sessionId ? terminalRendererCwdBySessionRef.current.get(sessionId) : undefined,
       sessionId,
       getSessionPwd: (id) => terminalBackend.getSessionPwd(id),
+      preferFreshBackend: options?.preferFreshBackend,
     });
-  }, [getActiveTerminalSessionId, terminalBackend]);
+  }, [getActiveTerminalSessionId, linkedTerminalSessionId, terminalBackend]);
 
   const refocusTerminalSession = useCallback((sessionId?: string | null) => {
     focusTerminalSessionInput(sessionId);

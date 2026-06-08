@@ -691,6 +691,10 @@ const sftpPaneViewAreEqual = (
   if (prev.showHeader !== next.showHeader) return false;
   if (prev.showEmptyHeader !== next.showEmptyHeader) return false;
   if (prev.sftpDefaultViewMode !== next.sftpDefaultViewMode) return false;
+  if (prev.followTerminalCwd !== next.followTerminalCwd) return false;
+  if (prev.onToggleFollowTerminalCwd !== next.onToggleFollowTerminalCwd) return false;
+  if (prev.onGoToTerminalCwd !== next.onGoToTerminalCwd) return false;
+  if (prev.onToggleShowHiddenFiles !== next.onToggleShowHiddenFiles) return false;
 
   return true;
 };
