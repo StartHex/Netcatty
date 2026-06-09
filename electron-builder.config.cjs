@@ -148,9 +148,12 @@ module.exports = {
     },
     linux: {
         // Linux .deb/.rpm/AppImage icons come from build/icons/* (see
-        // scripts/generate-linux-icons.sh). Do NOT set linux.icon to a single
-        // 1024px PNG — electron-builder then installs only hicolor/1024x1024
-        // and launchers on Ubuntu/GNOME miss the icon (#274, #1340).
+        // scripts/generate-linux-icons.sh). Point at the icons directory
+        // under buildResources — electron-builder still falls back to the
+        // top-level icon (public/icon.png) when linux.icon is unset, which
+        // installs only hicolor/1024x1024 and launchers miss the icon (#274,
+        // #1340). Do NOT set linux.icon to a single 1024px PNG either.
+        icon: 'icons',
         target: ['AppImage', 'deb', 'rpm'],
         category: 'Development',
         extraResources: [...moshExtraResources('linux'), ...etExtraResources('linux')]
