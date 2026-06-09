@@ -964,6 +964,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
 
   useRegisterVaultHostTreeActions({
     handleCopyCredentials,
+    handleDuplicateHost,
     onDeleteHost,
     handleUnmanageGroup,
     moveHostToGroup,
