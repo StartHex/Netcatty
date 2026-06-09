@@ -49,6 +49,7 @@ import {
   buildPromptWithTerminalSelectionAttachments,
   isTerminalSelectionAttachment,
 } from '../../../application/state/terminalSelectionAttachment';
+import { latestAISessionsSnapshot } from '../../../application/state/aiStateSnapshots';
 import {
   buildHistoricalToolReplayMaps,
   buildHistoricalToolResultReplayText,
@@ -100,6 +101,41 @@ const OPENAI_CHAT_ASSISTANT_FIELDS = Symbol('netcatty.openAIChatAssistantFields'
 type ModelMessageWithOpenAIChatFields = ModelMessage & {
   [OPENAI_CHAT_ASSISTANT_FIELDS]?: OpenAIChatAssistantFields;
 };
+
+type CattyRequestTooLargeRetryError = Error & {
+  cattyHadToolProgress?: boolean;
+  statusCode?: number;
+  status?: number;
+  responseBody?: string;
+};
+
+function createCattyRequestTooLargeRetryError(
+  error: unknown,
+  hadToolProgress: boolean,
+): CattyRequestTooLargeRetryError {
+  const message = error instanceof Error
+    ? error.message
+    : String(error ?? 'Request too large');
+  const retryError = new Error(message) as CattyRequestTooLargeRetryError;
+  retryError.name = 'CattyRequestTooLargeRetryError';
+  retryError.cause = error;
+  retryError.cattyHadToolProgress = hadToolProgress;
+  retryError.statusCode = 413;
+  if (error && typeof error === 'object') {
+    const source = error as Record<string, unknown>;
+    if (typeof source.status === 'number') retryError.status = source.status;
+    if (typeof source.responseBody === 'string') retryError.responseBody = source.responseBody;
+  }
+  return retryError;
+}
+
+function hadToolProgressBeforeRequestTooLarge(error: unknown): boolean {
+  return !!(
+    error &&
+    typeof error === 'object' &&
+    (error as { cattyHadToolProgress?: boolean }).cattyHadToolProgress
+  );
+}
 
 function emitStreamingStoreChange(): void {
   streamingSubscribers.forEach(listener => {
@@ -342,7 +378,7 @@ export function useAIChatStreaming({
     // Track the current assistant message ID so updates target the correct message
     let activeMsgId = currentAssistantMsgId;
     let lastAddedRole: 'assistant' | 'tool' = 'assistant';
-    let hasRetryUnsafeToolProgress = false;
+    let hadToolProgress = false;
     const reader = result.fullStream.getReader();
 
     // -- Text-delta batching: accumulate deltas and flush periodically --
@@ -485,7 +521,7 @@ export function useAIChatStreaming({
           cancelPendingFlush();
           flushText();
           const typedChunk = chunk as ToolCallChunk;
-          hasRetryUnsafeToolProgress = true;
+          hadToolProgress = true;
           const messageId = ensureAssistantMessage();
           const providerOptions = normalizeProviderContinuationOptions(typedChunk.providerMetadata);
           updateMessageById(streamSessionId, messageId, msg => ({
@@ -511,7 +547,7 @@ export function useAIChatStreaming({
           cancelPendingFlush();
           flushText();
           const typedChunk = chunk as ToolResultChunk;
-          hasRetryUnsafeToolProgress = true;
+          hadToolProgress = true;
           // Mark the assistant message's tool execution as completed
           updateMessageById(streamSessionId, activeMsgId, msg =>
             msg.role === 'assistant' && msg.executionStatus === 'running'
@@ -558,10 +594,13 @@ export function useAIChatStreaming({
             console.warn('[Catty] suppressed SDK stream state error:', typedChunk.error);
             break;
           }
-          if (isRequestTooLargeError(typedChunk.error) && !hasRetryUnsafeToolProgress) {
+          if (isRequestTooLargeError(typedChunk.error)) {
             cancelPendingFlush();
             flushText();
-            throw typedChunk.error;
+            throw createCattyRequestTooLargeRetryError(
+              typedChunk.error,
+              hadToolProgress,
+            );
           }
           cancelPendingFlush();
           flushText();
@@ -795,44 +834,81 @@ export function useAIChatStreaming({
     };
 
     try {
-      // Issue #5: Build SDK messages including tool-call and tool-result messages
-      // so the LLM maintains full conversation context
-      const allMessages = currentSession?.messages ?? [];
+      let openAIChatAssistantFieldsByMessage = new Map<ModelMessage, OpenAIChatAssistantFields | undefined>();
+      const buildSdkMessages = (
+        allMessages: ChatMessage[],
+        includeCurrentUserMessage: boolean,
+      ): Array<ModelMessage> => {
+        const { resolvedToolCallsByAssistant, toolCallByToolResult } = buildHistoricalToolReplayMaps(allMessages);
+        const nextFieldsByMessage = new Map<ModelMessage, OpenAIChatAssistantFields | undefined>();
+        const sdkMessages: Array<ModelMessage> = [];
+        let previousHistoryMessageWasToolResult = false;
 
-      const { resolvedToolCallsByAssistant, toolCallByToolResult } = buildHistoricalToolReplayMaps(allMessages);
-
-      const sdkMessages: Array<ModelMessage> = [];
-      const openAIChatAssistantFieldsByMessage = new Map<ModelMessage, OpenAIChatAssistantFields | undefined>();
-      let previousHistoryMessageWasToolResult = false;
-      for (const m of allMessages) {
-        const currentMessageFollowsToolResult = previousHistoryMessageWasToolResult;
-        if (m.role === 'user') {
-          // Historical attachments are replayed as placeholders so screenshots,
-          // files, and terminal selections do not balloon every follow-up request.
-          const messageAttachments = m.attachments ?? m.images;
-          sdkMessages.push({
-            role: 'user',
-            content: buildHistoricalUserReplayContent(m.content, messageAttachments ?? []),
-          });
-        } else if (m.role === 'assistant') {
-          const activeContinuation = isProviderContinuationForSource(
-            m.providerContinuation,
-            continuationContext.source,
-          )
-            ? m.providerContinuation
-            : undefined;
-          const openAIChatAssistantFields = getOpenAIChatAssistantFieldsForHistoryMessage(
-            m,
-            continuationContext.source,
-          );
-          if (m.toolCalls?.length) {
-            // Only include tool calls that have matching results
-            const resolvedToolCalls = resolvedToolCallsByAssistant.get(m);
-            const resolvedCalls = resolvedToolCalls
-              ? m.toolCalls.filter(tc => resolvedToolCalls.has(tc))
-              : [];
-            const contentParts: AssistantContentPart[] = [];
-            if (resolvedCalls.length > 0) {
+        for (const m of allMessages) {
+          const currentMessageFollowsToolResult = previousHistoryMessageWasToolResult;
+          if (m.role === 'user') {
+            // Historical attachments are replayed as placeholders so screenshots,
+            // files, and terminal selections do not balloon every follow-up request.
+            const messageAttachments = m.attachments ?? m.images;
+            sdkMessages.push({
+              role: 'user',
+              content: buildHistoricalUserReplayContent(m.content, messageAttachments ?? []),
+            });
+          } else if (m.role === 'assistant') {
+            const activeContinuation = isProviderContinuationForSource(
+              m.providerContinuation,
+              continuationContext.source,
+            )
+              ? m.providerContinuation
+              : undefined;
+            const openAIChatAssistantFields = getOpenAIChatAssistantFieldsForHistoryMessage(
+              m,
+              continuationContext.source,
+            );
+            if (m.toolCalls?.length) {
+              // Only include tool calls that have matching results
+              const resolvedToolCalls = resolvedToolCallsByAssistant.get(m);
+              const resolvedCalls = resolvedToolCalls
+                ? m.toolCalls.filter(tc => resolvedToolCalls.has(tc))
+                : [];
+              const contentParts: AssistantContentPart[] = [];
+              if (resolvedCalls.length > 0) {
+                for (const part of activeContinuation?.reasoningParts ?? []) {
+                  if (!part.text && !part.providerOptions) continue;
+                  contentParts.push({
+                    type: 'reasoning' as const,
+                    text: part.text,
+                    ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
+                  });
+                }
+              }
+              if (m.content) {
+                contentParts.push({
+                  type: 'text' as const,
+                  text: m.content,
+                  ...(activeContinuation?.textProviderOptions ? { providerOptions: activeContinuation.textProviderOptions } : {}),
+                });
+              }
+              for (const tc of resolvedCalls) {
+                const providerOptions = activeContinuation?.toolCallProviderOptionsById?.[tc.id];
+                contentParts.push({
+                  type: 'tool-call' as const,
+                  toolCallId: tc.id,
+                  toolName: tc.name,
+                  input: tc.arguments ?? {},
+                  ...(providerOptions ? { providerOptions } : {}),
+                });
+              }
+              // If all tool calls were orphaned, just include the text content
+              if (contentParts.length > 0) {
+                const message: ModelMessage = { role: 'assistant', content: toAssistantModelContent(contentParts) };
+                sdkMessages.push(message);
+                if (resolvedCalls.length > 0) {
+                  rememberOpenAIChatAssistantFields(message, openAIChatAssistantFields, nextFieldsByMessage);
+                }
+              }
+            } else if (m.content) {
+              const contentParts: AssistantContentPart[] = [];
               for (const part of activeContinuation?.reasoningParts ?? []) {
                 if (!part.text && !part.providerOptions) continue;
                 contentParts.push({
@@ -841,95 +917,68 @@ export function useAIChatStreaming({
                   ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
                 });
               }
-            }
-            if (m.content) {
               contentParts.push({
                 type: 'text' as const,
                 text: m.content,
                 ...(activeContinuation?.textProviderOptions ? { providerOptions: activeContinuation.textProviderOptions } : {}),
               });
-            }
-            for (const tc of resolvedCalls) {
-              const providerOptions = activeContinuation?.toolCallProviderOptionsById?.[tc.id];
-              contentParts.push({
-                type: 'tool-call' as const,
-                toolCallId: tc.id,
-                toolName: tc.name,
-                input: tc.arguments ?? {},
-                ...(providerOptions ? { providerOptions } : {}),
-              });
-            }
-            // If all tool calls were orphaned, just include the text content
-            if (contentParts.length > 0) {
-              const message: ModelMessage = { role: 'assistant', content: toAssistantModelContent(contentParts) };
+              const message: ModelMessage = {
+                role: 'assistant',
+                content: toAssistantModelContent(contentParts),
+              };
               sdkMessages.push(message);
-              if (resolvedCalls.length > 0) {
-                rememberOpenAIChatAssistantFields(message, openAIChatAssistantFields, openAIChatAssistantFieldsByMessage);
+              if (currentMessageFollowsToolResult) {
+                rememberOpenAIChatAssistantFields(message, openAIChatAssistantFields, nextFieldsByMessage);
               }
             }
-          } else if (m.content) {
-            const contentParts: AssistantContentPart[] = [];
-            for (const part of activeContinuation?.reasoningParts ?? []) {
-              if (!part.text && !part.providerOptions) continue;
-              contentParts.push({
-                type: 'reasoning' as const,
-                text: part.text,
-                ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
-              });
-            }
-            contentParts.push({
-              type: 'text' as const,
-              text: m.content,
-              ...(activeContinuation?.textProviderOptions ? { providerOptions: activeContinuation.textProviderOptions } : {}),
+          } else if (m.role === 'tool' && m.toolResults?.length) {
+            sdkMessages.push({
+              role: 'tool',
+              content: m.toolResults.map(tr => {
+                const toolCall = toolCallByToolResult.get(tr);
+                return {
+                  type: 'tool-result' as const,
+                  toolCallId: tr.toolCallId,
+                  toolName: toolCall?.name ?? 'unknown',
+                  output: { type: 'text' as const, value: buildHistoricalToolResultReplayText(tr, toolCall) },
+                };
+              }),
             });
-            const message: ModelMessage = {
-              role: 'assistant',
-              content: toAssistantModelContent(contentParts),
-            };
-            sdkMessages.push(message);
-            if (currentMessageFollowsToolResult) {
-              rememberOpenAIChatAssistantFields(message, openAIChatAssistantFields, openAIChatAssistantFieldsByMessage);
+          }
+          previousHistoryMessageWasToolResult = m.role === 'tool' && !!m.toolResults?.length;
+        }
+
+        if (includeCurrentUserMessage) {
+          // Build the current user message — include attachments as multimodal content
+          if (attachments?.length) {
+            const modelText = buildPromptWithTerminalSelectionAttachments(trimmed, attachments);
+            const modelAttachments = attachments.filter(
+              (attachment) => !isTerminalSelectionAttachment(attachment),
+            );
+            if (!modelAttachments.length) {
+              sdkMessages.push({ role: 'user', content: modelText });
+            } else {
+              const parts: Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType?: string } | { type: 'file'; data: string; mediaType: string; filename?: string }> = [];
+              parts.push({ type: 'text', text: modelText });
+              for (const att of modelAttachments) {
+                if (att.mediaType.startsWith('image/')) {
+                  parts.push({ type: 'image', image: att.base64Data, mediaType: att.mediaType });
+                } else {
+                  parts.push({ type: 'file', data: att.base64Data, mediaType: att.mediaType, filename: att.filename });
+                }
+              }
+              sdkMessages.push({ role: 'user', content: parts });
             }
-          }
-        } else if (m.role === 'tool' && m.toolResults?.length) {
-          sdkMessages.push({
-            role: 'tool',
-            content: m.toolResults.map(tr => {
-              const toolCall = toolCallByToolResult.get(tr);
-              return {
-                type: 'tool-result' as const,
-                toolCallId: tr.toolCallId,
-                toolName: toolCall?.name ?? 'unknown',
-                output: { type: 'text' as const, value: buildHistoricalToolResultReplayText(tr, toolCall) },
-              };
-            }),
-          });
-        }
-        previousHistoryMessageWasToolResult = m.role === 'tool' && !!m.toolResults?.length;
-      }
-      // Build the current user message — include attachments as multimodal content
-      if (attachments?.length) {
-        const modelText = buildPromptWithTerminalSelectionAttachments(trimmed, attachments);
-        const modelAttachments = attachments.filter(
-          (attachment) => !isTerminalSelectionAttachment(attachment),
-        );
-        if (!modelAttachments.length) {
-          sdkMessages.push({ role: 'user', content: modelText });
-        } else {
-        const parts: Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType?: string } | { type: 'file'; data: string; mediaType: string; filename?: string }> = [];
-        parts.push({ type: 'text', text: modelText });
-        for (const att of modelAttachments) {
-          if (att.mediaType.startsWith('image/')) {
-            parts.push({ type: 'image', image: att.base64Data, mediaType: att.mediaType });
           } else {
-            parts.push({ type: 'file', data: att.base64Data, mediaType: att.mediaType, filename: att.filename });
+            sdkMessages.push({ role: 'user', content: trimmed });
           }
         }
-        sdkMessages.push({ role: 'user', content: parts });
-        }
-      } else {
-        sdkMessages.push({ role: 'user', content: trimmed });
-      }
+
+        openAIChatAssistantFieldsByMessage = nextFieldsByMessage;
+        return sdkMessages;
+      };
+
+      const sdkMessages = buildSdkMessages(currentSession?.messages ?? [], true);
 
       // Create model with placeholder API key — the main process injects the real
       // decrypted key when the HTTP request is proxied through IPC, so plaintext
@@ -957,7 +1006,7 @@ export function useAIChatStreaming({
         defaultContextWindow: DEFAULT_CONTEXT_WINDOW_TOKENS,
       });
       const outputReserveTokens = Math.min(4096, Math.ceil(contextWindow * 0.05));
-      const requestReserveTokens = outputReserveTokens + estimateUnknownTokens({
+      const getRequestReserveTokens = () => outputReserveTokens + estimateUnknownTokens({
         systemPrompt,
         toolNames: Object.keys(tools),
         openAIChatAssistantFields: Array.from(openAIChatAssistantFieldsByMessage.values()),
@@ -1013,7 +1062,7 @@ export function useAIChatStreaming({
           const compacted = await prepareContextCompaction({
             messages,
             contextWindow,
-            reservedTokens: requestReserveTokens,
+            reservedTokens: getRequestReserveTokens(),
             thresholdRatio: force ? 0 : undefined,
             protectRecentMessages: DEFAULT_PROTECT_RECENT_MESSAGES,
             summarize: summarizeForCompaction,
@@ -1068,21 +1117,42 @@ export function useAIChatStreaming({
         }
 
         console.warn('[Catty] Request hit HTTP 413; forcing context compaction and retrying once.', streamErr);
-        updateMessageById(sessionId, assistantMsgId, msg => ({
-          ...msg,
-          content: '',
-          thinking: undefined,
-          thinkingDurationMs: undefined,
-          providerContinuation: undefined,
-          toolCalls: undefined,
-          errorInfo: undefined,
-          executionStatus: undefined,
-          pendingApproval: undefined,
-          statusText: 'Request was too large. Compacting context and retrying...',
-        }));
-        const retryMessages = prepareMessagesForStream(await compactMessages(messagesForStream, {
+        const statusText = 'Request was too large. Compacting context and retrying...';
+        const hadToolProgress = hadToolProgressBeforeRequestTooLarge(streamErr);
+        let retryBaseMessages = messagesForStream;
+        let retryAssistantMsgId = assistantMsgId;
+        if (hadToolProgress) {
+          const latestSession = latestAISessionsSnapshot?.find(session => session.id === sessionId);
+          if (latestSession) {
+            retryBaseMessages = buildSdkMessages(latestSession.messages, false);
+          }
+          retryAssistantMsgId = generateId();
+          addMessageToSession(sessionId, {
+            id: retryAssistantMsgId,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            model: activeModelId || context.activeProvider?.defaultModel || '',
+            providerId: context.activeProvider?.providerId,
+            statusText,
+          });
+        } else {
+          updateMessageById(sessionId, assistantMsgId, msg => ({
+            ...msg,
+            content: '',
+            thinking: undefined,
+            thinkingDurationMs: undefined,
+            providerContinuation: undefined,
+            toolCalls: undefined,
+            errorInfo: undefined,
+            executionStatus: undefined,
+            pendingApproval: undefined,
+            statusText,
+          }));
+        }
+        const retryMessages = prepareMessagesForStream(await compactMessages(retryBaseMessages, {
           force: true,
-          statusText: 'Request was too large. Compacting context and retrying...',
+          statusText,
           fallbackLog: '[Catty] Forced context compaction after 413 failed; falling back to recent messages only:',
           compressForRequestTooLargeRetry: true,
           compressionLog: '[Catty] Request content compressed after forced context compaction.',
@@ -1095,7 +1165,7 @@ export function useAIChatStreaming({
           tools,
           retryMessages,
           abortController.signal,
-          assistantMsgId,
+          retryAssistantMsgId,
           context.activeProvider?.advancedParams,
           continuationContext,
         );
@@ -1112,7 +1182,7 @@ export function useAIChatStreaming({
     }
   }, [
     processCattyStream, reportStreamError, setStreamingForScope,
-    updateLastMessage, updateMessageById,
+    addMessageToSession, updateLastMessage, updateMessageById,
   ]);
 
   return {
