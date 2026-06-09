@@ -21,6 +21,7 @@ import type {
   ExternalAgentConfig,
   ProviderAdvancedParams,
   ProviderConfig,
+  ToolResult,
   WebSearchConfig,
 } from '../../../infrastructure/ai/types';
 import { isWebSearchReady } from '../../../infrastructure/ai/types';
@@ -816,6 +817,11 @@ export function useAIChatStreaming({
       const buildSdkMessages = (
         allMessages: ChatMessage[],
         includeCurrentUserMessage: boolean,
+        {
+          preserveTerminalToolResults = new Set<ToolResult>(),
+        }: {
+          preserveTerminalToolResults?: ReadonlySet<ToolResult>;
+        } = {},
       ): Array<ModelMessage> => {
         const { resolvedToolCallsByAssistant, toolCallByToolResult } = buildHistoricalToolReplayMaps(allMessages);
         const nextFieldsByMessage = new Map<ModelMessage, OpenAIChatAssistantFields | undefined>();
@@ -918,7 +924,12 @@ export function useAIChatStreaming({
                   type: 'tool-result' as const,
                   toolCallId: tr.toolCallId,
                   toolName: toolCall?.name ?? 'unknown',
-                  output: { type: 'text' as const, value: buildHistoricalToolResultReplayText(tr, toolCall) },
+                  output: {
+                    type: 'text' as const,
+                    value: buildHistoricalToolResultReplayText(tr, toolCall, {
+                      preserveTerminalOutput: preserveTerminalToolResults.has(tr),
+                    }),
+                  },
                 };
               }),
             });
@@ -957,6 +968,24 @@ export function useAIChatStreaming({
       };
 
       const sdkMessages = buildSdkMessages(currentSession?.messages ?? [], true);
+      const collectToolResultsAfterMessage = (
+        messages: ChatMessage[],
+        messageId: string,
+      ): Set<ToolResult> => {
+        const results = new Set<ToolResult>();
+        let afterMessage = false;
+        for (const message of messages) {
+          if (message.id === messageId) {
+            afterMessage = true;
+            continue;
+          }
+          if (!afterMessage || message.role !== 'tool' || !message.toolResults?.length) continue;
+          for (const result of message.toolResults) {
+            results.add(result);
+          }
+        }
+        return results;
+      };
 
       // Create model with placeholder API key — the main process injects the real
       // decrypted key when the HTTP request is proxied through IPC, so plaintext
@@ -1033,12 +1062,22 @@ export function useAIChatStreaming({
           compressionLog?: string;
         },
       ): Promise<ModelMessage[]> => {
+        const compressRetryMessages = (candidateMessages: ModelMessage[], log?: string): ModelMessage[] => {
+          if (!compressForRequestTooLargeRetry) return candidateMessages;
+          const compressed = compressMessagesForRequestTooLargeRetry(candidateMessages);
+          if (compressed.didAdjust && log) {
+            console.warn(log);
+          }
+          return compressed.messages;
+        };
+
         try {
           if (statusText) {
             updateLastMessage(sessionId, msg => ({ ...msg, statusText }));
           }
+          const inputMessages = compressRetryMessages(messages, compressionLog);
           const compacted = await prepareContextCompaction({
-            messages,
+            messages: inputMessages,
             contextWindow,
             reservedTokens: getRequestReserveTokens(),
             thresholdRatio: force ? 0 : undefined,
@@ -1046,16 +1085,9 @@ export function useAIChatStreaming({
             summarize: summarizeForCompaction,
           });
           let nextMessages = force && !compacted.didCompact
-            ? keepRecentContextMessages(messages, DEFAULT_PROTECT_RECENT_MESSAGES)
+            ? keepRecentContextMessages(inputMessages, DEFAULT_PROTECT_RECENT_MESSAGES)
             : compacted.messages;
-          if (compressForRequestTooLargeRetry) {
-            const compressed = compressMessagesForRequestTooLargeRetry(nextMessages);
-            if (compressed.didAdjust) {
-              if (compressionLog) console.warn(compressionLog);
-              nextMessages = compressed.messages;
-            }
-          }
-          return nextMessages;
+          return compressRetryMessages(nextMessages);
         } catch (err) {
           if (abortController.signal.aborted) throw err;
           console.warn(fallbackLog, err);
@@ -1102,7 +1134,12 @@ export function useAIChatStreaming({
         if (hadToolProgress) {
           const latestSession = latestAISessionsSnapshot?.find(session => session.id === sessionId);
           if (latestSession) {
-            retryBaseMessages = buildSdkMessages(latestSession.messages, false);
+            retryBaseMessages = buildSdkMessages(latestSession.messages, false, {
+              preserveTerminalToolResults: collectToolResultsAfterMessage(
+                latestSession.messages,
+                assistantMsgId,
+              ),
+            });
           }
           retryAssistantMsgId = generateId();
           addMessageToSession(sessionId, {
