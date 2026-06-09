@@ -38,6 +38,10 @@ import {
 import {
   compressMessagesForRequestTooLargeRetry,
 } from '../../../infrastructure/ai/requestPayloadCompression';
+import {
+  createCattyRequestTooLargeRetryError,
+  hadToolProgressBeforeRequestTooLarge,
+} from '../../../infrastructure/ai/cattyRequestTooLargeRetry';
 import { createModelFromConfig } from '../../../infrastructure/ai/sdk/providers';
 import { createCattyTools } from '../../../infrastructure/ai/sdk/tools';
 import type { ExecutorContext } from '../../../infrastructure/ai/cattyAgent/executor';
@@ -101,41 +105,6 @@ const OPENAI_CHAT_ASSISTANT_FIELDS = Symbol('netcatty.openAIChatAssistantFields'
 type ModelMessageWithOpenAIChatFields = ModelMessage & {
   [OPENAI_CHAT_ASSISTANT_FIELDS]?: OpenAIChatAssistantFields;
 };
-
-type CattyRequestTooLargeRetryError = Error & {
-  cattyHadToolProgress?: boolean;
-  statusCode?: number;
-  status?: number;
-  responseBody?: string;
-};
-
-function createCattyRequestTooLargeRetryError(
-  error: unknown,
-  hadToolProgress: boolean,
-): CattyRequestTooLargeRetryError {
-  const message = error instanceof Error
-    ? error.message
-    : String(error ?? 'Request too large');
-  const retryError = new Error(message) as CattyRequestTooLargeRetryError;
-  retryError.name = 'CattyRequestTooLargeRetryError';
-  retryError.cause = error;
-  retryError.cattyHadToolProgress = hadToolProgress;
-  retryError.statusCode = 413;
-  if (error && typeof error === 'object') {
-    const source = error as Record<string, unknown>;
-    if (typeof source.status === 'number') retryError.status = source.status;
-    if (typeof source.responseBody === 'string') retryError.responseBody = source.responseBody;
-  }
-  return retryError;
-}
-
-function hadToolProgressBeforeRequestTooLarge(error: unknown): boolean {
-  return !!(
-    error &&
-    typeof error === 'object' &&
-    (error as { cattyHadToolProgress?: boolean }).cattyHadToolProgress
-  );
-}
 
 function emitStreamingStoreChange(): void {
   streamingSubscribers.forEach(listener => {
@@ -454,7 +423,16 @@ export function useAIChatStreaming({
 
     try {
     while (true) {
-      const { done, value } = await reader.read();
+      let readResult: ReadableStreamReadResult<unknown>;
+      try {
+        readResult = await reader.read();
+      } catch (readErr) {
+        if (isRequestTooLargeError(readErr)) {
+          throw createCattyRequestTooLargeRetryError(readErr, hadToolProgress);
+        }
+        throw readErr;
+      }
+      const { done, value } = readResult;
       if (done) break;
       // Use the StreamChunk union for type narrowing instead of unsafe casts
       const chunk = value as StreamChunk;
