@@ -53,3 +53,12 @@ test("asarUnpack keeps MCP server runtime deps unpacked", () => {
   // @modelcontextprotocol/sdk is now a direct dep and the MCP server hard-requires it.
   assert.ok(config.asarUnpack.includes("node_modules/@modelcontextprotocol/sdk/**/*"));
 });
+
+test("linux packaging uses multi-size build/icons instead of a single 1024px override", () => {
+  assert.equal(
+    config.linux.icon,
+    undefined,
+    "linux.icon must stay unset so electron-builder installs build/icons into hicolor/*",
+  );
+  assert.equal(config.directories.buildResources, "build");
+});
