@@ -36,9 +36,8 @@ import {
   resolveContextWindow,
 } from '../../../infrastructure/ai/contextCompaction';
 import {
-  estimateUtf8Bytes,
-  fitMessagesToRequestPayloadBudget,
-} from '../../../infrastructure/ai/requestPayloadBudget';
+  compressMessagesForRequestTooLargeRetry,
+} from '../../../infrastructure/ai/requestPayloadCompression';
 import { createModelFromConfig } from '../../../infrastructure/ai/sdk/providers';
 import { createCattyTools } from '../../../infrastructure/ai/sdk/tools';
 import type { ExecutorContext } from '../../../infrastructure/ai/cattyAgent/executor';
@@ -964,14 +963,6 @@ export function useAIChatStreaming({
         openAIChatAssistantFields: Array.from(openAIChatAssistantFieldsByMessage.values()),
       });
 
-      const payloadReservedBytes = estimateUtf8Bytes({
-        system: systemPrompt,
-        tools: Object.keys(tools),
-      });
-      const applyRequestPayloadBudget = (messages: ModelMessage[]) => fitMessagesToRequestPayloadBudget({
-        messages,
-        reservedBytes: payloadReservedBytes,
-      });
       const summarizeForCompaction = async (messagesToSummarize: ModelMessage[]) => {
         updateLastMessage(sessionId, msg => ({ ...msg, statusText: 'Compacting earlier context...' }));
         const result = await generateText({
@@ -999,18 +990,20 @@ export function useAIChatStreaming({
         );
         return pruned;
       };
-      const compactAndBudgetMessages = async (
+      const compactMessages = async (
         messages: ModelMessage[],
         {
           force = false,
           statusText,
-          trimLog,
           fallbackLog,
+          compressForRequestTooLargeRetry = false,
+          compressionLog,
         }: {
           force?: boolean;
           statusText?: string;
-          trimLog: string;
           fallbackLog: string;
+          compressForRequestTooLargeRetry?: boolean;
+          compressionLog?: string;
         },
       ): Promise<ModelMessage[]> => {
         try {
@@ -1028,35 +1021,30 @@ export function useAIChatStreaming({
           let nextMessages = force && !compacted.didCompact
             ? keepRecentContextMessages(messages, DEFAULT_PROTECT_RECENT_MESSAGES)
             : compacted.messages;
-          const budgetResult = applyRequestPayloadBudget(nextMessages);
-          if (budgetResult.didAdjust) {
-            console.warn(`${trimLog} ${budgetResult.estimatedBytes} bytes.`);
-            nextMessages = budgetResult.messages;
+          if (compressForRequestTooLargeRetry) {
+            const compressed = compressMessagesForRequestTooLargeRetry(nextMessages);
+            if (compressed.didAdjust) {
+              if (compressionLog) console.warn(compressionLog);
+              nextMessages = compressed.messages;
+            }
           }
           return nextMessages;
         } catch (err) {
           if (abortController.signal.aborted) throw err;
           console.warn(fallbackLog, err);
-          const fallbackBudget = applyRequestPayloadBudget(
-            keepRecentContextMessages(messages, DEFAULT_PROTECT_RECENT_MESSAGES),
-          );
-          if (fallbackBudget.didAdjust) {
-            console.warn(
-              `[Catty] Request payload trimmed to ${fallbackBudget.estimatedBytes} bytes after compaction fallback.`,
-            );
+          const fallbackMessages = keepRecentContextMessages(messages, DEFAULT_PROTECT_RECENT_MESSAGES);
+          if (!compressForRequestTooLargeRetry) {
+            return fallbackMessages;
           }
-          return fallbackBudget.messages;
+          const compressed = compressMessagesForRequestTooLargeRetry(fallbackMessages);
+          if (compressed.didAdjust) {
+            console.warn('[Catty] Request content compressed after compaction fallback.');
+          }
+          return compressed.messages;
         }
       };
-      const payloadBudgetResult = applyRequestPayloadBudget(sdkMessages);
-      let messagesForStream = payloadBudgetResult.messages;
-      if (payloadBudgetResult.didAdjust) {
-        console.warn(
-          `[Catty] Request payload trimmed to ${payloadBudgetResult.estimatedBytes} bytes to avoid HTTP 413.`,
-        );
-      }
-      messagesForStream = await compactAndBudgetMessages(messagesForStream, {
-        trimLog: '[Catty] Request payload re-trimmed after context compaction to',
+      let messagesForStream = sdkMessages;
+      messagesForStream = await compactMessages(messagesForStream, {
         fallbackLog: '[Catty] Context compaction failed; falling back to recent messages only:',
       });
 
@@ -1092,11 +1080,12 @@ export function useAIChatStreaming({
           pendingApproval: undefined,
           statusText: 'Request was too large. Compacting context and retrying...',
         }));
-        const retryMessages = prepareMessagesForStream(await compactAndBudgetMessages(messagesForStream, {
+        const retryMessages = prepareMessagesForStream(await compactMessages(messagesForStream, {
           force: true,
           statusText: 'Request was too large. Compacting context and retrying...',
-          trimLog: '[Catty] Request payload trimmed after forced context compaction to',
           fallbackLog: '[Catty] Forced context compaction after 413 failed; falling back to recent messages only:',
+          compressForRequestTooLargeRetry: true,
+          compressionLog: '[Catty] Request content compressed after forced context compaction.',
         }));
 
         await processCattyStream(
