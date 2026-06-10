@@ -237,6 +237,7 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     setSftpPendingUploadsForTab: s.setSftpPendingUploadsForTab,
     setAiMountedTabIds: s.setAiMountedTabIds,
     setScriptsMountedTabIds: s.setScriptsMountedTabIds,
+    setSystemMountedTabIds: s.setSystemMountedTabIds,
     setThemeMountedTabIds: s.setThemeMountedTabIds,
     setSidePanelOpenTabs: s.setSidePanelOpenTabs,
     setThemePreview: themeState.setThemePreview,
