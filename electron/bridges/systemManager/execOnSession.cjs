@@ -1,5 +1,7 @@
 /* eslint-disable no-undef */
 
+const { isSshConnAlive, isTransportExecError } = require("./execConnHealth.cjs");
+
 function createExecOnSessionApi(ctx) {
   with (ctx) {
     /** Serialize remote exec per session to avoid SSH channel storms. */
@@ -41,34 +43,42 @@ function createExecOnSessionApi(ctx) {
       }
     }
 
-    async function execOnSshSession(session, command, timeoutMs, event) {
-      if (session?.type === "et") {
-        if (typeof execOnEtSession !== "function") {
-          return { success: false, error: "ET command executor unavailable" };
+    async function ensureMoshCompanion(session, sessionId, event) {
+      if (session?.type !== "mosh" || typeof ensureMoshStatsConnection !== "function") {
+        return;
+      }
+      if (session.moshStatsConn && isSshConnAlive(session.moshStatsConn)) {
+        return;
+      }
+      if (session.moshStatsConn && !isSshConnAlive(session.moshStatsConn)) {
+        session.moshStatsConn = null;
+      }
+      if (!session.moshStatsConn && !session.moshStatsConnFailed) {
+        await ensureMoshStatsConnection(session, sessionId, event?.sender);
+      }
+    }
+
+    async function resolveExecConnection(session, sessionId, event) {
+      if (!session) return null;
+
+      await ensureMoshCompanion(session, sessionId, event);
+
+      const conn = session.conn || session.moshStatsConn;
+      if (!conn) return null;
+
+      if (!isSshConnAlive(conn)) {
+        if (session.moshStatsConn === conn) {
+          session.moshStatsConn = null;
+          await ensureMoshCompanion(session, sessionId, event);
+          return session.conn || session.moshStatsConn;
         }
-        return execOnEtSession(session, command, timeoutMs, {
-          requireTrustedHost: true,
-          knownHosts: session.etStatsAuth?.knownHosts,
-        });
+        return null;
       }
 
-      if (
-        !session?.conn &&
-        !session?.moshStatsConn &&
-        session?.type === "mosh" &&
-        typeof ensureMoshStatsConnection === "function"
-      ) {
-        await ensureMoshStatsConnection(session, session.id, event?.sender);
-      }
+      return conn;
+    }
 
-      const conn = session?.conn || session?.moshStatsConn;
-      if (!conn) {
-        if (session?.type === "mosh" && !session.moshStatsAuth && !session.moshStatsConnFailed) {
-          return { success: false, pending: true, error: "Mosh handshake in progress" };
-        }
-        return { success: false, error: "Session not found or not connected" };
-      }
-
+    function execOnConnection(conn, command, timeoutMs) {
       return new Promise((resolve) => {
         let settled = false;
         let activeStream = null;
@@ -104,6 +114,38 @@ function createExecOnSessionApi(ctx) {
           settle({ success: false, error: err?.message || String(err) });
         }
       });
+    }
+
+    async function execOnSshSession(session, sessionId, command, timeoutMs, event, allowCompanionRetry = true) {
+      if (session?.type === "et") {
+        if (typeof execOnEtSession !== "function") {
+          return { success: false, error: "ET command executor unavailable" };
+        }
+        return execOnEtSession(session, command, timeoutMs, {
+          requireTrustedHost: true,
+          knownHosts: session.etStatsAuth?.knownHosts,
+        });
+      }
+
+      const conn = await resolveExecConnection(session, sessionId, event);
+      if (!conn) {
+        if (session?.type === "mosh" && !session.moshStatsAuth && !session.moshStatsConnFailed) {
+          return { success: false, pending: true, error: "Mosh handshake in progress" };
+        }
+        return { success: false, error: "Session not found or not connected" };
+      }
+
+      const result = await execOnConnection(conn, command, timeoutMs);
+      if (
+        allowCompanionRetry
+        && !result.success
+        && session.moshStatsConn
+        && isTransportExecError(result.error)
+      ) {
+        session.moshStatsConn = null;
+        return execOnSshSession(session, sessionId, command, timeoutMs, event, false);
+      }
+      return result;
     }
 
     async function execOnLocalMachine(command, timeoutMs) {
@@ -155,7 +197,7 @@ function createExecOnSessionApi(ctx) {
       }
 
       if (session.conn || session.type === "mosh" || session.type === "et") {
-        return execOnSshSession(session, command, timeoutMs, event);
+        return execOnSshSession(session, sessionId, command, timeoutMs, event);
       }
 
       return { success: false, error: "Session not supported for system management" };

@@ -31,6 +31,7 @@ export const sessionCapabilitiesStore = {
 
   delete(sessionId: string) {
     if (!capabilitiesBySessionId.delete(sessionId)) return;
+    notifySession(sessionId);
     listenersBySessionId.delete(sessionId);
   },
 

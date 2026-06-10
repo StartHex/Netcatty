@@ -37,8 +37,15 @@ export function useSessionCapabilities(
     });
   }, [sessionId]);
 
-  const probe = useCallback(async () => {
+  useEffect(() => {
+    if (!sessionId || isConnected) return undefined;
+    sessionCapabilitiesStore.delete(sessionId);
+    return undefined;
+  }, [sessionId, isConnected]);
+
+  const probe = useCallback(async (force = false) => {
     if (!sessionId || !isConnected) return;
+    if (!force && sessionCapabilitiesStore.get(sessionId)) return;
     setProbing(true);
     try {
       const result = await backend.probeSystemCapabilities(sessionId);
@@ -52,12 +59,11 @@ export function useSessionCapabilities(
 
   useEffect(() => {
     if (!sessionId || !isConnected || !enabled) return undefined;
-    if (sessionCapabilitiesStore.get(sessionId)) return undefined;
     void probe();
     return undefined;
   }, [enabled, sessionId, isConnected, probe]);
 
-  return { capabilities, probing, refreshCapabilities: probe };
+  return { capabilities, probing, refreshCapabilities: () => probe(true) };
 }
 
 /** Prefetch capabilities only for the given session ids (e.g. when System panel opens). */
@@ -103,9 +109,22 @@ export function usePolling<T>(
   const inflightRef = useRef(false);
   const fetcherRef = useRef(fetcher);
   const mergeRef = useRef(merge);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   fetcherRef.current = fetcher;
   mergeRef.current = merge;
+
+  const clearPollTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const pollDelayMs = useCallback(() => {
+    if (failuresRef.current >= 3) return intervalMs * 4;
+    return intervalMs;
+  }, [intervalMs]);
 
   const run = useCallback(async (options?: { withLoading?: boolean }) => {
     if (!enabled || inflightRef.current) return;
@@ -133,24 +152,37 @@ export function usePolling<T>(
     }
   }, [enabled]);
 
+  const scheduleNextPoll = useCallback(() => {
+    clearPollTimer();
+    if (!enabled) return;
+    timerRef.current = setTimeout(() => {
+      void run({ withLoading: false }).finally(() => {
+        scheduleNextPoll();
+      });
+    }, pollDelayMs());
+  }, [clearPollTimer, enabled, pollDelayMs, run]);
+
   useEffect(() => {
     if (!enabled) {
+      clearPollTimer();
       setData(null);
       setError(null);
       failuresRef.current = 0;
       hasDataRef.current = false;
       return undefined;
     }
-    void run({ withLoading: true });
-    if (failuresRef.current >= 3) return undefined;
-    const id = setInterval(() => {
-      if (failuresRef.current >= 3) return;
-      void run({ withLoading: false });
-    }, intervalMs);
-    return () => clearInterval(id);
-  }, [enabled, intervalMs, run]);
+    void run({ withLoading: true }).finally(() => {
+      scheduleNextPoll();
+    });
+    return () => {
+      clearPollTimer();
+    };
+  }, [clearPollTimer, enabled, intervalMs, run, scheduleNextPoll]);
 
-  const refresh = useCallback(() => run({ withLoading: true }), [run]);
+  const refresh = useCallback(async () => {
+    failuresRef.current = 0;
+    await run({ withLoading: true });
+  }, [run]);
 
   return { data, error, loading, refresh };
 }
