@@ -17,6 +17,7 @@ test('DebouncedTextarea keeps draft locally and commits on debounce/blur', () =>
   assert.match(source, /setTimeout\(\(\) =>/);
   assert.match(source, /onBlur/);
   assert.match(source, /onCommitRef\.current\(draft\)/);
+  assert.match(source, /draftRef\.current !== committedRef\.current/);
 });
 
 test('settings appearance uses debounced custom CSS textarea with live preview', () => {

@@ -23,12 +23,16 @@ export const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({
   ...props
 }) => {
   const [draft, setDraft] = useState(value);
+  const draftRef = useRef(value);
+  const committedRef = useRef(value);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onCommitRef = useRef(onCommit);
   const onDraftChangeRef = useRef(onDraftChange);
 
   onCommitRef.current = onCommit;
   onDraftChangeRef.current = onDraftChange;
+  draftRef.current = draft;
+  committedRef.current = value;
 
   useEffect(() => {
     setDraft(value);
@@ -36,7 +40,13 @@ export const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({
 
   useEffect(() => {
     return () => {
-      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+      if (commitTimerRef.current) {
+        clearTimeout(commitTimerRef.current);
+        commitTimerRef.current = null;
+      }
+      if (draftRef.current !== committedRef.current) {
+        onCommitRef.current(draftRef.current);
+      }
     };
   }, []);
 
