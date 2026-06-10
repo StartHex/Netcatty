@@ -4,6 +4,7 @@ import { useI18n } from '../../application/i18n/I18nProvider';
 import type { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import type { Snippet, TerminalSession } from '../../types';
 import type { TmuxSessionInfo } from '../../domain/systemManager/types';
+import { tmuxSessionInfoEqual } from '../../domain/systemManager/pollEquals';
 import {
   SystemPanelEmpty,
   SystemPanelIconButton,
@@ -15,7 +16,7 @@ import {
   SystemPanelShell,
   SystemPanelToolbar,
 } from './SystemPanelUi';
-import { usePolling } from './hooks/useSystemManager';
+import { usePolling, useStableTranslate } from './hooks/useSystemManager';
 import { TmuxNewSessionModal } from './TmuxNewSessionModal';
 import { TmuxSessionCard } from './TmuxSessionCard';
 import { useStableListOrder, mergePollListByKey } from './listStable';
@@ -40,6 +41,7 @@ export const TmuxManagerTab = memo(function TmuxManagerTab({
   snippets,
 }: TmuxManagerTabProps) {
   const { t } = useI18n();
+  const stableT = useStableTranslate();
   const [query, setQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -49,20 +51,20 @@ export const TmuxManagerTab = memo(function TmuxManagerTab({
 
   const fetcher = useCallback(async () => {
     const result = await backend.listTmuxSessions(sessionId);
+    const version = result.tmuxVersion ?? null;
+    setTmuxVersion((prev) => (prev === version ? prev : version));
     if (!result.success) {
-      setTmuxVersion(result.tmuxVersion ?? null);
-      throw new Error(result.error || t('systemManager.errors.loadTmux'));
+      throw new Error(result.error || stableT('systemManager.errors.loadTmux'));
     }
-    setTmuxVersion(result.tmuxVersion ?? null);
     return result.sessions ?? [];
-  }, [backend, sessionId, t]);
+  }, [backend, sessionId, stableT]);
 
   const intervalMs = Math.max(2, refreshIntervalSec) * 1000;
   const { data: sessions, error, loading, refresh } = usePolling<TmuxSessionInfo[]>(
     fetcher,
     intervalMs,
     isVisible,
-    (prev, next) => mergePollListByKey(prev, next, (s) => s.name),
+    (prev, next) => mergePollListByKey(prev, next, (s) => s.name, tmuxSessionInfoEqual),
   );
 
   const filtered = useMemo(() => {

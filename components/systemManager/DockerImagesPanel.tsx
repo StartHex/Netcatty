@@ -3,6 +3,7 @@ import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import type { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import { dockerImageRowKey, type DockerImageInfo } from '../../domain/systemManager/types';
+import { dockerImageInfoEqual } from '../../domain/systemManager/pollEquals';
 import { DockerImageIcon } from './DockerImageIcon';
 import { DockerInspectView } from './DockerInspectView';
 import { mergePollListByKey, useStableListOrder } from './listStable';
@@ -10,7 +11,6 @@ import {
   SystemPanelCollapsible,
   SystemPanelEmpty,
   SystemPanelError,
-  SystemPanelInlineError,
   SystemPanelList,
   SystemPanelMetaBar,
   SystemPanelRefreshButton,
@@ -20,7 +20,8 @@ import {
   SystemPanelToolbar,
 } from './SystemPanelUi';
 import { SystemPanelPromptDialog } from './SystemPanelPromptDialog';
-import { usePolling } from './hooks/useSystemManager';
+import { usePolling, useStableTranslate } from './hooks/useSystemManager';
+import { showSystemManagerError } from './systemManagerToast';
 
 type Backend = ReturnType<typeof useSystemManagerBackend>;
 
@@ -84,26 +85,26 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
   listRefreshIntervalSec,
 }: DockerImagesPanelProps) {
   const { t } = useI18n();
+  const stableT = useStableTranslate();
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inspect, setInspect] = useState<Record<string, unknown> | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const inspectSeqRef = useRef(0);
 
   const imagesFetcher = useCallback(async () => {
     const result = await backend.listDockerImages(sessionId);
     if (!result.success || !result.images) {
-      throw new Error(result.error || t('systemManager.errors.loadDockerImages'));
+      throw new Error(result.error || stableT('systemManager.errors.loadDockerImages'));
     }
     return result.images;
-  }, [backend, sessionId, t]);
+  }, [backend, sessionId, stableT]);
 
   const listIntervalMs = Math.max(3, listRefreshIntervalSec) * 1000;
   const { data: images, error, loading, refresh } = usePolling<DockerImageInfo[]>(
     imagesFetcher,
     listIntervalMs,
     isVisible,
-    (prev, next) => mergePollListByKey(prev, next, dockerImageRowKey),
+    (prev, next) => mergePollListByKey(prev, next, dockerImageRowKey, dockerImageInfoEqual),
   );
 
   const filtered = useMemo(() => {
@@ -133,7 +134,6 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
     const label = image.name || image.id.slice(0, 12);
     const ok = window.confirm(t('systemManager.docker.confirmRemoveImage', { name: label }));
     if (!ok) return;
-    setActionError(null);
     const result = await backend.dockerImageAction({
       sessionId,
       action: 'rm',
@@ -141,7 +141,7 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
       force: image.tag === '<none>',
     });
     if (!result.success) {
-      setActionError(result.error || t('systemManager.errors.actionFailed'));
+      showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
       return;
     }
     if (selectedId === dockerImageRowKey(image)) {
@@ -157,10 +157,9 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
       ? t('systemManager.docker.confirmPruneAll')
       : t('systemManager.docker.confirmPrune'));
     if (!ok) return;
-    setActionError(null);
     const result = await backend.dockerImageAction({ sessionId, action: 'prune', all });
     if (!result.success) {
-      setActionError(result.error || t('systemManager.errors.actionFailed'));
+      showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
       return;
     }
     await refresh();
@@ -169,7 +168,6 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
   const [tagTarget, setTagTarget] = useState<DockerImageInfo | null>(null);
 
   const handleTagSubmit = async (image: DockerImageInfo, repository: string, tag: string) => {
-    setActionError(null);
     const result = await backend.dockerImageAction({
       sessionId,
       action: 'tag',
@@ -178,7 +176,7 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
       tag: tag || 'latest',
     });
     if (!result.success) {
-      setActionError(result.error || t('systemManager.errors.actionFailed'));
+      showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
       return;
     }
     await refresh();
@@ -240,8 +238,6 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
       <SystemPanelMetaBar>
         {t('systemManager.docker.imagesMeta', { count: String(displayList.length) })}
       </SystemPanelMetaBar>
-
-      {actionError && <SystemPanelInlineError message={actionError} />}
 
       <SystemPanelList>
         {error && (

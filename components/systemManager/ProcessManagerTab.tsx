@@ -10,6 +10,7 @@ import {
   getProcessTone,
 } from '../../domain/systemManager/processState';
 import type { SystemProcessInfo } from '../../domain/systemManager/types';
+import { systemProcessInfoEqual } from '../../domain/systemManager/pollEquals';
 import { cn } from '../../lib/utils';
 import { ResourceBar } from './ResourceBar';
 import { useStableListOrder, mergePollListByKey } from './listStable';
@@ -31,7 +32,7 @@ import {
   SystemPanelToolbar,
 } from './SystemPanelUi';
 import { SystemPanelPromptDialog } from './SystemPanelPromptDialog';
-import { usePolling } from './hooks/useSystemManager';
+import { usePolling, useStableTranslate } from './hooks/useSystemManager';
 
 type Backend = ReturnType<typeof useSystemManagerBackend>;
 type SortKey = 'cpuPercent' | 'memPercent' | 'pid' | 'command' | 'user';
@@ -58,7 +59,7 @@ function isProcessRunning(stat: string): boolean {
 const mergeProcesses = (
   prev: SystemProcessInfo[] | null,
   next: SystemProcessInfo[],
-) => mergePollListByKey(prev, next, (p) => p.pid);
+) => mergePollListByKey(prev, next, (p) => p.pid, systemProcessInfoEqual);
 
 interface ProcessRowProps {
   proc: SystemProcessInfo;
@@ -161,6 +162,7 @@ export const ProcessManagerTab = memo(function ProcessManagerTab({
   refreshIntervalSec,
 }: ProcessManagerTabProps) {
   const { t } = useI18n();
+  const stableT = useStableTranslate();
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('cpuPercent');
   const [sortAsc, setSortAsc] = useState(false);
@@ -173,10 +175,10 @@ export const ProcessManagerTab = memo(function ProcessManagerTab({
     const result = await backend.listSystemProcesses(sessionId);
     if (result.pending) return null;
     if (!result.success || !result.processes) {
-      throw new Error(result.error || t('systemManager.errors.loadProcesses'));
+      throw new Error(result.error || stableT('systemManager.errors.loadProcesses'));
     }
     return result.processes;
-  }, [backend, sessionId, t]);
+  }, [backend, sessionId, stableT]);
 
   const intervalMs = Math.max(2, refreshIntervalSec) * 1000;
   const { data: processes, error, loading, refresh } = usePolling<SystemProcessInfo[]>(

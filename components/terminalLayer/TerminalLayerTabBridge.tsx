@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 
 import { useActiveTabId } from '../../application/state/activeTabStore';
+import { sessionCapabilitiesStore } from '../../application/state/sessionCapabilitiesStore';
 import { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import { canReuseTerminalConnection } from '../../application/state/terminalConnectionReuse';
 import { resolveSystemSidebarSession } from '../../domain/systemManager/resolveSystemSession';
@@ -27,7 +28,6 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
   const workspaceById = s.workspaceById as Map<string, Workspace>;
   const sessions = s.sessions as TerminalSession[];
   const sessionHostsMap = s.sessionHostsMap as Map<string, Host>;
-  useSystemCapabilitiesWarmup(sessions, systemBackend);
   const sftpHostForTab = s.sftpHostForTab as Map<string, Host>;
   const sidePanelOpenTabs = s.sidePanelOpenTabs as Map<string, SidePanelTab>;
   const showHostTreeSidebar = s.showHostTreeSidebar as boolean | undefined;
@@ -143,6 +143,24 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     if (!id) return null;
     return sessionHostsMap.get(id) ?? null;
   }, [activeTerminalSessionForSystem?.id, sessionHostsMap]);
+
+  const systemWarmupSessionIds = useMemo(() => {
+    if (!activeTabId || activeSidePanelTab !== 'system') return [];
+    const session = activeTerminalSessionForSystem;
+    if (!session || session.status !== 'connected') return [];
+    return [session.id];
+  }, [activeSidePanelTab, activeTabId, activeTerminalSessionForSystem]);
+
+  useSystemCapabilitiesWarmup(
+    systemWarmupSessionIds,
+    systemBackend,
+    systemWarmupSessionIds.length > 0,
+  );
+
+  useEffect(() => {
+    sessionCapabilitiesStore.prune(new Set(sessions.map((session) => session.id)));
+  }, [sessions]);
+
   const focusedHost = useMemo((): Host | null => {
     if (!historySessionId) return null;
     return sessionHostsMap.get(historySessionId) ?? null;

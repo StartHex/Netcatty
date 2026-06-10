@@ -2,8 +2,43 @@
 
 function createExecOnSessionApi(ctx) {
   with (ctx) {
+    /** Serialize remote exec per session to avoid SSH channel storms. */
+    const execQueues = new Map();
+
     function getSession(sessionId) {
       return sessions?.get?.(sessionId) ?? null;
+    }
+
+    function enqueueExec(sessionId, task) {
+      let state = execQueues.get(sessionId);
+      if (!state) {
+        state = { running: false, pending: [] };
+        execQueues.set(sessionId, state);
+      }
+      return new Promise((resolve) => {
+        state.pending.push({ task, resolve });
+        void drainExecQueue(sessionId);
+      });
+    }
+
+    async function drainExecQueue(sessionId) {
+      const state = execQueues.get(sessionId);
+      if (!state || state.running) return;
+      state.running = true;
+      while (state.pending.length > 0) {
+        const job = state.pending.shift();
+        if (!job) continue;
+        try {
+          const result = await job.task();
+          job.resolve(result);
+        } catch (err) {
+          job.resolve({ success: false, error: err?.message || String(err) });
+        }
+      }
+      state.running = false;
+      if (state.pending.length === 0) {
+        execQueues.delete(sessionId);
+      }
     }
 
     async function execOnSshSession(session, command, timeoutMs, event) {
@@ -108,9 +143,10 @@ function createExecOnSessionApi(ctx) {
       });
     }
 
-    async function execOnSession(event, sessionId, command, timeoutMs = 8000) {
+    async function execOnSessionInner(event, sessionId, command, timeoutMs = 8000) {
       const session = getSession(sessionId);
       if (!session) {
+        execQueues.delete(sessionId);
         return { success: false, error: "Session not found" };
       }
 
@@ -123,6 +159,10 @@ function createExecOnSessionApi(ctx) {
       }
 
       return { success: false, error: "Session not supported for system management" };
+    }
+
+    async function execOnSession(event, sessionId, command, timeoutMs = 8000) {
+      return enqueueExec(sessionId, () => execOnSessionInner(event, sessionId, command, timeoutMs));
     }
 
     function isLocalSession(sessionId) {

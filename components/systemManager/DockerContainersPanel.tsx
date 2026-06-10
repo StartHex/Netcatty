@@ -4,6 +4,7 @@ import { useI18n } from '../../application/i18n/I18nProvider';
 import type { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import type { TerminalSession } from '../../types';
 import type { DockerContainerAction, DockerContainerInfo } from '../../domain/systemManager/types';
+import { dockerContainerInfoEqual } from '../../domain/systemManager/pollEquals';
 import { getContainerFlags, getContainerTone } from '../../domain/systemManager/containerState';
 import { buildDockerExecShellCommand, buildDockerLogsCommand } from '../../domain/systemManager/dockerShell';
 import { DockerContainerDetail } from './DockerContainerDetail';
@@ -13,7 +14,6 @@ import {
   SystemPanelCollapsible,
   SystemPanelEmpty,
   SystemPanelError,
-  SystemPanelInlineError,
   SystemPanelList,
   SystemPanelMetaBar,
   SystemPanelRefreshButton,
@@ -24,8 +24,9 @@ import {
   SystemPanelStatusBadge,
   SystemPanelToolbar,
 } from './SystemPanelUi';
-import { usePolling } from './hooks/useSystemManager';
+import { usePolling, useStableTranslate } from './hooks/useSystemManager';
 import { openInteractiveTerminal } from './openInteractiveTerminal';
+import { showSystemManagerError } from './systemManagerToast';
 
 type Backend = ReturnType<typeof useSystemManagerBackend>;
 type ContainerFilter = 'all' | 'running' | 'stopped' | 'paused';
@@ -136,11 +137,11 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
   statsRefreshIntervalSec,
 }: DockerContainersPanelProps) {
   const { t } = useI18n();
+  const stableT = useStableTranslate();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ContainerFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inspect, setInspect] = useState<Record<string, unknown> | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   // Invalidates in-flight inspect fetches when the selection changes —
   // a slow response for container A must not render under container B.
   const inspectSeqRef = useRef(0);
@@ -151,17 +152,17 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
   const containersFetcher = useCallback(async () => {
     const result = await backend.listDockerContainers(sessionId);
     if (!result.success || !result.containers) {
-      throw new Error(result.error || t('systemManager.errors.loadDocker'));
+      throw new Error(result.error || stableT('systemManager.errors.loadDocker'));
     }
     return result.containers;
-  }, [backend, sessionId, t]);
+  }, [backend, sessionId, stableT]);
 
   const listIntervalMs = Math.max(3, listRefreshIntervalSec) * 1000;
   const { data: containers, error, loading, refresh } = usePolling<DockerContainerInfo[]>(
     containersFetcher,
     listIntervalMs,
     isVisible,
-    (prev, next) => mergePollListByKey(prev, next, (c) => c.id),
+    (prev, next) => mergePollListByKey(prev, next, (c) => c.id, dockerContainerInfoEqual),
   );
 
   const matched = useMemo(() => {
@@ -200,7 +201,6 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
     action: DockerContainerAction,
     newName?: string,
   ) => {
-    setActionError(null);
     if (action === 'rm') {
       const ok = globalThis.confirm(t('systemManager.docker.confirmRemove'));
       if (!ok) return;
@@ -213,7 +213,7 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
     try {
       const result = await backend.dockerAction({ sessionId, containerId, action, newName });
       if (!result.success) {
-        setActionError(result.error || t('systemManager.errors.actionFailed'));
+        showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
         return;
       }
       if (action === 'rm') {
@@ -247,7 +247,6 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
 
   const openShell = useCallback(async (container: DockerContainerInfo) => {
     const id = container.id.slice(0, 12);
-    setActionError(null);
     const result = await openInteractiveTerminal(
       backend,
       parentSession,
@@ -255,13 +254,12 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
       buildDockerExecShellCommand(id),
     );
     if (!result.success) {
-      setActionError(result.error || t('systemManager.errors.actionFailed'));
+      showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
     }
   }, [backend, parentSession, t]);
 
   const openLogs = useCallback(async (container: DockerContainerInfo) => {
     const id = container.id.slice(0, 12);
-    setActionError(null);
     const result = await openInteractiveTerminal(
       backend,
       parentSession,
@@ -269,7 +267,7 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
       buildDockerLogsCommand(id),
     );
     if (!result.success) {
-      setActionError(result.error || t('systemManager.errors.actionFailed'));
+      showSystemManagerError(result.error || t('systemManager.errors.actionFailed'), t('common.error'));
     }
   }, [backend, parentSession, t]);
 
@@ -305,8 +303,6 @@ export const DockerContainersPanel = memo(function DockerContainersPanel({
       <SystemPanelMetaBar>
         {t('systemManager.docker.meta', { count: String(displayList.length) })}
       </SystemPanelMetaBar>
-
-      {actionError && <SystemPanelInlineError message={actionError} />}
 
       <SystemPanelList>
         {error && (

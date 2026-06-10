@@ -1,11 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useI18n } from '../../../application/i18n/I18nProvider';
+import type { I18nContextValue } from '../../../application/i18n/I18nProvider';
 import { sessionCapabilitiesStore } from '../../../application/state/sessionCapabilitiesStore';
 import type { SessionCapabilities } from '../../../domain/systemManager/types';
 import type { useSystemManagerBackend } from '../../../application/state/useSystemManagerBackend';
-import type { TerminalSession } from '../../../types';
 import { nextPollData } from '../listStable';
 
 type Backend = ReturnType<typeof useSystemManagerBackend>;
+
+/** Stable i18n ref so polling fetchers do not reset when locale re-renders. */
+export function useStableTranslate(): I18nContextValue['t'] {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
+  return useCallback(
+    (key, values) => tRef.current(key, values),
+    [],
+  );
+}
 
 export function useSessionCapabilities(
   sessionId: string | null,
@@ -20,7 +32,7 @@ export function useSessionCapabilities(
 
   useEffect(() => {
     if (!sessionId) return undefined;
-    return sessionCapabilitiesStore.subscribe(() => {
+    return sessionCapabilitiesStore.subscribe(sessionId, () => {
       setCapabilities(sessionCapabilitiesStore.get(sessionId));
     });
   }, [sessionId]);
@@ -48,27 +60,21 @@ export function useSessionCapabilities(
   return { capabilities, probing, refreshCapabilities: probe };
 }
 
-/** Prefetch capabilities for connected sessions so the system panel opens faster. */
+/** Prefetch capabilities only for the given session ids (e.g. when System panel opens). */
 export function useSystemCapabilitiesWarmup(
-  sessions: TerminalSession[],
+  sessionIds: string[],
   backend: Backend,
+  enabled: boolean,
 ) {
   const backendRef = useRef(backend);
   backendRef.current = backend;
   const inflightRef = useRef(new Set<string>());
 
-  const connectedKey = useMemo(
-    () => sessions
-      .filter((session) => session.status === 'connected')
-      .map((session) => session.id)
-      .sort()
-      .join(','),
-    [sessions],
-  );
+  const sessionKey = enabled ? sessionIds.slice().sort().join(',') : '';
 
   useEffect(() => {
-    if (!connectedKey) return undefined;
-    for (const sessionId of connectedKey.split(',')) {
+    if (!sessionKey) return undefined;
+    for (const sessionId of sessionKey.split(',')) {
       if (!sessionId || sessionCapabilitiesStore.get(sessionId)) continue;
       if (inflightRef.current.has(sessionId)) continue;
       inflightRef.current.add(sessionId);
@@ -80,7 +86,7 @@ export function useSystemCapabilitiesWarmup(
       });
     }
     return undefined;
-  }, [connectedKey]);
+  }, [sessionKey]);
 }
 
 export function usePolling<T>(

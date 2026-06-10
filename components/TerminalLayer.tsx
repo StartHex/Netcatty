@@ -9,6 +9,7 @@ import {
   shouldMarkSessionActivity,
 } from '../application/state/sessionActivity';
 import { sessionActivityStore } from '../application/state/sessionActivityStore';
+import { sessionCapabilitiesStore } from '../application/state/sessionCapabilitiesStore';
 import { useTerminalBackend } from '../application/state/useTerminalBackend';
 import { collectSessionIds } from '../domain/workspace';
 
@@ -169,6 +170,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
 
   // Stable callback references for Terminal components
   const handleCloseSession = useCallback((sessionId: string) => {
+    sessionCapabilitiesStore.delete(sessionId);
     onCloseSession(sessionId);
   }, [onCloseSession]);
 
