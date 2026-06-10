@@ -2,7 +2,10 @@
 import React, { useMemo, useRef } from 'react';
 
 import { useActiveTabId } from '../../application/state/activeTabStore';
+import { useSystemManagerBackend } from '../../application/state/useSystemManagerBackend';
 import { canReuseTerminalConnection } from '../../application/state/terminalConnectionReuse';
+import { resolveSystemSidebarSession } from '../../domain/systemManager/resolveSystemSession';
+import { useSystemCapabilitiesWarmup } from '../systemManager/hooks/useSystemManager';
 import { cn } from '../../lib/utils';
 import type { Host, TerminalSession, Workspace } from '../../types';
 import { TerminalLayerView } from './TerminalLayerView';
@@ -17,12 +20,14 @@ type StableRef = React.MutableRefObject<Record<string, any>>;
 export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) {
   const s = stableRef.current;
   const activeTabId = useActiveTabId();
+  const systemBackend = useSystemManagerBackend();
 
   s.activeTabIdRef.current = activeTabId;
 
   const workspaceById = s.workspaceById as Map<string, Workspace>;
   const sessions = s.sessions as TerminalSession[];
   const sessionHostsMap = s.sessionHostsMap as Map<string, Host>;
+  useSystemCapabilitiesWarmup(sessions, systemBackend);
   const sftpHostForTab = s.sftpHostForTab as Map<string, Host>;
   const sidePanelOpenTabs = s.sidePanelOpenTabs as Map<string, SidePanelTab>;
   const showHostTreeSidebar = s.showHostTreeSidebar as boolean | undefined;
@@ -129,6 +134,15 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
   }, [linkedTerminalSessionIdForSftp, s.terminalCwdRevision]);
 
   const historySessionId = (activeWorkspace ? focusedSessionId : activeSession?.id) ?? null;
+  const activeTerminalSessionForSystem = useMemo(
+    () => resolveSystemSidebarSession(sessions, activeWorkspace, focusedSessionId, activeSession),
+    [activeSession, activeWorkspace, focusedSessionId, sessions],
+  );
+  const activeSystemSessionHost = useMemo((): Host | null => {
+    const id = activeTerminalSessionForSystem?.id;
+    if (!id) return null;
+    return sessionHostsMap.get(id) ?? null;
+  }, [activeTerminalSessionForSystem?.id, sessionHostsMap]);
   const focusedHost = useMemo((): Host | null => {
     if (!historySessionId) return null;
     return sessionHostsMap.get(historySessionId) ?? null;
@@ -306,8 +320,11 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     handleFontWeightChangeForFocusedSession: themeState.handleFontWeightChangeForFocusedSession,
     handleFontWeightResetForFocusedSession: themeState.handleFontWeightResetForFocusedSession,
     handleOpenAI: s.handleOpenAI,
+    handleOpenSystem: s.handleOpenSystem,
     handleOpenHistory: s.handleOpenHistory,
     handleOpenScripts: s.handleOpenScripts,
+    activeTerminalSessionForSystem,
+    activeSystemSessionHost,
     handleOpenSftp: s.handleOpenSftp,
     handleOpenTheme: s.handleOpenTheme,
     History: s.History,
@@ -348,6 +365,7 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     mountedAiTabIds: s.mountedAiTabIds,
     mountedSftpTabIds: s.mountedSftpTabIds,
     scriptsMountedTabIds: s.scriptsMountedTabIds,
+    systemMountedTabIds: s.systemMountedTabIds,
     themeMountedTabIds: s.themeMountedTabIds,
     onConnectToHost: s.onConnectToHost,
     onCreateLocalTerminal: s.onCreateLocalTerminal,

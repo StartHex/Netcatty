@@ -301,6 +301,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   // Keep AI/scripts/theme panels mounted while switching sub-tabs (like SFTP).
   const [aiMountedTabIds, setAiMountedTabIds] = useState<string[]>([]);
   const [scriptsMountedTabIds, setScriptsMountedTabIds] = useState<string[]>([]);
+  const [systemMountedTabIds, setSystemMountedTabIds] = useState<string[]>([]);
   const [themeMountedTabIds, setThemeMountedTabIds] = useState<string[]>([]);
   const [sidePanelWidth, setSidePanelWidth, persistSidePanelWidth] = useStoredNumber(
     STORAGE_KEY_SIDE_PANEL_WIDTH, 420, { min: 280, max: 800 },
@@ -694,6 +695,10 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     }
     if (panel === 'theme') {
       setThemeMountedTabIds((prev) => addMountedSidePanelTabId(prev, tabId));
+      return;
+    }
+    if (panel === 'system') {
+      setSystemMountedTabIds((prev) => addMountedSidePanelTabId(prev, tabId));
     }
   }, []);
 
@@ -769,6 +774,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     setAiMountedTabIds((prev) => removeMountedSidePanelTabId(prev, activeTabId));
     setScriptsMountedTabIds((prev) => removeMountedSidePanelTabId(prev, activeTabId));
     setThemeMountedTabIds((prev) => removeMountedSidePanelTabId(prev, activeTabId));
+    setSystemMountedTabIds((prev) => removeMountedSidePanelTabId(prev, activeTabId));
     refocusTerminalSession(sessionIdToRefocus);
   }, [getActiveTerminalSessionId, refocusTerminalSession, syncWorkspaceFocusIfNeeded]);
 
@@ -890,6 +896,10 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   // no-op when AI is already the active sub-panel, matching the other rail tabs)
   const handleOpenAI = useCallback(() => {
     handleSwitchSidePanelTab('ai');
+  }, [handleSwitchSidePanelTab]);
+
+  const handleOpenSystem = useCallback(() => {
+    handleSwitchSidePanelTab('system');
   }, [handleSwitchSidePanelTab]);
 
   const handleAddSelectionToAI = useCallback((sourceSessionId: string, selection: string) => {
@@ -1063,6 +1073,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     handleOpenScripts,
     handleOpenTheme,
     handleOpenAI,
+    handleOpenSystem,
     handleOsDetected,
     handlePendingTerminalSelectionConsumed,
     handlePendingUploadHandled,
@@ -1097,6 +1108,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     mountedAiTabIds: aiMountedTabIds,
     mountedSftpTabIds,
     scriptsMountedTabIds,
+    systemMountedTabIds,
     themeMountedTabIds,
     onAddSessionToWorkspace,
     onConnectToHost,
@@ -1139,6 +1151,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     setPendingTerminalSelectionForAI,
     setAiMountedTabIds,
     setScriptsMountedTabIds,
+    setSystemMountedTabIds,
     setThemeMountedTabIds,
     setSidePanelOpenTabs,
     setSidePanelWidth,
