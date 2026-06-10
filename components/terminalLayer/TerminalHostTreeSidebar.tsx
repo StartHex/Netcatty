@@ -716,15 +716,22 @@ const TerminalHostTreeSidebarInner: React.FC<TerminalHostTreeSidebarProps> = ({
   }, [canDrag, handleDropToParent]);
 
   const handleListPointerDownCapture = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!inlineEdit?.groupPath || !menuActions) return;
+    if (!menuActions) return;
+    const editingGroupPath = inlineEdit?.groupPath;
+    const editingHostId = inlineHostEdit?.hostId;
+    if (!editingGroupPath && !editingHostId) return;
+
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest('[data-inline-group-edit="true"]')) return;
     const row = target.closest('[data-section="terminal-host-tree-sidebar-row"]');
     if (!row) return;
-    if (row.getAttribute('data-group-path') === inlineEdit.groupPath) return;
-    menuActions.cancelInlineGroupEdit();
-  }, [inlineEdit?.groupPath, menuActions]);
+    if (editingGroupPath && row.getAttribute('data-group-path') === editingGroupPath) return;
+    if (editingHostId && row.getAttribute('data-host-id') === editingHostId) return;
+
+    if (editingGroupPath) menuActions.cancelInlineGroupEdit();
+    if (editingHostId) menuActions.cancelInlineHostEdit();
+  }, [inlineEdit?.groupPath, inlineHostEdit?.hostId, menuActions]);
 
   useEffect(() => {
     if (!inlineEdit?.shouldScrollIntoView || !inlineEdit.isNew) return;
