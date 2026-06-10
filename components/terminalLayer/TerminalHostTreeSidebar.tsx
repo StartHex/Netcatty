@@ -360,6 +360,7 @@ const HostTreeFlatRowItem = memo<HostTreeFlatRowProps>(({
         onTogglePath(node.path);
       }}
       onKeyDown={(event) => {
+        if (isInlineEditing) return;
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           onTogglePath(node.path);
