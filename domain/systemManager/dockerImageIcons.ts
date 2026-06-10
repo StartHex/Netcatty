@@ -194,6 +194,8 @@ const DOCKER_ICON_BASE = '/docker-icons';
 
 /** Internal icon id → Simple Icons slug (https://simpleicons.org/) */
 /** Only official Simple Icons slugs — no cross-brand substitutes. */
+/** Parsed at build/sync time by scripts/sync-docker-icons.mjs (not referenced at runtime). */
+// eslint-disable-next-line unused-imports/no-unused-vars -- consumed by scripts/sync-docker-icons.mjs
 const SIMPLE_ICONS_SLUG: Record<string, string> = {
   container: 'docker',
   mosquitto: 'eclipsemosquitto',

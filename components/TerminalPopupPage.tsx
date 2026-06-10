@@ -35,7 +35,7 @@ function TerminalPopupPageInner() {
   const { close, setWindowTitle, onPopupConfig } = useTerminalPopupWindow();
   const { notifyRendererReady, onWindowCommandCloseRequested } = useWindowControls();
   const settings = useSettingsState();
-  const { isInitialized: vaultInitialized, hosts, keys, identities, knownHosts } = useVaultState();
+  const { isInitialized: vaultInitialized, hosts, keys, identities, knownHosts, snippets, snippetPackages } = useVaultState();
   const [config, setConfig] = useState<TerminalPopupPayload | null>(null);
   const sessionId = useMemo(() => crypto.randomUUID(), []);
 
@@ -108,7 +108,9 @@ function TerminalPopupPageInner() {
               host={host}
               keys={keys}
               identities={identities}
-              snippets={[]}
+              snippets={snippets}
+              snippetPackages={snippetPackages}
+              compactToolbar
               knownHosts={knownHosts}
               isVisible
               isFocused

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sessionCapabilitiesStore } from '../../../application/state/sessionCapabilitiesStore';
 import type { SessionCapabilities } from '../../../domain/systemManager/types';
 import type { useSystemManagerBackend } from '../../../application/state/useSystemManagerBackend';
@@ -39,13 +39,8 @@ export function useSessionCapabilities(
   }, [backend, isConnected, sessionId]);
 
   useEffect(() => {
-    if (!sessionId || !isConnected) return undefined;
-    void probe();
-    return undefined;
-  }, [sessionId, isConnected, probe]);
-
-  useEffect(() => {
-    if (!enabled || !sessionId || !isConnected) return undefined;
+    if (!sessionId || !isConnected || !enabled) return undefined;
+    if (sessionCapabilitiesStore.get(sessionId)) return undefined;
     void probe();
     return undefined;
   }, [enabled, sessionId, isConnected, probe]);
@@ -60,18 +55,32 @@ export function useSystemCapabilitiesWarmup(
 ) {
   const backendRef = useRef(backend);
   backendRef.current = backend;
+  const inflightRef = useRef(new Set<string>());
+
+  const connectedKey = useMemo(
+    () => sessions
+      .filter((session) => session.status === 'connected')
+      .map((session) => session.id)
+      .sort()
+      .join(','),
+    [sessions],
+  );
 
   useEffect(() => {
-    const connected = sessions.filter((session) => session.status === 'connected');
-    for (const session of connected) {
-      if (sessionCapabilitiesStore.get(session.id)) continue;
-      void backendRef.current.probeSystemCapabilities(session.id).then((result) => {
+    if (!connectedKey) return undefined;
+    for (const sessionId of connectedKey.split(',')) {
+      if (!sessionId || sessionCapabilitiesStore.get(sessionId)) continue;
+      if (inflightRef.current.has(sessionId)) continue;
+      inflightRef.current.add(sessionId);
+      void backendRef.current.probeSystemCapabilities(sessionId).then((result) => {
+        inflightRef.current.delete(sessionId);
         if (result.success && result.capabilities) {
-          sessionCapabilitiesStore.set(session.id, result.capabilities);
+          sessionCapabilitiesStore.set(sessionId, result.capabilities);
         }
       });
     }
-  }, [sessions]);
+    return undefined;
+  }, [connectedKey]);
 }
 
 export function usePolling<T>(
