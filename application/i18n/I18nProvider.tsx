@@ -14,14 +14,19 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 const interpolate = (template: string, values?: InterpolationValues): string => {
   if (!values) return template;
-  const replaceToken = (match: string, key: string) => {
+  const replaceDoubleBraceToken = (match: string, key: string) => {
     const v = values[key];
     if (v === null || v === undefined) return match;
     return String(v);
   };
+  const replaceSingleBraceToken = (_match: string, key: string) => {
+    const v = values[key];
+    if (v === null || v === undefined) return '';
+    return String(v);
+  };
   return template
-    .replace(/\{\{(\w+)\}\}/g, replaceToken)
-    .replace(/\{(\w+)\}/g, replaceToken);
+    .replace(/\{\{(\w+)\}\}/g, replaceDoubleBraceToken)
+    .replace(/\{(\w+)\}/g, replaceSingleBraceToken);
 };
 
 const resolveMessage = (resolvedLocale: string, key: string): string | undefined => {

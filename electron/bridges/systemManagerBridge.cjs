@@ -62,6 +62,39 @@ function parseProcessLines(stdout) {
   return processes;
 }
 
+const ALLOWED_SIGNALS = new Set([
+  "TERM", "KILL", "STOP", "CONT", "HUP", "INT", "USR1", "USR2",
+  "1", "2", "9", "15", "18", "19",
+]);
+
+function buildProcessSignalCommand(pid, signal, nice) {
+  if (nice !== undefined && nice !== null) {
+    const n = Number(nice);
+    if (!Number.isFinite(n) || n < -20 || n > 19) {
+      return { error: "Invalid nice value" };
+    }
+    return { command: `renice ${Math.trunc(n)} -p ${Number(pid)}` };
+  }
+  const sig = String(signal || "TERM").toUpperCase();
+  if (!ALLOWED_SIGNALS.has(sig)) {
+    return { error: "Invalid signal" };
+  }
+  const numericPid = Number(pid);
+  if (!Number.isFinite(numericPid) || numericPid <= 0) {
+    return { error: "Invalid pid" };
+  }
+  if (sig === "KILL" || sig === "9") {
+    return { command: `kill -9 ${numericPid}` };
+  }
+  if (sig === "TERM" || sig === "15") {
+    return { command: `kill -15 ${numericPid}` };
+  }
+  if (/^\d+$/.test(sig)) {
+    return { command: `kill -${sig} ${numericPid}` };
+  }
+  return { command: `kill -s ${sig} ${numericPid}` };
+}
+
 function createSystemManagerBridge(deps) {
   const {
     getSessions,
@@ -132,7 +165,7 @@ function createSystemManagerBridge(deps) {
 
     if (isLocalSession(sessionId) && process.platform === "win32") {
       const result = await execOnLocalMachine(
-        "Get-Process | Sort-Object CPU -Descending | Select-Object -First 200 Id,@{n='Parent';e={$_.Id}},ProcessName,CPU,WorkingSet | ConvertTo-Json -Compress",
+        "Get-CimInstance Win32_Process | Sort-Object KernelModeTime -Descending | Select-Object -First 200 ProcessId,ParentProcessId,Name,WorkingSetSize | ConvertTo-Json -Compress",
         10000,
       );
       if (!result.success) return { success: false, error: result.error };
@@ -140,16 +173,16 @@ function createSystemManagerBridge(deps) {
         const raw = JSON.parse(result.stdout || "[]");
         const list = Array.isArray(raw) ? raw : [raw];
         const processes = list.map((p) => ({
-          pid: Number(p.Id),
-          ppid: Number(p.Parent) || 0,
+          pid: Number(p.ProcessId),
+          ppid: Number(p.ParentProcessId) || 0,
           user: "",
           stat: "R",
-          cpuPercent: Number(p.CPU) || 0,
+          cpuPercent: 0,
           memPercent: 0,
-          rssKb: Math.round((Number(p.WorkingSet) || 0) / 1024),
+          rssKb: Math.round((Number(p.WorkingSetSize) || 0) / 1024),
           vszKb: 0,
           elapsed: "",
-          command: String(p.ProcessName || ""),
+          command: String(p.Name || ""),
         }));
         return { success: true, processes };
       } catch {
@@ -166,18 +199,9 @@ function createSystemManagerBridge(deps) {
   async function signalProcess(event, payload) {
     const { sessionId, pid, signal = "TERM", nice } = payload || {};
     if (!sessionId || !pid) return { success: false, error: "Missing sessionId or pid" };
-    const sig = String(signal).toUpperCase();
-    let command;
-    if (nice !== undefined && nice !== null) {
-      command = `renice ${Number(nice)} -p ${Number(pid)}`;
-    } else if (sig === "KILL" || sig === "9") {
-      command = `kill -9 ${Number(pid)}`;
-    } else if (sig === "TERM" || sig === "15") {
-      command = `kill -15 ${Number(pid)}`;
-    } else {
-      command = `kill -${sig} ${Number(pid)}`;
-    }
-    const result = await execOnSession(event, sessionId, `exec sh -c ${JSON.stringify(command)}`, 5000);
+    const built = buildProcessSignalCommand(pid, signal, nice);
+    if (built.error) return { success: false, error: built.error };
+    const result = await execOnSession(event, sessionId, `exec sh -c ${JSON.stringify(built.command)}`, 5000);
     if (!result.success) return { success: false, error: result.error };
     return { success: true, code: result.code };
   }

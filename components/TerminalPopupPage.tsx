@@ -140,8 +140,9 @@ function TerminalPopupPageInner() {
 }
 
 export default function TerminalPopupPage() {
+  const settings = useSettingsState();
   return (
-    <I18nProvider>
+    <I18nProvider locale={settings.uiLanguage}>
       <TerminalPopupPageInner />
     </I18nProvider>
   );

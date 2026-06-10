@@ -52,7 +52,7 @@ function formatKb(kb: number): string {
 }
 
 function isProcessRunning(stat: string): boolean {
-  return /[RSD]/i.test(stat);
+  return /R/i.test(stat);
 }
 
 const mergeProcesses = (

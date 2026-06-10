@@ -164,7 +164,7 @@ function createBridgeRegistrar(context) {
     const systemManagerBridge = createSystemManagerBridge({
       getSessions: () => sessions,
       execOnEtSession: (...args) => terminalBridge.execOnEtSession(...args),
-      ensureMoshStatsConnection: null,
+      ensureMoshStatsConnection: (...args) => sshBridge.ensureMoshStatsConnection(...args),
       process,
     });
     systemManagerBridge.registerHandlers(ipcMain);

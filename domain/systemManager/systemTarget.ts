@@ -32,6 +32,7 @@ export function shouldShowDockerTab(
   capabilities: SessionCapabilities | undefined,
   session: TerminalSession | null | undefined,
 ): boolean {
+  if (capabilities?.hasDocker === true) return true;
   return isDefiniteLinuxTarget(host, capabilities, session);
 }
 

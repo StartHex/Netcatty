@@ -98,7 +98,7 @@ export const DockerImagesPanel = memo(function DockerImagesPanel({
     return result.images;
   }, [backend, sessionId, t]);
 
-  const listIntervalMs = Math.max(5, listRefreshIntervalSec) * 1000;
+  const listIntervalMs = Math.max(3, listRefreshIntervalSec) * 1000;
   const { data: images, error, loading, refresh } = usePolling<DockerImageInfo[]>(
     imagesFetcher,
     listIntervalMs,

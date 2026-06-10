@@ -94,6 +94,7 @@ export function usePolling<T>(
   const [loading, setLoading] = useState(false);
   const failuresRef = useRef(0);
   const hasDataRef = useRef(false);
+  const inflightRef = useRef(false);
   const fetcherRef = useRef(fetcher);
   const mergeRef = useRef(merge);
 
@@ -101,7 +102,8 @@ export function usePolling<T>(
   mergeRef.current = merge;
 
   const run = useCallback(async (options?: { withLoading?: boolean }) => {
-    if (!enabled) return;
+    if (!enabled || inflightRef.current) return;
+    inflightRef.current = true;
     const showLoading = options?.withLoading ?? !hasDataRef.current;
     if (showLoading) setLoading(true);
     try {
@@ -120,6 +122,7 @@ export function usePolling<T>(
       failuresRef.current += 1;
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
+      inflightRef.current = false;
       if (showLoading) setLoading(false);
     }
   }, [enabled]);
