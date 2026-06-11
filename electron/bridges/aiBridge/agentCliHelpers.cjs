@@ -5,6 +5,17 @@ function createAgentCliHelpers(ctx) {
     return await new Promise((resolve, reject) => {
       let settled = false;
       let timeoutId = null;
+      let killId = null;
+      function clearTimers() {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        if (killId) {
+          clearTimeout(killId);
+          killId = null;
+        }
+      }
       const spawnSpec = prepareCommandForSpawn(command, args || []);
       const child = spawn(spawnSpec.command, spawnSpec.args, {
         stdio: ["ignore", "pipe", "pipe"],
@@ -34,14 +45,14 @@ function createAgentCliHelpers(ctx) {
       child.once("error", (error) => {
         if (settled) return;
         settled = true;
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimers();
         reject(error);
       });
 
       child.once("close", (exitCode) => {
         if (settled) return;
         settled = true;
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimers();
         resolve({
           stdout: stripAnsi(stdout),
           stderr: stripAnsi(stderr),
@@ -58,6 +69,12 @@ function createAgentCliHelpers(ctx) {
           try {
             if (!child.killed) child.kill("SIGTERM");
           } catch {}
+          killId = setTimeout(() => {
+            try {
+              if (!child.killed) child.kill("SIGKILL");
+            } catch {}
+          }, 750);
+          if (typeof killId.unref === "function") killId.unref();
           reject(error);
         }, timeoutMs);
         if (typeof timeoutId.unref === "function") timeoutId.unref();
