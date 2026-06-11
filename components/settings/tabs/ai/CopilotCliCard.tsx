@@ -12,6 +12,7 @@ export const CopilotCliCard: React.FC<{
   onCustomPathChange: (path: string) => void;
   onRecheckPath: () => void;
   i18nPrefix?: "ai.copilot" | "ai.cursor";
+  allowEmptyCheck?: boolean;
 }> = ({
   pathInfo,
   isResolvingPath,
@@ -19,6 +20,7 @@ export const CopilotCliCard: React.FC<{
   onCustomPathChange,
   onRecheckPath,
   i18nPrefix = "ai.copilot",
+  allowEmptyCheck = false,
 }) => {
   const { t } = useI18n();
   const found = pathInfo?.available;
@@ -70,7 +72,7 @@ export const CopilotCliCard: React.FC<{
               placeholder={t(`${i18nPrefix}.customPathPlaceholder`)}
               className="flex-1 h-8 rounded-md border border-input bg-background px-3 text-sm font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
-            <Button variant="outline" size="sm" onClick={onRecheckPath} disabled={!customPath.trim()}>
+            <Button variant="outline" size="sm" onClick={onRecheckPath} disabled={!allowEmptyCheck && !customPath.trim()}>
               <RefreshCw size={14} className="mr-1.5" />
               {t(`${i18nPrefix}.check`)}
             </Button>

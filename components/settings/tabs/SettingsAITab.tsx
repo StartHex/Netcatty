@@ -608,6 +608,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
               onCustomPathChange={setCursorCustomPath}
               onRecheckPath={() => void handleCheckCustomPath("cursor")}
               i18nPrefix="ai.cursor"
+              allowEmptyCheck
             />
           </SettingsSection>
 
