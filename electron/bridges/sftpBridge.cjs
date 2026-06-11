@@ -928,6 +928,7 @@ const {
  */
 function registerHandlers(ipcMain) {
   ipcMain.handle("netcatty:sftp:open", openSftp);
+  ipcMain.handle("netcatty:sftp:openForSession", openSftpForSession);
   ipcMain.handle("netcatty:sftp:list", listSftp);
   ipcMain.handle("netcatty:sftp:read", readSftp);
   ipcMain.handle("netcatty:sftp:readBinary", readSftpBinary);

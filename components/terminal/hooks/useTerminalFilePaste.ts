@@ -7,6 +7,7 @@ import { logger } from "../../../lib/logger";
 import type { TerminalSession } from "../../../types";
 import { extractRootPathsFromClipboardFiles } from "../terminalHelpers";
 import { pasteTextIntoTerminal } from "../runtime/terminalUserPaste";
+import { handleRemoteClipboardImagePaste } from "../clipboardImagePaste";
 
 interface UseTerminalFilePasteOptions {
   isLocalConnection: boolean;
@@ -16,6 +17,7 @@ interface UseTerminalFilePasteOptions {
   terminalBackend: {
     writeToSession: (sessionId: string, data: string, options?: { automated?: boolean }) => void;
   };
+  resolveSftpInitialPath: (options?: { preferFreshBackend?: boolean }) => Promise<string | undefined>;
   scrollToBottomAfterProgrammaticInput: (data: string) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -26,6 +28,7 @@ export function useTerminalFilePaste({
   termRef,
   sessionRef,
   terminalBackend,
+  resolveSftpInitialPath,
   scrollToBottomAfterProgrammaticInput,
   containerRef,
 }: UseTerminalFilePasteOptions) {
@@ -46,10 +49,34 @@ export function useTerminalFilePaste({
     };
 
     const handlePaste = (event: ClipboardEvent) => {
-      if (!isLocalConnection || status !== "connected") return;
+      if (status !== "connected") return;
 
       const bridge = netcattyBridge.get();
-      if (!bridge?.readClipboardFiles) return;
+
+      if (!isLocalConnection && bridge?.readClipboardImage) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        void (async () => {
+          try {
+            const handled = await handleRemoteClipboardImagePaste({
+              bridge,
+              getRemoteCwd: () => resolveSftpInitialPath({ preferFreshBackend: true }),
+              sessionId: sessionRef.current,
+              terminalBackend,
+              term: termRef.current,
+              scrollToBottomAfterProgrammaticInput,
+            });
+            if (!handled) fallbackToTextPaste();
+          } catch (error) {
+            logger.error("Failed to handle remote image paste", error);
+            fallbackToTextPaste();
+          }
+        })();
+        return;
+      }
+
+      if (!isLocalConnection || !bridge?.readClipboardFiles) return;
 
       // ⚡ Must call preventDefault SYNCHRONOUSLY — the event lifecycle
       // is synchronous; calling it after an await is too late and the
@@ -89,6 +116,7 @@ export function useTerminalFilePaste({
   }, [
     containerRef,
     isLocalConnection,
+    resolveSftpInitialPath,
     scrollToBottomAfterProgrammaticInput,
     sessionRef,
     status,

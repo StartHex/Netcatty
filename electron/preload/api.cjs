@@ -265,6 +265,10 @@ function createPreloadApi(ctx) {
       const result = await ipcRenderer.invoke("netcatty:sftp:open", options);
       return result.sftpId;
     },
+  openSftpForSession: async (sessionId) => {
+    const result = await ipcRenderer.invoke("netcatty:sftp:openForSession", { sessionId });
+    return result.sftpId;
+  },
   listSftp: async (sftpId, path, encoding) => {
     return ipcRenderer.invoke("netcatty:sftp:list", { sftpId, path, encoding });
   },
@@ -808,6 +812,9 @@ function createPreloadApi(ctx) {
   },
   readClipboardFiles: async () => {
     return ipcRenderer.invoke("netcatty:clipboard:readFiles");
+  },
+  readClipboardImage: async () => {
+    return ipcRenderer.invoke("netcatty:clipboard:readImage");
   },
 
   // Credential encryption (field-level safeStorage)

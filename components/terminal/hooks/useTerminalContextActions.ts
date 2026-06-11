@@ -6,6 +6,7 @@ import { logger } from "../../../lib/logger";
 import { pasteTextIntoTerminal } from "../runtime/terminalUserPaste";
 import { clearTerminalViewport } from "../clearTerminalViewport";
 import { extractRootPathsFromClipboardFiles } from "../terminalHelpers";
+import { handleRemoteClipboardImagePaste } from "../clipboardImagePaste";
 
 type BroadcastPasteRefs = {
   sourceSessionId: string;
@@ -35,6 +36,7 @@ export const useTerminalContextActions = ({
   onBroadcastInputRef,
   isLocalConnection,
   terminalBackend,
+  getRemoteCwd,
 }: {
   termRef: RefObject<XTerm | null>;
   sourceSessionId: string;
@@ -47,6 +49,7 @@ export const useTerminalContextActions = ({
   terminalBackend: {
     writeToSession: (sessionId: string, data: string, options?: { automated?: boolean }) => void;
   };
+  getRemoteCwd?: () => Promise<string | null | undefined>;
 }) => {
   const broadcastUserPasteData = useCallback((data: string) => {
     return broadcastTerminalPasteData(data, {
@@ -70,7 +73,20 @@ export const useTerminalContextActions = ({
     const term = termRef.current;
     if (!term) return;
     try {
-      const readClipboardFiles = netcattyBridge.get()?.readClipboardFiles;
+      const bridge = netcattyBridge.get();
+      if (!isLocalConnection && bridge?.readClipboardImage && getRemoteCwd) {
+        const handled = await handleRemoteClipboardImagePaste({
+          bridge,
+          getRemoteCwd,
+          sessionId: sessionRef.current,
+          terminalBackend,
+          term,
+          scrollToBottomAfterProgrammaticInput: undefined,
+        });
+        if (handled) return;
+      }
+
+      const readClipboardFiles = bridge?.readClipboardFiles;
       if (readClipboardFiles) {
         const files = await readClipboardFiles();
         if (files.length > 0 && isLocalConnection && sessionRef.current) {
@@ -100,6 +116,7 @@ export const useTerminalContextActions = ({
     termRef,
     scrollOnPasteRef,
     terminalBackend,
+    getRemoteCwd,
   ]);
 
   const onPasteSelection = useCallback(() => {

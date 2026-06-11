@@ -871,6 +871,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     onBroadcastInputRef,
     isLocalConnection,
     terminalBackend,
+    getRemoteCwd: () => resolveSftpInitialPath({ preferFreshBackend: true }),
   });
   // Kept fresh on every render so the mouseTracking capture handler at
   // handleContextMenuCapture (which is bound once per sessionId) can
@@ -1110,6 +1111,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     termRef,
     sessionRef,
     terminalBackend,
+    resolveSftpInitialPath,
     scrollToBottomAfterProgrammaticInput,
     containerRef,
   });
