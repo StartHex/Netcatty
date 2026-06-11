@@ -74,7 +74,7 @@ function createAgentCliHelpers(ctx) {
 
   async function runCodexCli(args, options) {
     const shellEnv = await getShellEnv();
-    const codexCliPath = resolveCliFromPath("codex", shellEnv) || "codex";
+    const codexCliPath = await resolveCliFromPathAsync("codex", shellEnv) || "codex";
     return await runCommand(codexCliPath, args, {
       cwd: options?.cwd?.trim() || undefined,
       env: shellEnv,
@@ -101,13 +101,12 @@ function createAgentCliHelpers(ctx) {
     if (cached && now - cached.checkedAt < maxAgeMs) return cached;
 
     const shellEnv = await getShellEnv();
-    const rawCodexPath = resolveCliFromPath("codex", shellEnv);
-    if (!rawCodexPath) {
+    const codexPath = await resolveSdkBinPathAsync("codex", shellEnv);
+    if (!codexPath) {
       const result = { ok: false, checkedAt: now, error: "codex binary not found", code: "ENOENT" };
       setCodexValidationCache(result);
       return result;
     }
-    const codexPath = resolveSdkBinPath("codex", shellEnv);
     try {
       // Minimal read-only probe turn through the SDK to confirm auth works.
       const { Codex } = await import("@openai/codex-sdk");
