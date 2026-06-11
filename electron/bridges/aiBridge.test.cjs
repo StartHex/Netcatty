@@ -172,15 +172,15 @@ test("discover returns the 3-layer contract for an installed, authenticated agen
     const discover = ipcMain.handlers.get("netcatty:ai:agents:discover");
     assert.equal(typeof discover, "function");
     const agents = await discover({ sender: { id: 1 } });
-    assert.equal(agents.length, 1);
-    assert.equal(agents[0].command, "claude");
-    assert.equal(agents[0].sdkBackend, "claude");
-    assert.equal(agents[0].binPath, claudePath);
-    assert.equal(agents[0].path, claudePath);
-    assert.equal(agents[0].installed, true);
-    assert.equal(agents[0].available, true);
-    assert.equal(agents[0].authenticated, true);
-    assert.equal(agents[0].authSource, "env");
+    const claude = agents.find((agent) => agent.command === "claude");
+    assert.ok(claude);
+    assert.equal(claude.sdkBackend, "claude");
+    assert.equal(claude.binPath, claudePath);
+    assert.equal(claude.path, claudePath);
+    assert.equal(claude.installed, true);
+    assert.equal(claude.available, true);
+    assert.equal(claude.authenticated, true);
+    assert.equal(claude.authSource, "env");
   } finally {
     restore();
   }
@@ -306,6 +306,29 @@ test("resolve-cli probes Windows Claude exe paths with spaces", { skip: process.
       path: claudePath,
       binPath: claudePath,
       version: process.version,
+      available: true,
+      installed: true,
+    });
+  } finally {
+    restore();
+  }
+});
+
+test("resolve-cli exposes Cursor SDK support without requiring a cursor executable", async () => {
+  const { bridge, restore } = loadBridgeWithMocks({
+    resolveCliFromPath: () => null,
+  });
+  const ipcMain = createIpcMainStub();
+  bridge.init({ sessions: new Map(), sftpClients: new Map(), electronModule: { app: { getPath: () => process.cwd() } } });
+  bridge.registerHandlers(ipcMain);
+
+  try {
+    const resolveCli = ipcMain.handlers.get("netcatty:ai:resolve-cli");
+    const result = await resolveCli({ sender: { id: 1 } }, { command: "cursor", customPath: "" });
+    assert.deepEqual(result, {
+      path: "cursor",
+      binPath: "cursor",
+      version: "Cursor SDK",
       available: true,
       installed: true,
     });

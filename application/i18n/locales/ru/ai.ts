@@ -106,6 +106,17 @@ export const ruAiMessages: Messages = {
   'ai.copilot.customPathPlaceholder': 'например, /usr/local/bin/copilot',
   'ai.copilot.check': 'Проверить',
 
+  // AI Cursor SDK
+  'ai.cursor.title': 'Cursor',
+  'ai.cursor.description': 'Использует Cursor SDK. Укажите CURSOR_API_KEY в shell или окружении агента, чтобы использовать Cursor как внешний агент для программирования.',
+  'ai.cursor.detecting': 'Обнаружение...',
+  'ai.cursor.detected': 'Доступен',
+  'ai.cursor.notFound': 'Недоступен',
+  'ai.cursor.path': 'Среда:',
+  'ai.cursor.notFoundHint': 'Поддержка Cursor SDK недоступна. Установите зависимости или укажите путь к исполняемому файлу cursor ниже.',
+  'ai.cursor.customPathPlaceholder': 'например, /usr/local/bin/cursor',
+  'ai.cursor.check': 'Проверить',
+
   // AI Default Agent
   'ai.defaultAgent': 'Агент по умолчанию',
   'ai.defaultAgent.description': 'Агент, который будет использоваться при запуске новой AI-сессии',

@@ -11,17 +11,25 @@ function registerAgentDiscoveryHandlers(ctx) {
         description: "OpenAI's coding agent", sdkBackend: "codex", args: [] },
       { command: "copilot", name: "GitHub Copilot CLI", icon: "copilot",
         description: "GitHub's coding agent CLI", sdkBackend: "copilot", args: [] },
+      { command: "cursor", name: "Cursor", icon: "cursor",
+        description: "Cursor's coding agent via Cursor SDK", sdkBackend: "cursor", args: [] },
     ];
 
     const shellEnv = await getShellEnv();
     const seenPaths = new Set();
 
     for (const agent of knownAgents) {
-      const resolvedPath = resolveCliFromPath(agent.command, shellEnv); // Layer-1: locate
+      const resolvedPath = agent.command === "cursor"
+        ? (resolveCliFromPath(agent.command, shellEnv) || "cursor")
+        : resolveCliFromPath(agent.command, shellEnv); // Layer-1: locate
       if (!resolvedPath || seenPaths.has(resolvedPath)) continue;
 
-      const probe = await probeCliVersion(resolvedPath, ["--version"], shellEnv); // Layer-2: version
-      const hasPlausibleVersion = probe.exitCode === 0 && isPlausibleCliVersionOutput(probe.version);
+      const probe = agent.command === "cursor" && resolvedPath === "cursor"
+        ? { exitCode: 0, version: "Cursor SDK" }
+        : await probeCliVersion(resolvedPath, ["--version"], shellEnv); // Layer-2: version
+      const hasPlausibleVersion = agent.command === "cursor"
+        ? probe.exitCode === 0
+        : probe.exitCode === 0 && isPlausibleCliVersionOutput(probe.version);
       if (!hasPlausibleVersion) continue;
 
       // Layer-3: authentication (best-effort; never blocks discovery).
@@ -35,6 +43,8 @@ function registerAgentDiscoveryHandlers(ctx) {
           // codex login status is async; resolve it then inject synchronously.
           const codexStatus = await runCodexCli(["login", "status"]).catch(() => null);
           auth = probeCodexAuth({ runLoginStatus: () => codexStatus || { exitCode: 1, stdout: "" } });
+        } else if (agent.command === "cursor") {
+          auth = { authenticated: Boolean(shellEnv.CURSOR_API_KEY), authSource: shellEnv.CURSOR_API_KEY ? "CURSOR_API_KEY" : null };
         }
       } catch { /* auth probe is best-effort */ }
 
@@ -63,9 +73,10 @@ function registerAgentDiscoveryHandlers(ctx) {
   ipcMain.handle("netcatty:ai:resolve-cli", async (event, { command, customPath }) => {
     if (!validateSenderOrSettings(event)) return { ok: false, error: "Unauthorized IPC sender" };
     const shellEnv = await getShellEnv();
+    const hasCustomPath = Boolean(String(customPath || "").trim());
 
     let resolvedPath;
-    if (customPath) {
+    if (hasCustomPath) {
       // Normalize Windows shim paths like `codex` -> `codex.cmd` when present.
       // Fall back to PATH search if the stored path no longer exists
       // (e.g. CLI reinstalled to a different location).
@@ -74,12 +85,18 @@ function registerAgentDiscoveryHandlers(ctx) {
       resolvedPath = resolveCliFromPath(command, shellEnv);
     }
 
+    if (command === "cursor" && !resolvedPath && !hasCustomPath) {
+      return { path: "cursor", binPath: "cursor", version: "Cursor SDK", available: true, installed: true };
+    }
+
     if (!resolvedPath) {
       return { path: null, binPath: null, version: null, available: false, installed: false };
     }
 
     const probe = await probeCliVersion(resolvedPath, ["--version"], shellEnv);
-    const hasPlausibleVersion = probe.exitCode === 0 && isPlausibleCliVersionOutput(probe.version);
+    const hasPlausibleVersion = command === "cursor"
+      ? probe.exitCode === 0
+      : probe.exitCode === 0 && isPlausibleCliVersionOutput(probe.version);
     if (!hasPlausibleVersion) {
       return { path: resolvedPath, binPath: resolvedPath, version: null, available: false, installed: true };
     }

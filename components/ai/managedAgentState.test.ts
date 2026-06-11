@@ -101,6 +101,20 @@ test('buildManagedAgentState stores SDK backend keys for discovered managed agen
   assert.equal(copilotState.agents[0].acpArgs, undefined);
 });
 
+test('buildManagedAgentState stores SDK backend key for discovered Cursor', () => {
+  const state = buildManagedAgentState(
+    [],
+    'catty',
+    'cursor',
+    { path: 'cursor', version: 'Cursor SDK 1.0.18', available: true },
+  );
+
+  assert.equal(state.agents[0].id, 'discovered_cursor');
+  assert.equal(state.agents[0].name, 'Cursor');
+  assert.equal(state.agents[0].command, 'cursor');
+  assert.equal(state.agents[0].sdkBackend, 'cursor');
+});
+
 test('buildManagedAgentState does not remove user-created matching agents', () => {
   const agents: ExternalAgentConfig[] = [
     {

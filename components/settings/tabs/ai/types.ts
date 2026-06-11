@@ -130,6 +130,12 @@ export const AGENT_DEFAULTS: Record<string, Omit<ExternalAgentConfig, "id" | "co
     icon: "copilot",
     sdkBackend: "copilot",
   },
+  cursor: {
+    name: "Cursor",
+    args: ["{prompt}"],
+    icon: "cursor",
+    sdkBackend: "cursor",
+  },
 };
 
 // ---------------------------------------------------------------------------

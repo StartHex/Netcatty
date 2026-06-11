@@ -12,6 +12,7 @@
 const claude = require("./claudeDriver.cjs");
 const codex = require("./codexDriver.cjs");
 const copilot = require("./copilotDriver.cjs");
+const cursor = require("./cursorDriver.cjs");
 
 const DRIVER_REGISTRY = {
   claude: {
@@ -75,6 +76,28 @@ const DRIVER_REGISTRY = {
     },
     async listModels(ctx) {
       return copilot.listCopilotModels({ cliPath: ctx.binPath });
+    },
+  },
+  cursor: {
+    async runTurn(ctx) {
+      const agentOptions = cursor.buildCursorAgentOptions({
+        apiKey: ctx.apiKey,
+        env: ctx.env,
+        model: ctx.model,
+        cwd: ctx.cwd,
+        injectedMcpServers: ctx.injectedMcpServers,
+      });
+      return cursor.runCursorTurn({
+        prompt: ctx.prompt,
+        attachments: ctx.attachments,
+        agentOptions,
+        resumeSessionId: ctx.resumeSessionId,
+        emitter: ctx.emitter,
+        signal: ctx.signal,
+      });
+    },
+    async listModels(ctx) {
+      return cursor.listCursorModels({ env: ctx.env });
     },
   },
 };

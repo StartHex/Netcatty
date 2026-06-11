@@ -106,6 +106,17 @@ export const zhCNAiMessages: Messages = {
   'ai.copilot.customPathPlaceholder': '例如 /usr/local/bin/copilot',
   'ai.copilot.check': '检查',
 
+  // AI Cursor SDK
+  'ai.cursor.title': 'Cursor',
+  'ai.cursor.description': '使用 Cursor SDK。请在 shell 或 Agent 环境中设置 CURSOR_API_KEY，即可把 Cursor 作为外部编程 Agent 使用。',
+  'ai.cursor.detecting': '检测中...',
+  'ai.cursor.detected': '可用',
+  'ai.cursor.notFound': '不可用',
+  'ai.cursor.path': '运行环境：',
+  'ai.cursor.notFoundHint': 'Cursor SDK 支持当前不可用。请安装依赖，或在下方指定 cursor 可执行文件路径。',
+  'ai.cursor.customPathPlaceholder': '例如 /usr/local/bin/cursor',
+  'ai.cursor.check': '检查',
+
   // AI Default Agent
   'ai.defaultAgent': '默认 Agent',
   'ai.defaultAgent.description': '创建新 AI 会话时使用的 Agent',

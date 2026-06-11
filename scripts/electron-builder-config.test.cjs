@@ -54,6 +54,12 @@ test("asarUnpack keeps MCP server runtime deps unpacked", () => {
   assert.ok(config.asarUnpack.includes("node_modules/@modelcontextprotocol/sdk/**/*"));
 });
 
+test("asarUnpack keeps Cursor SDK runtime deps unpacked", () => {
+  assert.ok(config.asarUnpack.includes("node_modules/@cursor/sdk/**/*"));
+  assert.ok(config.asarUnpack.includes("node_modules/@cursor/sdk-*/**/*"));
+  assert.ok(config.asarUnpack.includes("node_modules/sqlite3/**/*"));
+});
+
 test("linux packaging uses multi-size build/icons instead of a single 1024px override", async () => {
   assert.equal(
     config.linux.icon,

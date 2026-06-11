@@ -12,6 +12,7 @@ type AgentLike = {
 type AgentIconKey =
   | 'catty'
   | 'copilot'
+  | 'cursor'
   | 'openai'
   | 'claude'
   | 'anthropic'
@@ -40,6 +41,11 @@ const AGENT_ICON_VISUALS: Record<AgentIconKey, AgentIconVisual> = {
     src: '/ai/agents/copilot.svg',
     badgeClassName: 'border-zinc-300 bg-white',
     imageClassName: 'object-contain brightness-0',
+  },
+  cursor: {
+    src: '/ai/agents/cursor.svg',
+    badgeClassName: 'border-zinc-500/22 bg-zinc-500/12',
+    imageClassName: 'object-contain dark:brightness-0 dark:invert opacity-90',
   },
   openai: {
     src: '/ai/providers/openai.svg',
@@ -123,6 +129,9 @@ function getAgentIconKey(agent: AgentLike | 'add-more'): AgentIconKey {
   }
   if (tokens.some((token) => token.includes('copilot'))) {
     return 'copilot';
+  }
+  if (tokens.some((token) => token.includes('cursor'))) {
+    return 'cursor';
   }
   if (tokens.some((token) => token.includes('anthropic'))) {
     return 'anthropic';

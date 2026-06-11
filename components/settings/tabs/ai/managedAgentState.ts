@@ -77,5 +77,6 @@ export function getInitialManagedAgentPaths(agents: ExternalAgentConfig[]) {
     codex: getAutoManagedAgentStoredPath(agents, "codex") ?? "",
     claude: getAutoManagedAgentStoredPath(agents, "claude") ?? "",
     copilot: getAutoManagedAgentStoredPath(agents, "copilot") ?? "",
+    cursor: getAutoManagedAgentStoredPath(agents, "cursor") ?? "",
   };
 }

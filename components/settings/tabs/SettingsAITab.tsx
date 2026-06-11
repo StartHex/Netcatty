@@ -160,6 +160,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
     codex: string;
     claude: string;
     copilot: string;
+    cursor: string;
   } | null>(null);
   if (!initialManagedPathsRef.current) {
     initialManagedPathsRef.current = getInitialManagedAgentPaths(externalAgents);
@@ -168,6 +169,9 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   const [copilotPathInfo, setCopilotPathInfo] = useState<AgentPathInfo | null>(null);
   const [copilotCustomPath, setCopilotCustomPath] = useState("");
   const [isResolvingCopilot, setIsResolvingCopilot] = useState(false);
+  const [cursorPathInfo, setCursorPathInfo] = useState<AgentPathInfo | null>(null);
+  const [cursorCustomPath, setCursorCustomPath] = useState("");
+  const [isResolvingCursor, setIsResolvingCursor] = useState(false);
   const [userSkillsStatus, setUserSkillsStatus] = useState<UserSkillsStatusResult | null>(null);
   const [isLoadingUserSkills, setIsLoadingUserSkills] = useState(false);
 
@@ -186,12 +190,16 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
       ? setCodexPathInfo
       : agentKey === "claude"
         ? setClaudePathInfo
-        : setCopilotPathInfo;
+        : agentKey === "copilot"
+          ? setCopilotPathInfo
+          : setCursorPathInfo;
     const setResolving = agentKey === "codex"
       ? setIsResolvingCodex
       : agentKey === "claude"
         ? setIsResolvingClaude
-        : setIsResolvingCopilot;
+        : agentKey === "copilot"
+          ? setIsResolvingCopilot
+          : setIsResolvingCursor;
 
     setResolving(true);
     try {
@@ -232,6 +240,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
     void resolveAgentPath("codex", initialManagedPathsRef.current?.codex ?? "");
     void resolveAgentPath("claude", initialManagedPathsRef.current?.claude ?? "");
     void resolveAgentPath("copilot", initialManagedPathsRef.current?.copilot ?? "");
+    void resolveAgentPath("cursor", initialManagedPathsRef.current?.cursor ?? "");
   }, [resolveAgentPath]);
 
   // Validate a custom path for an agent
@@ -240,9 +249,11 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
       ? codexCustomPath
       : agentKey === "claude"
         ? claudeCustomPath
-        : copilotCustomPath;
+        : agentKey === "copilot"
+          ? copilotCustomPath
+          : cursorCustomPath;
     await resolveAgentPath(agentKey, customPath);
-  }, [claudeCustomPath, codexCustomPath, copilotCustomPath, resolveAgentPath]);
+  }, [claudeCustomPath, codexCustomPath, copilotCustomPath, cursorCustomPath, resolveAgentPath]);
 
   // Add a new provider from preset
   const handleAddProvider = useCallback(
@@ -582,6 +593,20 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
               customPath={copilotCustomPath}
               onCustomPathChange={setCopilotCustomPath}
               onRecheckPath={() => void handleCheckCustomPath("copilot")}
+            />
+          </SettingsSection>
+
+          <SettingsSection
+            title={t('ai.cursor.title')}
+            leading={<AgentIconBadge agent={{ id: "cursor", icon: "cursor", name: "Cursor" }} size="xs" variant="plain" />}
+          >
+            <CopilotCliCard
+              pathInfo={cursorPathInfo}
+              isResolvingPath={isResolvingCursor}
+              customPath={cursorCustomPath}
+              onCustomPathChange={setCursorCustomPath}
+              onRecheckPath={() => void handleCheckCustomPath("cursor")}
+              i18nPrefix="ai.cursor"
             />
           </SettingsSection>
 

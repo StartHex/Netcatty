@@ -113,6 +113,7 @@
   },
   "optionalDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.161",
+    "@cursor/sdk": "^1.0.18",
     "@github/copilot-sdk": "1.0.0",
     "@vscode/windows-process-tree": "^0.7.0"
   },

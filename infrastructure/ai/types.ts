@@ -252,8 +252,8 @@ export interface DiscoveredAgent {
   /** @deprecated Legacy discovery field from the pre-SDK migration. */
   acpCommand?: string;
   acpArgs?: string[];
-  /** SDK backend key (claude|codex|copilot) — the post-migration routing value. */
-  sdkBackend?: 'claude' | 'codex' | 'copilot';
+  /** SDK backend key (claude|codex|copilot|cursor) — the post-migration routing value. */
+  sdkBackend?: 'claude' | 'codex' | 'copilot' | 'cursor';
   /** Absolute resolved CLI path (preferred over `path`). */
   binPath?: string;
   installed?: boolean;
@@ -445,11 +445,21 @@ export const CODEX_MODEL_PRESETS: AgentModelPreset[] = [
   { id: 'gpt-4o', name: 'GPT-4o' },
 ];
 
+export const CURSOR_MODEL_PRESETS: AgentModelPreset[] = [
+  { id: 'composer-2', name: 'Composer 2', description: 'Recommended' },
+  { id: 'gpt-5.5', name: 'GPT-5.5' },
+  { id: 'gpt-5.2', name: 'GPT-5.2' },
+  { id: 'gpt-5.1', name: 'GPT-5.1' },
+  { id: 'claude-opus-4.6', name: 'Claude Opus 4.6' },
+  { id: 'claude-sonnet-4.6', name: 'Claude Sonnet 4.6' },
+];
+
 export function getAgentModelPresets(agentCommand?: string): AgentModelPreset[] {
   if (!agentCommand) return [];
   const basename = agentCommand.split('/').pop()?.toLowerCase() ?? '';
   if (basename.startsWith('claude')) return CLAUDE_MODEL_PRESETS;
   if (basename.startsWith('codex')) return CODEX_MODEL_PRESETS;
+  if (basename.startsWith('cursor')) return CURSOR_MODEL_PRESETS;
   return [];
 }
 
