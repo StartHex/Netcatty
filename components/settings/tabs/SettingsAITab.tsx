@@ -271,7 +271,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   // Ref to read current defaultAgentId without adding it as a dependency.
   const defaultAgentIdRef = useRef(defaultAgentId);
   defaultAgentIdRef.current = defaultAgentId;
-  const agentDiscoveryStartedRef = useRef(false);
+  const resolvedAgentKeysRef = useRef<Partial<Record<ManagedAgentKey, boolean>>>({});
   const codexIntegrationLoadedRef = useRef(false);
   const userSkillsLoadedRef = useRef(false);
 
@@ -341,19 +341,32 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
 
   useEffect(() => {
     if (activeSubTab !== "agents") return;
-    if (agentDiscoveryStartedRef.current) return;
 
     const initialPaths = initialManagedPathsRef.current;
-    const cancelTasks = [
-      scheduleAfterFirstPaint(() => {
-        agentDiscoveryStartedRef.current = true;
-        void resolveAgentPath("codex", initialPaths?.codex ?? "");
-      }, 160),
-      scheduleAfterFirstPaint(() => void resolveAgentPath("claude", initialPaths?.claude ?? ""), 440),
-      scheduleAfterFirstPaint(() => void resolveAgentPath("copilot", initialPaths?.copilot ?? ""), 720),
-      scheduleAfterFirstPaint(() => void resolveAgentPath("cursor", initialPaths?.cursor ?? "", { apiKeyPresent: Boolean(cursorApiKeyEncrypted) }), 1000),
-      scheduleAfterFirstPaint(() => void resolveAgentPath("codebuddy", initialPaths?.codebuddy ?? ""), 1280),
+    const tasks: Array<{
+      key: ManagedAgentKey;
+      delayMs: number;
+      path: string;
+      options?: { apiKeyPresent?: boolean };
+    }> = [
+      { key: "codex", delayMs: 160, path: initialPaths?.codex ?? "" },
+      { key: "claude", delayMs: 440, path: initialPaths?.claude ?? "" },
+      { key: "copilot", delayMs: 720, path: initialPaths?.copilot ?? "" },
+      {
+        key: "cursor",
+        delayMs: 1000,
+        path: initialPaths?.cursor ?? "",
+        options: { apiKeyPresent: Boolean(cursorApiKeyEncrypted) },
+      },
+      { key: "codebuddy", delayMs: 1280, path: initialPaths?.codebuddy ?? "" },
     ];
+    const cancelTasks = tasks
+      .filter((task) => !resolvedAgentKeysRef.current[task.key])
+      .map((task) => scheduleAfterFirstPaint(() => {
+        void resolveAgentPath(task.key, task.path, task.options).finally(() => {
+          resolvedAgentKeysRef.current[task.key] = true;
+        });
+      }, task.delayMs));
     return () => {
       for (const cancel of cancelTasks) cancel();
     };
