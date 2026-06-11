@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   buildCursorAgentOptions,
   buildCursorSendMessage,
+  formatCursorErrorForUser,
   mapCursorModels,
   runCursorTurn,
   toCursorMcpServers,
@@ -168,6 +169,27 @@ test("translateCursorEvent marks error status as failed", () => {
   assert.equal(failed, true);
   assert.equal(state.failed, true);
   assert.deepEqual(emitter.calls, [["error", "bad key"]]);
+});
+
+test("translateCursorEvent rewrites Cursor authentication errors", () => {
+  const emitter = makeEmitter();
+  const state = {};
+
+  const failed = translateCursorEvent({ type: "status", status: "ERROR", message: "bad API key" }, emitter, state);
+
+  assert.equal(failed, true);
+  assert.equal(state.failed, true);
+  assert.deepEqual(emitter.calls, [[
+    "error",
+    "Cursor authentication failed. Update the Cursor API Key in Settings -> AI.",
+  ]]);
+});
+
+test("formatCursorErrorForUser points users to the settings API key", () => {
+  assert.equal(
+    formatCursorErrorForUser("unauthorized"),
+    "Cursor authentication failed. Update the Cursor API Key in Settings -> AI.",
+  );
 });
 
 test("runCursorTurn creates or resumes an agent, streams events, and emits done", async () => {

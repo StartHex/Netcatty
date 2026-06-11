@@ -134,6 +134,14 @@ function emitCursorToolResultOnce(event, emitter, state, id, result, toolName) {
   return true;
 }
 
+function formatCursorErrorForUser(message) {
+  const text = String(message || "").trim();
+  if (/api.?key|auth|unauthorized/i.test(text)) {
+    return "Cursor authentication failed. Update the Cursor API Key in Settings -> AI.";
+  }
+  return text || "Cursor turn failed";
+}
+
 function translateCursorEvent(event, emitter, state = {}) {
   if (!event || typeof event !== "object") return;
 
@@ -174,7 +182,7 @@ function translateCursorEvent(event, emitter, state = {}) {
       if (event.status === "ERROR") {
         closeReasoning(state, emitter);
         state.failed = true;
-        emitter.emitError(event.message || "Cursor turn failed");
+        emitter.emitError(formatCursorErrorForUser(event.message));
         return true;
       }
       return false;
@@ -296,7 +304,7 @@ async function runCursorTurn({
       return { sessionId };
     }
     if (!hasContent && !signal?.aborted) {
-      emitter.emitError("Cursor returned an empty response. Set CURSOR_API_KEY in Settings -> AI or in your shell environment.");
+      emitter.emitError("Cursor returned an empty response. Check the Cursor API Key in Settings -> AI.");
       return { sessionId };
     }
     if (!signal?.aborted) emitter.emitDone();
@@ -307,11 +315,7 @@ async function runCursorTurn({
     }
     {
       const message = error?.message || String(error);
-      if (/api.?key|auth|unauthorized/i.test(message)) {
-        emitter.emitError("Cursor authentication failed. Set CURSOR_API_KEY to a valid Cursor API key.");
-      } else {
-        emitter.emitError(message || "Cursor turn failed");
-      }
+      emitter.emitError(formatCursorErrorForUser(message));
     }
     return { sessionId };
   } finally {
@@ -369,6 +373,7 @@ module.exports = {
   applyTemporaryProcessEnv,
   buildCursorAgentOptions,
   buildCursorSendMessage,
+  formatCursorErrorForUser,
   listCursorModels,
   mapCursorModels,
   parseCursorModelSelection,
