@@ -20,6 +20,7 @@ let electronShell = null;
 let sessionsMap = null;
 
 const LOG_RETENTION_DAYS = 30;
+const WINDOWS_EXTERNAL_TERMINATION_EXIT_CODE = 0x40010004;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,6 +66,42 @@ function todayFileName() {
   return `crash-${ymd}.log`;
 }
 
+function normalizeExitCode(exitCode) {
+  if (typeof exitCode !== "number" || !Number.isFinite(exitCode)) return null;
+  return exitCode >>> 0;
+}
+
+function formatExitCodeHex(exitCode) {
+  const normalized = normalizeExitCode(exitCode);
+  if (normalized === null) return undefined;
+  return `0x${normalized.toString(16).toUpperCase().padStart(8, "0")}`;
+}
+
+function describeWindowsExitCode(exitCode) {
+  const normalized = normalizeExitCode(exitCode);
+  if (normalized === null) return undefined;
+  if (normalized === WINDOWS_EXTERNAL_TERMINATION_EXIT_CODE) {
+    return "Windows external process termination (DBG_TERMINATE_PROCESS); commonly seen when Windows, a debugger, or another external process terminates the renderer.";
+  }
+  return undefined;
+}
+
+function buildDiagnostic(extra, platform = process.platform) {
+  if (!extra || typeof extra !== "object") return undefined;
+
+  const exitCode = extra.exitCode;
+  const exitCodeHex = formatExitCodeHex(exitCode);
+  const windowsExitCodeMeaning = platform === "win32"
+    ? describeWindowsExitCode(exitCode)
+    : undefined;
+
+  if (!exitCodeHex && !windowsExitCodeMeaning) return undefined;
+  return {
+    exitCodeHex,
+    windowsExitCodeMeaning,
+  };
+}
+
 function buildEntry(source, err, extra) {
   const error = err instanceof Error ? err : new Error(String(err ?? "unknown"));
 
@@ -88,6 +125,8 @@ function buildEntry(source, err, extra) {
     }
   }
 
+  const diagnostic = buildDiagnostic(extra);
+
   return {
     timestamp: new Date().toISOString(),
     source,
@@ -104,6 +143,7 @@ function buildEntry(source, err, extra) {
     memoryMB: mem,
     activeSessionCount: sessionsMap?.size ?? -1,
     uptimeSeconds: Math.round(process.uptime()),
+    diagnostic,
   };
 }
 
@@ -323,4 +363,9 @@ module.exports = {
   init,
   captureError,
   registerHandlers,
+  _private: {
+    buildDiagnostic,
+    describeWindowsExitCode,
+    formatExitCodeHex,
+  },
 };
