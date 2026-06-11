@@ -8,7 +8,7 @@
  */
 const { mcpEnvPairsToObject } = require("./injectMcp.cjs");
 
-const DEFAULT_CURSOR_MODEL = "composer-2";
+const DEFAULT_CURSOR_MODEL = "composer-2.5";
 
 function toCursorMcpServers(injectedMcpServers) {
   const servers = {};
@@ -43,7 +43,11 @@ function buildCursorAgentOptions({ apiKey, env, model, cwd, injectedMcpServers }
   const options = {
     apiKey: effectiveApiKey,
     model: parseCursorModelSelection(model),
-    local: { cwd: cwd || process.cwd() },
+    local: {
+      cwd: cwd || process.cwd(),
+      autoReview: false,
+      sandboxOptions: { enabled: true },
+    },
   };
   const mcpServers = toCursorMcpServers(injectedMcpServers);
   if (Object.keys(mcpServers).length > 0) options.mcpServers = mcpServers;
@@ -143,11 +147,52 @@ function translateCursorEvent(event, emitter, state = {}) {
     case "status":
       if (event.status === "ERROR") {
         closeReasoning(state, emitter);
+        state.failed = true;
         emitter.emitError(event.message || "Cursor turn failed");
+        return true;
       }
-      return;
+      return false;
     default:
-      return;
+      return false;
+  }
+}
+
+class CursorTurnAbortError extends Error {
+  constructor() {
+    super("Cursor turn aborted");
+    this.name = "CursorTurnAbortError";
+  }
+}
+
+function isCursorTurnAbortError(error) {
+  return error instanceof CursorTurnAbortError || error?.name === "CursorTurnAbortError";
+}
+
+async function abortable(promise, signal, onLateResolve) {
+  if (!signal) return promise;
+  if (signal.aborted) {
+    promise.then((value) => onLateResolve?.(value)).catch(() => {});
+    throw new CursorTurnAbortError();
+  }
+
+  let aborted = false;
+  let removeAbortListener = () => {};
+  const abortPromise = new Promise((_, reject) => {
+    const onAbort = () => {
+      aborted = true;
+      reject(new CursorTurnAbortError());
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    removeAbortListener = () => signal.removeEventListener("abort", onAbort);
+  });
+
+  try {
+    return await Promise.race([promise, abortPromise]);
+  } finally {
+    removeAbortListener();
+    if (aborted) {
+      promise.then((value) => onLateResolve?.(value)).catch(() => {});
+    }
   }
 }
 
@@ -169,16 +214,20 @@ async function runCursorTurn({
   let run = null;
   let sessionId = resumeSessionId || null;
   try {
-    agent = resumeSessionId && typeof Agent.resume === "function"
-      ? await Agent.resume(resumeSessionId, agentOptions)
-      : await Agent.create(agentOptions);
+    const agentPromise = resumeSessionId && typeof Agent.resume === "function"
+      ? Agent.resume(resumeSessionId, agentOptions)
+      : Agent.create(agentOptions);
+    agent = await abortable(agentPromise, signal, (lateAgent) => {
+      try { lateAgent?.close?.(); } catch { /* best effort */ }
+    });
     sessionId = agent.agentId || sessionId;
     if (sessionId) emitter.sessionId(sessionId);
     if (signal?.aborted) return { sessionId };
 
-    run = await agent.send(buildCursorSendMessage(prompt, attachments));
+    run = await abortable(agent.send(buildCursorSendMessage(prompt, attachments)), signal);
     const state = { reasoningOpen: false };
     let hasContent = false;
+    let failed = false;
     const onAbort = () => {
       if (run && typeof run.cancel === "function") {
         void run.cancel().catch(() => {});
@@ -192,12 +241,19 @@ async function runCursorTurn({
       for await (const event of run.stream()) {
         if (signal?.aborted) break;
         if (event?.type === "assistant" || event?.type === "tool_call") hasContent = true;
-        translateCursorEvent(event, emitter, state);
+        const streamFailed = translateCursorEvent(event, emitter, state);
+        if (streamFailed || state.failed) {
+          failed = true;
+          break;
+        }
       }
     } finally {
       if (signal) signal.removeEventListener("abort", onAbort);
     }
     closeReasoning(state, emitter);
+    if (failed) {
+      return { sessionId };
+    }
     if (!hasContent && !signal?.aborted) {
       emitter.emitError("Cursor returned an empty response. Set CURSOR_API_KEY in Settings -> AI or in your shell environment.");
       return { sessionId };
@@ -205,7 +261,10 @@ async function runCursorTurn({
     if (!signal?.aborted) emitter.emitDone();
     return { sessionId };
   } catch (error) {
-    if (!signal?.aborted) {
+    if (isCursorTurnAbortError(error) || signal?.aborted) {
+      return { sessionId };
+    }
+    {
       const message = error?.message || String(error);
       if (/api.?key|auth|unauthorized/i.test(message)) {
         emitter.emitError("Cursor authentication failed. Set CURSOR_API_KEY to a valid Cursor API key.");
@@ -265,6 +324,7 @@ async function listCursorModels({ apiKey, env, sdkModule } = {}) {
 
 module.exports = {
   DEFAULT_CURSOR_MODEL,
+  abortable,
   buildCursorAgentOptions,
   buildCursorSendMessage,
   listCursorModels,

@@ -446,7 +446,7 @@ export const CODEX_MODEL_PRESETS: AgentModelPreset[] = [
 ];
 
 export const CURSOR_MODEL_PRESETS: AgentModelPreset[] = [
-  { id: 'composer-2', name: 'Composer 2', description: 'Recommended' },
+  { id: 'composer-2.5', name: 'Composer 2.5', description: 'Recommended' },
   { id: 'gpt-5.5', name: 'GPT-5.5' },
   { id: 'gpt-5.2', name: 'GPT-5.2' },
   { id: 'gpt-5.1', name: 'GPT-5.1' },

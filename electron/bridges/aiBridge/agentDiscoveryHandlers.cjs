@@ -1,4 +1,34 @@
 /* eslint-disable no-undef */
+function getCursorPlatformPackageName(platform = process.platform, arch = process.arch) {
+  if (platform === "darwin" && (arch === "arm64" || arch === "x64")) return `@cursor/sdk-darwin-${arch}`;
+  if (platform === "linux" && (arch === "arm64" || arch === "x64")) return `@cursor/sdk-linux-${arch}`;
+  if (platform === "win32" && arch === "x64") return "@cursor/sdk-win32-x64";
+  return null;
+}
+
+async function probeCursorSdkAvailability(shellEnv) {
+  const platformPackageName = getCursorPlatformPackageName();
+  if (!platformPackageName) {
+    return { installed: false, available: false, authenticated: false, authSource: null, version: null };
+  }
+
+  try {
+    await import("@cursor/sdk");
+    require.resolve(`${platformPackageName}/package.json`);
+  } catch {
+    return { installed: false, available: false, authenticated: false, authSource: null, version: null };
+  }
+
+  const authenticated = Boolean(shellEnv?.CURSOR_API_KEY);
+  return {
+    installed: true,
+    available: authenticated,
+    authenticated,
+    authSource: authenticated ? "CURSOR_API_KEY" : null,
+    version: "Cursor SDK",
+  };
+}
+
 function registerAgentDiscoveryHandlers(ctx) {
   with (ctx) {
   ipcMain.handle("netcatty:ai:agents:discover", async (event) => {
@@ -19,13 +49,20 @@ function registerAgentDiscoveryHandlers(ctx) {
     const seenPaths = new Set();
 
     for (const agent of knownAgents) {
+      let cursorSdkStatus = null;
+      if (agent.command === "cursor") {
+        if (!shellEnv.CURSOR_API_KEY) continue;
+        cursorSdkStatus = await probeCursorSdkAvailability(shellEnv);
+        if (!cursorSdkStatus.available) continue;
+      }
+
       const resolvedPath = agent.command === "cursor"
         ? (resolveCliFromPath(agent.command, shellEnv) || "cursor")
         : resolveCliFromPath(agent.command, shellEnv); // Layer-1: locate
       if (!resolvedPath || seenPaths.has(resolvedPath)) continue;
 
       const probe = agent.command === "cursor" && resolvedPath === "cursor"
-        ? { exitCode: 0, version: "Cursor SDK" }
+        ? { exitCode: 0, version: cursorSdkStatus.version }
         : await probeCliVersion(resolvedPath, ["--version"], shellEnv); // Layer-2: version
       const hasPlausibleVersion = agent.command === "cursor"
         ? probe.exitCode === 0
@@ -44,7 +81,10 @@ function registerAgentDiscoveryHandlers(ctx) {
           const codexStatus = await runCodexCli(["login", "status"]).catch(() => null);
           auth = probeCodexAuth({ runLoginStatus: () => codexStatus || { exitCode: 1, stdout: "" } });
         } else if (agent.command === "cursor") {
-          auth = { authenticated: Boolean(shellEnv.CURSOR_API_KEY), authSource: shellEnv.CURSOR_API_KEY ? "CURSOR_API_KEY" : null };
+          auth = {
+            authenticated: cursorSdkStatus.authenticated,
+            authSource: cursorSdkStatus.authSource,
+          };
         }
       } catch { /* auth probe is best-effort */ }
 
@@ -85,8 +125,19 @@ function registerAgentDiscoveryHandlers(ctx) {
       resolvedPath = resolveCliFromPath(command, shellEnv);
     }
 
+    if (command === "cursor" && !resolvedPath && !hasCustomPath && !shellEnv.CURSOR_API_KEY) {
+      return { path: null, binPath: null, version: null, available: false, installed: false };
+    }
+
     if (command === "cursor" && !resolvedPath && !hasCustomPath) {
-      return { path: "cursor", binPath: "cursor", version: "Cursor SDK", available: true, installed: true };
+      const cursorSdkStatus = await probeCursorSdkAvailability(shellEnv);
+      return {
+        path: cursorSdkStatus.installed ? "cursor" : null,
+        binPath: cursorSdkStatus.installed ? "cursor" : null,
+        version: cursorSdkStatus.version,
+        available: cursorSdkStatus.available,
+        installed: cursorSdkStatus.installed,
+      };
     }
 
     if (!resolvedPath) {

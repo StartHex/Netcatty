@@ -43,7 +43,7 @@ test("buildCursorAgentOptions uses api key, model, cwd, and injected MCP servers
   assert.deepEqual(options, {
     apiKey: "cur-key",
     model: { id: "composer-2" },
-    local: { cwd: "/repo" },
+    local: { cwd: "/repo", autoReview: false, sandboxOptions: { enabled: true } },
     mcpServers: {
       netcatty: {
         type: "stdio",
@@ -55,14 +55,14 @@ test("buildCursorAgentOptions uses api key, model, cwd, and injected MCP servers
   });
 });
 
-test("buildCursorAgentOptions falls back to CURSOR_API_KEY and composer-2", () => {
+test("buildCursorAgentOptions falls back to CURSOR_API_KEY and composer-2.5", () => {
   const options = buildCursorAgentOptions({
     env: { CURSOR_API_KEY: "env-key" },
     cwd: "/repo",
   });
 
   assert.equal(options.apiKey, "env-key");
-  assert.deepEqual(options.model, { id: "composer-2" });
+  assert.deepEqual(options.model, { id: "composer-2.5" });
 });
 
 test("toCursorMcpServers drops invalid server configs", () => {
@@ -105,6 +105,17 @@ test("translateCursorEvent maps assistant, thinking, and tool events", () => {
     ["toolCall", "read_file", { path: "README.md" }, "tool-1"],
     ["toolResult", "tool-1", "contents", "read_file"],
   ]);
+});
+
+test("translateCursorEvent marks error status as failed", () => {
+  const emitter = makeEmitter();
+  const state = {};
+
+  const failed = translateCursorEvent({ type: "status", status: "ERROR", message: "bad key" }, emitter, state);
+
+  assert.equal(failed, true);
+  assert.equal(state.failed, true);
+  assert.deepEqual(emitter.calls, [["error", "bad key"]]);
 });
 
 test("runCursorTurn creates or resumes an agent, streams events, and emits done", async () => {
@@ -155,14 +166,82 @@ test("runCursorTurn creates or resumes an agent, streams events, and emits done"
   assert.equal(captured.closed, true);
 });
 
+test("runCursorTurn does not emit done after a Cursor error status", async () => {
+  const emitter = makeEmitter();
+  const sdkModule = {
+    Agent: {
+      async create() {
+        return {
+          agentId: "agent-error",
+          async send() {
+            return {
+              async *stream() {
+                yield { type: "status", status: "ERROR", message: "bad key" };
+                yield { type: "assistant", message: { content: [{ type: "text", text: "late" }] } };
+              },
+            };
+          },
+          close() {},
+        };
+      },
+    },
+  };
+
+  const result = await runCursorTurn({
+    prompt: "hi",
+    agentOptions: { apiKey: "key", model: { id: "composer-2.5" }, local: { cwd: "/repo" } },
+    emitter,
+    sdkModule,
+  });
+
+  assert.equal(result.sessionId, "agent-error");
+  assert.deepEqual(emitter.calls, [
+    ["sessionId", "agent-error"],
+    ["error", "bad key"],
+  ]);
+});
+
+test("runCursorTurn returns when aborted while creating an agent", async () => {
+  const emitter = makeEmitter();
+  let resolveCreate;
+  const createPromise = new Promise((resolve) => {
+    resolveCreate = resolve;
+  });
+  const sdkModule = {
+    Agent: {
+      create() {
+        return createPromise;
+      },
+    },
+  };
+  const controller = new AbortController();
+  const turnPromise = runCursorTurn({
+    prompt: "hi",
+    agentOptions: { apiKey: "key", model: { id: "composer-2.5" }, local: { cwd: "/repo" } },
+    emitter,
+    signal: controller.signal,
+    sdkModule,
+  });
+
+  controller.abort();
+  const result = await turnPromise;
+  assert.deepEqual(result, { sessionId: null });
+  assert.deepEqual(emitter.calls, []);
+
+  let closed = false;
+  resolveCreate({ agentId: "late", close: () => { closed = true; } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(closed, true);
+});
+
 test("mapCursorModels maps display names and variants", () => {
   assert.deepEqual(
     mapCursorModels([
-      { id: "composer-2", displayName: "Composer 2", description: "Default" },
+      { id: "composer-2.5", displayName: "Composer 2.5", description: "Default" },
       { id: "gpt-5", displayName: "GPT-5", variants: [{ displayName: "Fast", params: [{ id: "effort", value: "low" }] }] },
     ]),
     [
-      { id: "composer-2", name: "Composer 2", description: "Default" },
+      { id: "composer-2.5", name: "Composer 2.5", description: "Default" },
       { id: "gpt-5", name: "GPT-5" },
       { id: "gpt-5?effort=low", name: "GPT-5 - Fast" },
     ],
