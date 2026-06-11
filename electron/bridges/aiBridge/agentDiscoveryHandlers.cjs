@@ -110,8 +110,11 @@ function registerAgentDiscoveryHandlers(ctx) {
   });
 
   // Resolve a CLI binary path (auto-detect or validate custom path)
-  ipcMain.handle("netcatty:ai:resolve-cli", async (event, { command, customPath }) => {
+  ipcMain.handle("netcatty:ai:resolve-cli", async (event, { command, customPath, refreshShellEnv }) => {
     if (!validateSenderOrSettings(event)) return { ok: false, error: "Unauthorized IPC sender" };
+    if (refreshShellEnv) {
+      invalidateShellEnvCache();
+    }
     const shellEnv = await getShellEnv();
     const hasCustomPath = Boolean(String(customPath || "").trim());
 

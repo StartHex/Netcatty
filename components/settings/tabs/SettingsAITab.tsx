@@ -206,6 +206,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
       const result = await bridge.aiResolveCli({
         command: agentKey,
         customPath: customPath.trim(),
+        refreshShellEnv: agentKey === "cursor",
       });
       setInfo(result);
 

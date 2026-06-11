@@ -8,6 +8,7 @@ const {
   runCursorTurn,
   toCursorMcpServers,
   translateCursorEvent,
+  withTemporaryProcessEnv,
 } = require("./cursorDriver.cjs");
 
 function makeEmitter() {
@@ -74,6 +75,57 @@ test("toCursorMcpServers drops invalid server configs", () => {
     ]),
     { ok: { type: "stdio", command: "node", args: [], env: {} } },
   );
+});
+
+test("withTemporaryProcessEnv restores env after async work", async () => {
+  const original = process.env.NETCATTY_CURSOR_TEST_ENV;
+  delete process.env.NETCATTY_CURSOR_TEST_ENV;
+
+  const value = await withTemporaryProcessEnv(
+    { NETCATTY_CURSOR_TEST_ENV: "present" },
+    async () => process.env.NETCATTY_CURSOR_TEST_ENV,
+  );
+
+  assert.equal(value, "present");
+  assert.equal(process.env.NETCATTY_CURSOR_TEST_ENV, undefined);
+  if (original !== undefined) process.env.NETCATTY_CURSOR_TEST_ENV = original;
+});
+
+test("runCursorTurn exposes runtime env while creating and sending", async () => {
+  const emitter = makeEmitter();
+  const observed = [];
+  const sdkModule = {
+    Agent: {
+      async create() {
+        observed.push(["create", process.env.NETCATTY_TOOL_CLI_DISCOVERY_FILE]);
+        return {
+          agentId: "agent-env",
+          async send() {
+            observed.push(["send", process.env.NETCATTY_TOOL_CLI_DISCOVERY_FILE]);
+            return {
+              async *stream() {
+                yield { type: "assistant", message: { content: [{ type: "text", text: "ok" }] } };
+              },
+            };
+          },
+          close() {},
+        };
+      },
+    },
+  };
+
+  await runCursorTurn({
+    prompt: "hi",
+    agentOptions: { apiKey: "key", model: { id: "composer-2.5" }, local: { cwd: "/repo" } },
+    runtimeEnv: { NETCATTY_TOOL_CLI_DISCOVERY_FILE: "/tmp/discovery.json" },
+    emitter,
+    sdkModule,
+  });
+
+  assert.deepEqual(observed, [
+    ["create", "/tmp/discovery.json"],
+    ["send", "/tmp/discovery.json"],
+  ]);
 });
 
 test("translateCursorEvent maps assistant, thinking, and tool events", () => {
@@ -232,6 +284,35 @@ test("runCursorTurn returns when aborted while creating an agent", async () => {
   resolveCreate({ agentId: "late", close: () => { closed = true; } });
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(closed, true);
+});
+
+test("runCursorTurn restores runtime env when aborted while creating an agent", async () => {
+  const emitter = makeEmitter();
+  const original = process.env.NETCATTY_CURSOR_ABORT_ENV;
+  delete process.env.NETCATTY_CURSOR_ABORT_ENV;
+  const sdkModule = {
+    Agent: {
+      create() {
+        return new Promise(() => {});
+      },
+    },
+  };
+  const controller = new AbortController();
+  const turnPromise = runCursorTurn({
+    prompt: "hi",
+    agentOptions: { apiKey: "key", model: { id: "composer-2.5" }, local: { cwd: "/repo" } },
+    runtimeEnv: { NETCATTY_CURSOR_ABORT_ENV: "present" },
+    emitter,
+    signal: controller.signal,
+    sdkModule,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(process.env.NETCATTY_CURSOR_ABORT_ENV, "present");
+  controller.abort();
+  await turnPromise;
+  assert.equal(process.env.NETCATTY_CURSOR_ABORT_ENV, undefined);
+  if (original !== undefined) process.env.NETCATTY_CURSOR_ABORT_ENV = original;
 });
 
 test("runCursorTurn cancels a late Cursor run when aborted while sending", async () => {

@@ -91,6 +91,7 @@ const DRIVER_REGISTRY = {
         prompt: ctx.prompt,
         attachments: ctx.attachments,
         agentOptions,
+        runtimeEnv: ctx.env,
         resumeSessionId: ctx.resumeSessionId,
         emitter: ctx.emitter,
         signal: ctx.signal,

@@ -54,6 +54,32 @@ function buildCursorAgentOptions({ apiKey, env, model, cwd, injectedMcpServers }
   return options;
 }
 
+function applyTemporaryProcessEnv(env) {
+  if (!env || typeof env !== "object") return () => {};
+  const previous = new Map();
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== "string") continue;
+    previous.set(key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined);
+    process.env[key] = value;
+  }
+
+  return () => {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
+
+async function withTemporaryProcessEnv(env, fn) {
+  const restore = applyTemporaryProcessEnv(env);
+  try {
+    return await fn();
+  } finally {
+    restore();
+  }
+}
+
 function buildCursorSendMessage(prompt, attachments) {
   const images = [];
   for (const attachment of Array.isArray(attachments) ? attachments : []) {
@@ -197,7 +223,7 @@ async function abortable(promise, signal, onLateResolve) {
 }
 
 async function runCursorTurn({
-  prompt, attachments, agentOptions, resumeSessionId, emitter, signal, sdkModule,
+  prompt, attachments, agentOptions, runtimeEnv, resumeSessionId, emitter, signal, sdkModule,
 }) {
   let resolvedModule = sdkModule;
   if (!resolvedModule) {
@@ -214,21 +240,32 @@ async function runCursorTurn({
   let run = null;
   let sessionId = resumeSessionId || null;
   try {
-    const agentPromise = resumeSessionId && typeof Agent.resume === "function"
-      ? Agent.resume(resumeSessionId, agentOptions)
-      : Agent.create(agentOptions);
-    agent = await abortable(agentPromise, signal, (lateAgent) => {
-      try { lateAgent?.close?.(); } catch { /* best effort */ }
-    });
+    const restoreCreateEnv = applyTemporaryProcessEnv(runtimeEnv);
+    try {
+      const agentPromise = resumeSessionId && typeof Agent.resume === "function"
+        ? Agent.resume(resumeSessionId, agentOptions)
+        : Agent.create(agentOptions);
+      agent = await abortable(agentPromise, signal, (lateAgent) => {
+        try { lateAgent?.close?.(); } catch { /* best effort */ }
+      });
+    } finally {
+      restoreCreateEnv();
+    }
     sessionId = agent.agentId || sessionId;
     if (sessionId) emitter.sessionId(sessionId);
     if (signal?.aborted) return { sessionId };
 
-    run = await abortable(agent.send(buildCursorSendMessage(prompt, attachments)), signal, (lateRun) => {
-      if (lateRun && typeof lateRun.cancel === "function") {
-        void lateRun.cancel().catch(() => {});
-      }
-    });
+    const sendMessage = buildCursorSendMessage(prompt, attachments);
+    const restoreSendEnv = applyTemporaryProcessEnv(runtimeEnv);
+    try {
+      run = await abortable(agent.send(sendMessage), signal, (lateRun) => {
+        if (lateRun && typeof lateRun.cancel === "function") {
+          void lateRun.cancel().catch(() => {});
+        }
+      });
+    } finally {
+      restoreSendEnv();
+    }
     const state = { reasoningOpen: false };
     let hasContent = false;
     let failed = false;
@@ -329,6 +366,7 @@ async function listCursorModels({ apiKey, env, sdkModule } = {}) {
 module.exports = {
   DEFAULT_CURSOR_MODEL,
   abortable,
+  applyTemporaryProcessEnv,
   buildCursorAgentOptions,
   buildCursorSendMessage,
   listCursorModels,
@@ -337,4 +375,5 @@ module.exports = {
   runCursorTurn,
   toCursorMcpServers,
   translateCursorEvent,
+  withTemporaryProcessEnv,
 };

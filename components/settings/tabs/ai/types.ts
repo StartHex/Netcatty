@@ -104,7 +104,7 @@ export interface NetcattyAiBridge {
   aiCodexGetLoginSession?: (sessionId: string) => Promise<{ ok: boolean; session?: CodexLoginSession; error?: string }>;
   aiCodexCancelLogin?: (sessionId: string) => Promise<{ ok: boolean; found?: boolean; session?: CodexLoginSession; error?: string }>;
   aiCodexLogout?: () => Promise<{ ok: boolean; state?: CodexIntegrationState; isConnected?: boolean; rawOutput?: string; logoutOutput?: string; error?: string }>;
-  aiResolveCli?: (params: { command: string; customPath?: string }) => Promise<AgentPathInfo>;
+  aiResolveCli?: (params: { command: string; customPath?: string; refreshShellEnv?: boolean }) => Promise<AgentPathInfo>;
   aiUserSkillsGetStatus?: () => Promise<UserSkillsStatusResult>;
   aiUserSkillsOpenFolder?: () => Promise<UserSkillsStatusResult>;
   openExternal?: (url: string) => Promise<void>;
