@@ -31,8 +31,11 @@ async function probeCursorSdkAvailability(shellEnv) {
 
 function registerAgentDiscoveryHandlers(ctx) {
   with (ctx) {
-  ipcMain.handle("netcatty:ai:agents:discover", async (event) => {
+  ipcMain.handle("netcatty:ai:agents:discover", async (event, options = {}) => {
     if (!validateSenderOrSettings(event)) return { ok: false, error: "Unauthorized IPC sender" };
+    if (options?.refreshShellEnv) {
+      invalidateShellEnvCache();
+    }
     const agents = [];
     const knownAgents = [
       { command: "claude", name: "Claude Code", icon: "claude",
@@ -116,7 +119,7 @@ function registerAgentDiscoveryHandlers(ctx) {
       invalidateShellEnvCache();
     }
     const shellEnv = await getShellEnv();
-    const hasCustomPath = Boolean(String(customPath || "").trim());
+    const hasCustomPath = command !== "cursor" && Boolean(String(customPath || "").trim());
 
     let resolvedPath;
     if (hasCustomPath) {
@@ -134,10 +137,9 @@ function registerAgentDiscoveryHandlers(ctx) {
 
     if (command === "cursor") {
       const cursorSdkStatus = await probeCursorSdkAvailability(shellEnv);
-      const cursorPath = resolvedPath || "cursor";
       return {
-        path: cursorSdkStatus.installed ? cursorPath : null,
-        binPath: cursorSdkStatus.installed ? cursorPath : null,
+        path: cursorSdkStatus.installed ? "cursor" : null,
+        binPath: cursorSdkStatus.installed ? "cursor" : null,
         version: cursorSdkStatus.version,
         available: cursorSdkStatus.available,
         installed: cursorSdkStatus.installed,
