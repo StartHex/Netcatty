@@ -14,10 +14,10 @@ test("remote clipboard image path is placed under the current directory", () => 
   );
 });
 
-test("remote clipboard image path falls back to home when cwd is unavailable", () => {
+test("remote clipboard image path is empty when cwd is unavailable", () => {
   assert.equal(
     buildRemoteClipboardImagePath(undefined, "shot.png"),
-    "~/.netcatty-paste-images/shot.png",
+    "",
   );
 });
 
@@ -33,7 +33,9 @@ test("remote clipboard image paste uploads and inserts the remote image path", a
   const scrolled: string[] = [];
   let focused = false;
   let closedSftpId: string | undefined;
+  let deletedTempFile: string | undefined;
   const transferPayloads: unknown[] = [];
+  const broadcastData: string[] = [];
 
   const handled = await handleRemoteClipboardImagePaste({
     bridge: {
@@ -54,6 +56,10 @@ test("remote clipboard image paste uploads and inserts the remote image path", a
       closeSftp: async (sftpId) => {
         closedSftpId = sftpId;
       },
+      deleteTempFile: async (filePath) => {
+        deletedTempFile = filePath;
+        return { success: true };
+      },
     },
     createTransferId: () => "transfer-1",
     getRemoteCwd: async () => "/home/alice/project",
@@ -61,6 +67,7 @@ test("remote clipboard image paste uploads and inserts the remote image path", a
     terminalBackend: {
       writeToSession: (sessionId, data) => writes.push({ sessionId, data }),
     },
+    onPasteData: (data) => broadcastData.push(data),
     term: {
       focus: () => {
         focused = true;
@@ -88,8 +95,10 @@ test("remote clipboard image paste uploads and inserts the remote image path", a
     },
   ]);
   assert.deepEqual(scrolled, ["/home/alice/project/.netcatty-paste-images/shot_1.png"]);
+  assert.deepEqual(broadcastData, ["/home/alice/project/.netcatty-paste-images/shot_1.png"]);
   assert.equal(focused, true);
   assert.equal(closedSftpId, "sftp-1");
+  assert.equal(deletedTempFile, "/tmp/netcatty/shot.png");
 });
 
 test("remote clipboard image paste reports unhandled when no image exists", async () => {
@@ -107,4 +116,74 @@ test("remote clipboard image paste reports unhandled when no image exists", asyn
   });
 
   assert.equal(handled, false);
+});
+
+test("remote clipboard image paste skips upload without a reliable cwd", async () => {
+  const transferPayloads: unknown[] = [];
+  let deletedTempFile: string | undefined;
+
+  const handled = await handleRemoteClipboardImagePaste({
+    bridge: {
+      readClipboardImage: async () => ({
+        path: "/tmp/netcatty/shot.png",
+        name: "shot.png",
+        mediaType: "image/png",
+        size: 12,
+      }),
+      openSftpForSession: async () => {
+        assert.fail("should not open SFTP without cwd");
+      },
+      startStreamTransfer: async (options) => {
+        transferPayloads.push(options);
+        return { transferId: options.transferId };
+      },
+      deleteTempFile: async (filePath) => {
+        deletedTempFile = filePath;
+        return { success: true };
+      },
+    },
+    getRemoteCwd: async () => undefined,
+    sessionId: "session-1",
+    terminalBackend: {
+      writeToSession: () => assert.fail("should not paste without upload"),
+    },
+  });
+
+  assert.equal(handled, false);
+  assert.deepEqual(transferPayloads, []);
+  assert.equal(deletedTempFile, "/tmp/netcatty/shot.png");
+});
+
+test("remote clipboard image paste does not insert a path when upload returns an error", async () => {
+  let closedSftpId: string | undefined;
+  let deletedTempFile: string | undefined;
+
+  const handled = await handleRemoteClipboardImagePaste({
+    bridge: {
+      readClipboardImage: async () => ({
+        path: "/tmp/netcatty/shot.png",
+        name: "shot.png",
+        mediaType: "image/png",
+        size: 12,
+      }),
+      openSftpForSession: async () => "sftp-1",
+      startStreamTransfer: async (options) => ({ transferId: options.transferId, error: "disk full" }),
+      closeSftp: async (sftpId) => {
+        closedSftpId = sftpId;
+      },
+      deleteTempFile: async (filePath) => {
+        deletedTempFile = filePath;
+        return { success: true };
+      },
+    },
+    getRemoteCwd: async () => "/home/alice",
+    sessionId: "session-1",
+    terminalBackend: {
+      writeToSession: () => assert.fail("should not paste failed upload path"),
+    },
+  });
+
+  assert.equal(handled, false);
+  assert.equal(closedSftpId, "sftp-1");
+  assert.equal(deletedTempFile, "/tmp/netcatty/shot.png");
 });

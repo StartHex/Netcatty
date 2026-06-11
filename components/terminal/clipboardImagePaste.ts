@@ -10,7 +10,7 @@ type ClipboardImageFile = {
 type RemoteClipboardImageBridge = Pick<
   NetcattyBridge,
   "readClipboardImage" | "openSftpForSession" | "startStreamTransfer"
-> & Pick<Partial<NetcattyBridge>, "closeSftp">;
+> & Pick<Partial<NetcattyBridge>, "closeSftp" | "deleteTempFile">;
 
 type TerminalLike = {
   focus?: () => void;
@@ -21,6 +21,7 @@ type HandleRemoteClipboardImagePasteOptions = {
   createTransferId?: () => string;
   getRemoteCwd: () => Promise<string | null | undefined>;
   scrollToBottomAfterProgrammaticInput?: (data: string) => void;
+  onPasteData?: (data: string) => boolean | void;
   sessionId: string | null | undefined;
   terminalBackend: {
     writeToSession: (sessionId: string, data: string, options?: { automated?: boolean }) => void;
@@ -44,9 +45,9 @@ export function sanitizeRemoteClipboardImageName(name: string): string {
 
 export function buildRemoteClipboardImagePath(cwd: string | null | undefined, fileName: string): string {
   const safeFileName = sanitizeRemoteClipboardImageName(fileName);
-  const base = typeof cwd === "string" && cwd.trim().length > 0
-    ? cwd.trim().replace(/\/+$/g, "") || "/"
-    : "~";
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : "";
+  if (!normalizedCwd) return "";
+  const base = normalizedCwd.replace(/\/+$/g, "") || "/";
 
   if (base === "/") {
     return `/${REMOTE_CLIPBOARD_IMAGE_DIR}/${safeFileName}`;
@@ -70,6 +71,7 @@ export async function handleRemoteClipboardImagePaste({
   createTransferId = defaultTransferId,
   getRemoteCwd,
   scrollToBottomAfterProgrammaticInput,
+  onPasteData,
   sessionId,
   terminalBackend,
   term,
@@ -86,10 +88,11 @@ export async function handleRemoteClipboardImagePaste({
   try {
     const remoteCwd = await getRemoteCwd();
     const targetPath = buildRemoteClipboardImagePath(remoteCwd, image.name);
+    if (!targetPath) return false;
     const transferId = createTransferId();
 
     sftpId = await bridge.openSftpForSession(sessionId);
-    await bridge.startStreamTransfer({
+    const transferResult = await bridge.startStreamTransfer({
       transferId,
       sourcePath: image.path,
       targetPath,
@@ -98,15 +101,20 @@ export async function handleRemoteClipboardImagePaste({
       targetSftpId: sftpId,
       totalBytes: image.size,
     });
+    if (!transferResult || transferResult.error) return false;
 
     const pastedPath = quoteRemotePathForShell(targetPath);
     terminalBackend.writeToSession(sessionId, pastedPath);
+    onPasteData?.(pastedPath);
     scrollToBottomAfterProgrammaticInput?.(pastedPath);
     term?.focus?.();
     return true;
   } finally {
     if (sftpId && bridge.closeSftp) {
       await bridge.closeSftp(sftpId).catch(() => undefined);
+    }
+    if (bridge.deleteTempFile) {
+      await bridge.deleteTempFile(image.path).catch(() => undefined);
     }
   }
 }

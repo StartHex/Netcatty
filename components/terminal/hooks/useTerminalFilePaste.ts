@@ -11,6 +11,7 @@ import { handleRemoteClipboardImagePaste } from "../clipboardImagePaste";
 
 interface UseTerminalFilePasteOptions {
   isLocalConnection: boolean;
+  supportsRemoteImagePaste: boolean;
   status: TerminalSession["status"];
   termRef: React.MutableRefObject<XTerm | null>;
   sessionRef: React.MutableRefObject<string | null>;
@@ -18,17 +19,22 @@ interface UseTerminalFilePasteOptions {
     writeToSession: (sessionId: string, data: string, options?: { automated?: boolean }) => void;
   };
   resolveSftpInitialPath: (options?: { preferFreshBackend?: boolean }) => Promise<string | undefined>;
+  scrollOnPasteRef?: React.RefObject<boolean>;
+  onPasteData?: (data: string) => boolean | void;
   scrollToBottomAfterProgrammaticInput: (data: string) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function useTerminalFilePaste({
   isLocalConnection,
+  supportsRemoteImagePaste,
   status,
   termRef,
   sessionRef,
   terminalBackend,
   resolveSftpInitialPath,
+  scrollOnPasteRef,
+  onPasteData,
   scrollToBottomAfterProgrammaticInput,
   containerRef,
 }: UseTerminalFilePasteOptions) {
@@ -41,7 +47,10 @@ export function useTerminalFilePaste({
       if (!term || !sessionRef.current) return;
       navigator.clipboard.readText().then((text) => {
         if (text) {
-          pasteTextIntoTerminal(term, text, { scrollOnPaste: false });
+          pasteTextIntoTerminal(term, text, {
+            scrollOnPaste: scrollOnPasteRef?.current ?? false,
+            onPasteData,
+          });
         }
       }).catch(() => {
         // clipboard access denied — silently ignore
@@ -53,7 +62,7 @@ export function useTerminalFilePaste({
 
       const bridge = netcattyBridge.get();
 
-      if (!isLocalConnection && bridge?.readClipboardImage) {
+      if (supportsRemoteImagePaste && bridge?.readClipboardImage) {
         event.preventDefault();
         event.stopPropagation();
 
@@ -65,6 +74,7 @@ export function useTerminalFilePaste({
               sessionId: sessionRef.current,
               terminalBackend,
               term: termRef.current,
+              onPasteData,
               scrollToBottomAfterProgrammaticInput,
             });
             if (!handled) fallbackToTextPaste();
@@ -116,7 +126,10 @@ export function useTerminalFilePaste({
   }, [
     containerRef,
     isLocalConnection,
+    supportsRemoteImagePaste,
+    onPasteData,
     resolveSftpInitialPath,
+    scrollOnPasteRef,
     scrollToBottomAfterProgrammaticInput,
     sessionRef,
     status,

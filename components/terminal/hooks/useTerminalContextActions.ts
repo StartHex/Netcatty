@@ -35,8 +35,10 @@ export const useTerminalContextActions = ({
   isBroadcastEnabledRef,
   onBroadcastInputRef,
   isLocalConnection,
+  supportsRemoteImagePaste,
   terminalBackend,
   getRemoteCwd,
+  scrollToBottomAfterProgrammaticInput,
 }: {
   termRef: RefObject<XTerm | null>;
   sourceSessionId: string;
@@ -46,10 +48,12 @@ export const useTerminalContextActions = ({
   isBroadcastEnabledRef?: RefObject<boolean | undefined>;
   onBroadcastInputRef?: RefObject<((data: string, sourceSessionId: string) => void) | undefined>;
   isLocalConnection: boolean;
+  supportsRemoteImagePaste: boolean;
   terminalBackend: {
     writeToSession: (sessionId: string, data: string, options?: { automated?: boolean }) => void;
   };
   getRemoteCwd?: () => Promise<string | null | undefined>;
+  scrollToBottomAfterProgrammaticInput?: (data: string) => void;
 }) => {
   const broadcastUserPasteData = useCallback((data: string) => {
     return broadcastTerminalPasteData(data, {
@@ -74,14 +78,15 @@ export const useTerminalContextActions = ({
     if (!term) return;
     try {
       const bridge = netcattyBridge.get();
-      if (!isLocalConnection && bridge?.readClipboardImage && getRemoteCwd) {
+      if (supportsRemoteImagePaste && bridge?.readClipboardImage && getRemoteCwd) {
         const handled = await handleRemoteClipboardImagePaste({
           bridge,
           getRemoteCwd,
           sessionId: sessionRef.current,
           terminalBackend,
           term,
-          scrollToBottomAfterProgrammaticInput: undefined,
+          onPasteData: broadcastUserPasteData,
+          scrollToBottomAfterProgrammaticInput,
         });
         if (handled) return;
       }
@@ -112,11 +117,13 @@ export const useTerminalContextActions = ({
   }, [
     broadcastUserPasteData,
     isLocalConnection,
+    supportsRemoteImagePaste,
     sessionRef,
     termRef,
     scrollOnPasteRef,
     terminalBackend,
     getRemoteCwd,
+    scrollToBottomAfterProgrammaticInput,
   ]);
 
   const onPasteSelection = useCallback(() => {
