@@ -179,6 +179,16 @@ function emitCursorToolResultOnce(event, emitter, state, id, result, toolName) {
   return true;
 }
 
+function getCursorDisplayToolName(rawName, args) {
+  const name = String(rawName || "").trim();
+  const input = args && typeof args === "object" ? args : {};
+  const nestedToolName = typeof input.toolName === "string" ? input.toolName.trim() : "";
+  if ((name === "mcp" || name === "tool" || !name) && nestedToolName) {
+    return nestedToolName;
+  }
+  return name || nestedToolName || "tool";
+}
+
 function formatCursorErrorForUser(message) {
   const text = String(message || "").trim();
   if (/api.?key|auth|unauthorized/i.test(text)) {
@@ -206,7 +216,14 @@ function translateCursorEvent(event, emitter, state = {}) {
         if (block.type === "text" && block.text) {
           emitter.text(String(block.text));
         } else if (block.type === "tool_use") {
-          emitCursorToolCallOnce(event, emitter, state, block.name, block.input, block.id);
+          emitCursorToolCallOnce(
+            event,
+            emitter,
+            state,
+            getCursorDisplayToolName(block.name, block.input),
+            block.input,
+            block.id,
+          );
         }
       }
       return;
@@ -214,7 +231,7 @@ function translateCursorEvent(event, emitter, state = {}) {
     case "tool_call": {
       closeReasoning(state, emitter);
       const id = event.call_id;
-      const name = event.name || "tool";
+      const name = getCursorDisplayToolName(event.name, event.args);
       if (event.status === "running") {
         emitCursorToolCallOnce(event, emitter, state, name, event.args, id);
       } else if (event.status === "completed" || event.status === "error") {

@@ -160,6 +160,30 @@ test("translateCursorEvent maps assistant, thinking, and tool events", () => {
   ]);
 });
 
+test("translateCursorEvent uses nested Cursor MCP toolName for display", () => {
+  const emitter = makeEmitter();
+  const state = {};
+  const args = {
+    providerIdentifier: "netcatty-remote-hosts",
+    toolName: "terminal_execute",
+    args: { command: "uname -a" },
+  };
+
+  translateCursorEvent({
+    type: "tool_call",
+    call_id: "mcp-1",
+    name: "mcp",
+    status: "completed",
+    args,
+    result: { content: [{ type: "text", text: "Linux" }] },
+  }, emitter, state);
+
+  assert.deepEqual(emitter.calls, [
+    ["toolCall", "terminal_execute", args, "mcp-1"],
+    ["toolResult", "mcp-1", "Linux", "terminal_execute"],
+  ]);
+});
+
 test("translateCursorEvent marks error status as failed", () => {
   const emitter = makeEmitter();
   const state = {};
