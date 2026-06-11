@@ -108,12 +108,12 @@ export const enAiMessages: Messages = {
 
   // AI Cursor SDK
   'ai.cursor.title': 'Cursor',
-  'ai.cursor.description': 'Uses the Cursor SDK. Set CURSOR_API_KEY in your shell or agent environment to use Cursor as an external coding agent.',
+  'ai.cursor.description': 'Uses the Cursor SDK. Set CURSOR_API_KEY in your shell or agent environment; installing cursor or cursor-agent alone does not make the SDK available.',
   'ai.cursor.detecting': 'Detecting...',
   'ai.cursor.detected': 'Available',
   'ai.cursor.notFound': 'Unavailable',
   'ai.cursor.path': 'Runtime:',
-  'ai.cursor.notFoundHint': 'Cursor SDK support is unavailable. Install dependencies or specify a cursor executable path below.',
+  'ai.cursor.notFoundHint': 'Cursor SDK is unavailable. Set CURSOR_API_KEY, then click Check or restart the app.',
   'ai.cursor.customPathPlaceholder': 'e.g. /usr/local/bin/cursor',
   'ai.cursor.check': 'Check',
 

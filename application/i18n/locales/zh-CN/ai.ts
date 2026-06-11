@@ -108,12 +108,12 @@ export const zhCNAiMessages: Messages = {
 
   // AI Cursor SDK
   'ai.cursor.title': 'Cursor',
-  'ai.cursor.description': '使用 Cursor SDK。请在 shell 或 Agent 环境中设置 CURSOR_API_KEY，即可把 Cursor 作为外部编程 Agent 使用。',
+  'ai.cursor.description': '使用 Cursor SDK。需要在 shell 或 Agent 环境中设置 CURSOR_API_KEY；仅安装 cursor 或 cursor-agent 不会让 SDK 可用。',
   'ai.cursor.detecting': '检测中...',
   'ai.cursor.detected': '可用',
   'ai.cursor.notFound': '不可用',
   'ai.cursor.path': '运行环境：',
-  'ai.cursor.notFoundHint': 'Cursor SDK 支持当前不可用。请安装依赖，或在下方指定 cursor 可执行文件路径。',
+  'ai.cursor.notFoundHint': 'Cursor SDK 当前不可用。请设置 CURSOR_API_KEY，然后点击检查或重启应用。',
   'ai.cursor.customPathPlaceholder': '例如 /usr/local/bin/cursor',
   'ai.cursor.check': '检查',
 

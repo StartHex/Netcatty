@@ -108,12 +108,12 @@ export const ruAiMessages: Messages = {
 
   // AI Cursor SDK
   'ai.cursor.title': 'Cursor',
-  'ai.cursor.description': 'Использует Cursor SDK. Укажите CURSOR_API_KEY в shell или окружении агента, чтобы использовать Cursor как внешний агент для программирования.',
+  'ai.cursor.description': 'Использует Cursor SDK. Укажите CURSOR_API_KEY в shell или окружении агента; одной установки cursor или cursor-agent недостаточно.',
   'ai.cursor.detecting': 'Обнаружение...',
   'ai.cursor.detected': 'Доступен',
   'ai.cursor.notFound': 'Недоступен',
   'ai.cursor.path': 'Среда:',
-  'ai.cursor.notFoundHint': 'Поддержка Cursor SDK недоступна. Установите зависимости или укажите путь к исполняемому файлу cursor ниже.',
+  'ai.cursor.notFoundHint': 'Cursor SDK недоступен. Укажите CURSOR_API_KEY, затем нажмите «Проверить» или перезапустите приложение.',
   'ai.cursor.customPathPlaceholder': 'например, /usr/local/bin/cursor',
   'ai.cursor.check': 'Проверить',
 
