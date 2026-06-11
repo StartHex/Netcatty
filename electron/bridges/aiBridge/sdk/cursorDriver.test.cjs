@@ -234,6 +234,46 @@ test("runCursorTurn returns when aborted while creating an agent", async () => {
   assert.equal(closed, true);
 });
 
+test("runCursorTurn cancels a late Cursor run when aborted while sending", async () => {
+  const emitter = makeEmitter();
+  let resolveSend;
+  let cancelled = false;
+  const sendPromise = new Promise((resolve) => {
+    resolveSend = resolve;
+  });
+  const sdkModule = {
+    Agent: {
+      async create() {
+        return {
+          agentId: "agent-send-abort",
+          send() {
+            return sendPromise;
+          },
+          close() {},
+        };
+      },
+    },
+  };
+  const controller = new AbortController();
+  const turnPromise = runCursorTurn({
+    prompt: "hi",
+    agentOptions: { apiKey: "key", model: { id: "composer-2.5" }, local: { cwd: "/repo" } },
+    emitter,
+    signal: controller.signal,
+    sdkModule,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  controller.abort();
+  const result = await turnPromise;
+  assert.deepEqual(result, { sessionId: "agent-send-abort" });
+  assert.deepEqual(emitter.calls, [["sessionId", "agent-send-abort"]]);
+
+  resolveSend({ cancel: async () => { cancelled = true; }, stream: async function* stream() {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(cancelled, true);
+});
+
 test("mapCursorModels maps display names and variants", () => {
   assert.deepEqual(
     mapCursorModels([

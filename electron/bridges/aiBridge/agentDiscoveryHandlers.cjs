@@ -125,15 +125,16 @@ function registerAgentDiscoveryHandlers(ctx) {
       resolvedPath = resolveCliFromPath(command, shellEnv);
     }
 
-    if (command === "cursor" && !resolvedPath && !hasCustomPath && !shellEnv.CURSOR_API_KEY) {
+    if (command === "cursor" && !shellEnv.CURSOR_API_KEY) {
       return { path: null, binPath: null, version: null, available: false, installed: false };
     }
 
-    if (command === "cursor" && !resolvedPath && !hasCustomPath) {
+    if (command === "cursor") {
       const cursorSdkStatus = await probeCursorSdkAvailability(shellEnv);
+      const cursorPath = resolvedPath || "cursor";
       return {
-        path: cursorSdkStatus.installed ? "cursor" : null,
-        binPath: cursorSdkStatus.installed ? "cursor" : null,
+        path: cursorSdkStatus.installed ? cursorPath : null,
+        binPath: cursorSdkStatus.installed ? cursorPath : null,
         version: cursorSdkStatus.version,
         available: cursorSdkStatus.available,
         installed: cursorSdkStatus.installed,

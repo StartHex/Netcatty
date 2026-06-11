@@ -224,7 +224,11 @@ async function runCursorTurn({
     if (sessionId) emitter.sessionId(sessionId);
     if (signal?.aborted) return { sessionId };
 
-    run = await abortable(agent.send(buildCursorSendMessage(prompt, attachments)), signal);
+    run = await abortable(agent.send(buildCursorSendMessage(prompt, attachments)), signal, (lateRun) => {
+      if (lateRun && typeof lateRun.cancel === "function") {
+        void lateRun.cancel().catch(() => {});
+      }
+    });
     const state = { reasoningOpen: false };
     let hasContent = false;
     let failed = false;

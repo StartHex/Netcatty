@@ -337,6 +337,33 @@ test("resolve-cli keeps Cursor SDK unavailable without an API key", async () => 
   }
 });
 
+test("resolve-cli keeps Cursor SDK unavailable without an API key even with a custom path", async () => {
+  const { bridge, restore } = loadBridgeWithMocks({
+    normalizeCliPathForPlatform: () => "/Applications/Cursor.app/Contents/MacOS/Cursor",
+    resolveCliFromPath: () => null,
+  });
+  const ipcMain = createIpcMainStub();
+  bridge.init({ sessions: new Map(), sftpClients: new Map(), electronModule: { app: { getPath: () => process.cwd() } } });
+  bridge.registerHandlers(ipcMain);
+
+  try {
+    const resolveCli = ipcMain.handlers.get("netcatty:ai:resolve-cli");
+    const result = await resolveCli(
+      { sender: { id: 1 } },
+      { command: "cursor", customPath: "/Applications/Cursor.app/Contents/MacOS/Cursor" },
+    );
+    assert.deepEqual(result, {
+      path: null,
+      binPath: null,
+      version: null,
+      available: false,
+      installed: false,
+    });
+  } finally {
+    restore();
+  }
+});
+
 test("resolve-cli exposes Cursor SDK support when installed and authenticated", async () => {
   const { bridge, restore } = loadBridgeWithMocks({
     resolveCliFromPath: () => null,
