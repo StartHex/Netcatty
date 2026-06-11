@@ -3,6 +3,8 @@ function createAgentCliHelpers(ctx) {
   with (ctx) {
   async function runCommand(command, args, options) {
     return await new Promise((resolve, reject) => {
+      let settled = false;
+      let timeoutId = null;
       const spawnSpec = prepareCommandForSpawn(command, args || []);
       const child = spawn(spawnSpec.command, spawnSpec.args, {
         stdio: ["ignore", "pipe", "pipe"],
@@ -15,6 +17,7 @@ function createAgentCliHelpers(ctx) {
       let stdout = "";
       let stderr = "";
       const MAX_BUFFER = 10 * 1024 * 1024; // 10MB
+      const timeoutMs = Number.isFinite(options?.timeoutMs) ? Number(options.timeoutMs) : 0;
 
       child.stdout.on("data", (chunk) => {
         if (stdout.length < MAX_BUFFER) {
@@ -29,16 +32,36 @@ function createAgentCliHelpers(ctx) {
       });
 
       child.once("error", (error) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
         reject(error);
       });
 
       child.once("close", (exitCode) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
         resolve({
           stdout: stripAnsi(stdout),
           stderr: stripAnsi(stderr),
           exitCode,
         });
       });
+
+      if (timeoutMs > 0) {
+        timeoutId = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          const error = new Error(`Command timed out after ${timeoutMs}ms`);
+          error.code = "ETIMEDOUT";
+          try {
+            if (!child.killed) child.kill("SIGTERM");
+          } catch {}
+          reject(error);
+        }, timeoutMs);
+        if (typeof timeoutId.unref === "function") timeoutId.unref();
+      }
     });
   }
 
@@ -55,7 +78,7 @@ function createAgentCliHelpers(ctx) {
 
   async function probeCliVersion(probeCmd, probeArgs, env) {
     try {
-      const result = await runCommand(probeCmd, probeArgs, { env });
+      const result = await runCommand(probeCmd, probeArgs, { env, timeoutMs: 5000 });
       return {
         launched: true,
         exitCode: result.exitCode,

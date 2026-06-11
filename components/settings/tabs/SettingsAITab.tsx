@@ -342,11 +342,13 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   useEffect(() => {
     if (activeSubTab !== "agents") return;
     if (agentDiscoveryStartedRef.current) return;
-    agentDiscoveryStartedRef.current = true;
 
     const initialPaths = initialManagedPathsRef.current;
     const cancelTasks = [
-      scheduleAfterFirstPaint(() => void resolveAgentPath("codex", initialPaths?.codex ?? ""), 160),
+      scheduleAfterFirstPaint(() => {
+        agentDiscoveryStartedRef.current = true;
+        void resolveAgentPath("codex", initialPaths?.codex ?? "");
+      }, 160),
       scheduleAfterFirstPaint(() => void resolveAgentPath("claude", initialPaths?.claude ?? ""), 440),
       scheduleAfterFirstPaint(() => void resolveAgentPath("copilot", initialPaths?.copilot ?? ""), 720),
       scheduleAfterFirstPaint(() => void resolveAgentPath("cursor", initialPaths?.cursor ?? "", { apiKeyPresent: Boolean(cursorApiKeyEncrypted) }), 1000),
@@ -475,8 +477,10 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   useEffect(() => {
     if (activeSubTab !== "agents") return;
     if (codexIntegrationLoadedRef.current) return;
-    codexIntegrationLoadedRef.current = true;
-    return scheduleAfterFirstPaint(() => void refreshCodexIntegration(), 620);
+    return scheduleAfterFirstPaint(() => {
+      codexIntegrationLoadedRef.current = true;
+      void refreshCodexIntegration();
+    }, 620);
   }, [activeSubTab, refreshCodexIntegration]);
 
   useEffect(() => {
@@ -568,7 +572,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
         throw new Error(result.error || "Failed to log out from Codex");
       }
       setCodexLoginSession(null);
-      await refreshCodexIntegration({ refreshShellEnv: true });
+      await refreshCodexIntegration({ refreshShellEnv: true, validateChatGptAuth: true });
     } catch (err) {
       setCodexError(normalizeCodexBridgeError(err));
     } finally {
@@ -601,8 +605,10 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   useEffect(() => {
     if (activeSubTab !== "tools") return;
     if (userSkillsLoadedRef.current) return;
-    userSkillsLoadedRef.current = true;
-    return scheduleAfterFirstPaint(() => void refreshUserSkillsStatus(), 520);
+    return scheduleAfterFirstPaint(() => {
+      userSkillsLoadedRef.current = true;
+      void refreshUserSkillsStatus();
+    }, 520);
   }, [activeSubTab, refreshUserSkillsStatus]);
 
   const reservedUserSkillSlugs = useMemo(
@@ -635,7 +641,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
       <Tabs value={activeSubTab} onValueChange={(value) => setActiveSubTab(value as AISettingsSubTab)} className="space-y-5">
         <TabsList className="h-auto flex-wrap justify-start bg-muted/50">
           <TabsTrigger value="providers">{t('ai.providers')}</TabsTrigger>
-          <TabsTrigger value="agents">Agents</TabsTrigger>
+          <TabsTrigger value="agents">{t('ai.agents')}</TabsTrigger>
           <TabsTrigger value="tools">{t('ai.toolAccess.title')}</TabsTrigger>
           <TabsTrigger value="search">{t("ai.webSearch.title")}</TabsTrigger>
           <TabsTrigger value="safety">{t('ai.safety.title')}</TabsTrigger>
@@ -717,7 +723,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
               loginSession={codexLoginSession}
               isLoading={isCodexLoading}
               error={codexError}
-              onRefresh={() => void refreshCodexIntegration({ refreshShellEnv: true })}
+              onRefresh={() => void refreshCodexIntegration({ refreshShellEnv: true, validateChatGptAuth: true })}
               onConnect={() => void handleStartCodexLogin()}
               onCancel={() => void handleCancelCodexLogin()}
               onOpenUrl={handleOpenCodexLoginUrl}

@@ -544,6 +544,7 @@ function isPlausibleCliVersionOutput(value) {
 
 let _cachedShellEnv = null;
 let _shellEnvPromise = null;
+let _shellEnvGeneration = 0;
 
 /**
  * Run the user's login shell once to print its PATH. Used as a fallback when
@@ -607,6 +608,7 @@ async function getShellEnv() {
   if (_cachedShellEnv) return _cachedShellEnv;
   if (_shellEnvPromise) return _shellEnvPromise;
 
+  const generation = _shellEnvGeneration;
   _shellEnvPromise = (async () => {
     const home = process.env.HOME || "";
     const extraPaths = [
@@ -617,11 +619,14 @@ async function getShellEnv() {
     ];
 
     if (process.platform === "win32") {
-      _cachedShellEnv = {
+      const nextEnv = {
         ...process.env,
         PATH: [...extraPaths, process.env.PATH || ""].join(path.delimiter),
       };
-      return _cachedShellEnv;
+      if (generation === _shellEnvGeneration) {
+        _cachedShellEnv = nextEnv;
+      }
+      return nextEnv;
     }
 
     // On macOS/Linux, spawn a login shell to capture the real environment.
@@ -646,11 +651,15 @@ async function getShellEnv() {
       const mergedPath = [...extraPaths, shellPath, process.env.PATH || ""].join(path.delimiter);
       // Layer-0 fix-path: front-load + de-duplicate the login-shell PATH we just
       // captured (reuse the `-ilc env` result above — no second shell spawn).
-      _cachedShellEnv = {
+      const nextEnv = {
         ...envMap,
         ...process.env,
         PATH: mergeLoginShellPath({ basePath: mergedPath, runLoginShellPath: () => shellPath }),
       };
+      if (generation === _shellEnvGeneration) {
+        _cachedShellEnv = nextEnv;
+      }
+      return nextEnv;
     } catch {
       // `-ilc env` failed — try a lighter login-shell PATH probe as a fallback so
       // GUI-launch PATH stripping still doesn't break CLI discovery (layer-0).
@@ -661,17 +670,22 @@ async function getShellEnv() {
       } catch {
         loginShellPath = "";
       }
-      _cachedShellEnv = {
+      const nextEnv = {
         ...process.env,
         PATH: mergeLoginShellPath({
           basePath,
           runLoginShellPath: () => loginShellPath,
         }),
       };
+      if (generation === _shellEnvGeneration) {
+        _cachedShellEnv = nextEnv;
+      }
+      return nextEnv;
     }
-    return _cachedShellEnv;
   })().finally(() => {
-    _shellEnvPromise = null;
+    if (generation === _shellEnvGeneration) {
+      _shellEnvPromise = null;
+    }
   });
 
   return _shellEnvPromise;
@@ -683,6 +697,7 @@ async function getShellEnv() {
  * their rc file and clicks "Refresh Status" without restarting the app.
  */
 function invalidateShellEnvCache() {
+  _shellEnvGeneration += 1;
   _cachedShellEnv = null;
   _shellEnvPromise = null;
 }
