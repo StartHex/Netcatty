@@ -46,7 +46,6 @@ function buildCursorAgentOptions({ apiKey, env, model, cwd, injectedMcpServers }
     local: {
       cwd: cwd || process.cwd(),
       autoReview: false,
-      sandboxOptions: { enabled: true },
     },
   };
   const mcpServers = toCursorMcpServers(injectedMcpServers);

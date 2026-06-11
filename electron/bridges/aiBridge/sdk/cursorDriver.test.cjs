@@ -45,7 +45,7 @@ test("buildCursorAgentOptions uses api key, model, cwd, and injected MCP servers
   assert.deepEqual(options, {
     apiKey: "cur-key",
     model: { id: "composer-2" },
-    local: { cwd: "/repo", autoReview: false, sandboxOptions: { enabled: true } },
+    local: { cwd: "/repo", autoReview: false },
     mcpServers: {
       netcatty: {
         type: "stdio",
