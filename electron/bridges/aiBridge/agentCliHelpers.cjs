@@ -4,6 +4,7 @@ function createAgentCliHelpers(ctx) {
   async function runCommand(command, args, options) {
     return await new Promise((resolve, reject) => {
       let settled = false;
+      let closed = false;
       let timeoutId = null;
       let killId = null;
       function clearTimers() {
@@ -43,6 +44,7 @@ function createAgentCliHelpers(ctx) {
       });
 
       child.once("error", (error) => {
+        closed = true;
         if (settled) return;
         settled = true;
         clearTimers();
@@ -50,9 +52,10 @@ function createAgentCliHelpers(ctx) {
       });
 
       child.once("close", (exitCode) => {
+        closed = true;
+        clearTimers();
         if (settled) return;
         settled = true;
-        clearTimers();
         resolve({
           stdout: stripAnsi(stdout),
           stderr: stripAnsi(stderr),
@@ -67,11 +70,11 @@ function createAgentCliHelpers(ctx) {
           const error = new Error(`Command timed out after ${timeoutMs}ms`);
           error.code = "ETIMEDOUT";
           try {
-            if (!child.killed) child.kill("SIGTERM");
+            if (!closed) child.kill("SIGTERM");
           } catch {}
           killId = setTimeout(() => {
             try {
-              if (!child.killed) child.kill("SIGKILL");
+              if (!closed) child.kill("SIGKILL");
             } catch {}
           }, 750);
           if (typeof killId.unref === "function") killId.unref();
