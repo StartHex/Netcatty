@@ -108,14 +108,14 @@ export const zhCNAiMessages: Messages = {
 
   // AI Cursor SDK
   'ai.cursor.title': 'Cursor',
-  'ai.cursor.description': '使用 Cursor SDK。安装状态和 API Key 会分开检测；填入 API Key 后即可作为外部编程 Agent 使用。',
+  'ai.cursor.description': '使用 Cursor SDK。',
   'ai.cursor.detecting': '检测中...',
   'ai.cursor.detected': '可用',
   'ai.cursor.notFound': '不可用',
   'ai.cursor.path': '运行环境：',
-  'ai.cursor.notFoundHint': '已检测到 Cursor SDK，但还没有可用的 API Key。请在下方填写，或在环境中设置 CURSOR_API_KEY。',
-  'ai.cursor.notInstalledHint': '未检测到 Cursor SDK 支持。请先安装项目依赖，然后重新检查。',
-  'ai.cursor.installStatus': '安装状态',
+  'ai.cursor.notFoundHint': '填写 API Key 后即可使用。',
+  'ai.cursor.notInstalledHint': '未检测到 Cursor SDK。',
+  'ai.cursor.installStatus': 'Cursor SDK',
   'ai.cursor.installed': '已检测到',
   'ai.cursor.notInstalled': '未检测到',
   'ai.cursor.apiKeyStatus': 'API Key',

@@ -108,14 +108,14 @@ export const enAiMessages: Messages = {
 
   // AI Cursor SDK
   'ai.cursor.title': 'Cursor',
-  'ai.cursor.description': 'Uses the Cursor SDK. Installation and API key status are checked separately; enter an API key to use Cursor as an external coding agent.',
+  'ai.cursor.description': 'Uses the Cursor SDK.',
   'ai.cursor.detecting': 'Detecting...',
   'ai.cursor.detected': 'Available',
   'ai.cursor.notFound': 'Unavailable',
   'ai.cursor.path': 'Runtime:',
-  'ai.cursor.notFoundHint': 'Cursor SDK was detected, but no usable API key is configured. Enter one below or set CURSOR_API_KEY in the environment.',
-  'ai.cursor.notInstalledHint': 'Cursor SDK support was not detected. Install project dependencies, then check again.',
-  'ai.cursor.installStatus': 'Installation',
+  'ai.cursor.notFoundHint': 'Enter an API key to enable Cursor.',
+  'ai.cursor.notInstalledHint': 'Cursor SDK was not detected.',
+  'ai.cursor.installStatus': 'Cursor SDK',
   'ai.cursor.installed': 'Detected',
   'ai.cursor.notInstalled': 'Not detected',
   'ai.cursor.apiKeyStatus': 'API Key',

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { useI18n } from "../../../../application/i18n/I18nProvider";
 import { decryptField } from "../../../../infrastructure/persistence/secureFieldAdapter";
@@ -73,18 +73,6 @@ export const CursorSdkCard: React.FC<{
       : "text-amber-500";
   const keyStatusClassName = hasAnyApiKey ? "text-emerald-500" : "text-amber-500";
 
-  const statusText = useMemo(() => {
-    if (isResolvingPath) return t("ai.cursor.detecting");
-    if (available) return t("ai.cursor.detected");
-    return t("ai.cursor.notFound");
-  }, [available, isResolvingPath, t]);
-
-  const statusClassName = isResolvingPath
-    ? "text-muted-foreground"
-    : available
-      ? "text-emerald-500"
-      : "text-amber-500";
-
   const handleSave = async () => {
     setIsSaving(true);
     setSaved(false);
@@ -97,27 +85,12 @@ export const CursorSdkCard: React.FC<{
   };
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <p className="min-w-0 text-xs text-muted-foreground leading-5">
-          {t("ai.cursor.description")}
-        </p>
-        <div className={cn("text-xs font-medium shrink-0", statusClassName)}>
-          {statusText}
-        </div>
-      </div>
-
+    <div className="rounded-lg border bg-card p-4 space-y-3">
       <div className="grid gap-2 text-xs">
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">{t("ai.cursor.installStatus")}</span>
           <span className={cn("font-medium", installStatusClassName)}>{installStatus}</span>
         </div>
-        {installed && (
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">{t("ai.cursor.path")}</span>
-            <span className="truncate font-mono text-foreground">{pathInfo?.path || "cursor"}</span>
-          </div>
-        )}
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">{t("ai.cursor.apiKeyStatus")}</span>
           <span className={cn("font-medium", keyStatusClassName)}>{keyStatus}</span>

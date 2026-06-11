@@ -108,14 +108,14 @@ export const ruAiMessages: Messages = {
 
   // AI Cursor SDK
   'ai.cursor.title': 'Cursor',
-  'ai.cursor.description': 'Использует Cursor SDK. Установка и API-ключ проверяются отдельно; укажите API-ключ, чтобы использовать Cursor как внешний агент.',
+  'ai.cursor.description': 'Использует Cursor SDK.',
   'ai.cursor.detecting': 'Обнаружение...',
   'ai.cursor.detected': 'Доступен',
   'ai.cursor.notFound': 'Недоступен',
   'ai.cursor.path': 'Среда:',
-  'ai.cursor.notFoundHint': 'Cursor SDK обнаружен, но пригодный API-ключ не настроен. Укажите его ниже или задайте CURSOR_API_KEY в окружении.',
-  'ai.cursor.notInstalledHint': 'Поддержка Cursor SDK не обнаружена. Установите зависимости проекта, затем проверьте снова.',
-  'ai.cursor.installStatus': 'Установка',
+  'ai.cursor.notFoundHint': 'Укажите API-ключ, чтобы включить Cursor.',
+  'ai.cursor.notInstalledHint': 'Cursor SDK не обнаружен.',
+  'ai.cursor.installStatus': 'Cursor SDK',
   'ai.cursor.installed': 'Обнаружено',
   'ai.cursor.notInstalled': 'Не обнаружено',
   'ai.cursor.apiKeyStatus': 'API-ключ',
