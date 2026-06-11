@@ -271,7 +271,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   // Ref to read current defaultAgentId without adding it as a dependency.
   const defaultAgentIdRef = useRef(defaultAgentId);
   defaultAgentIdRef.current = defaultAgentId;
-  const resolvedAgentKeysRef = useRef<Partial<Record<ManagedAgentKey, boolean>>>({});
+  const autoResolvedAgentStateRef = useRef<Partial<Record<ManagedAgentKey, "pending" | "done">>>({});
   const codexIntegrationLoadedRef = useRef(false);
   const userSkillsLoadedRef = useRef(false);
 
@@ -361,10 +361,11 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
       { key: "codebuddy", delayMs: 1280, path: initialPaths?.codebuddy ?? "" },
     ];
     const cancelTasks = tasks
-      .filter((task) => !resolvedAgentKeysRef.current[task.key])
+      .filter((task) => !autoResolvedAgentStateRef.current[task.key])
       .map((task) => scheduleAfterFirstPaint(() => {
+        autoResolvedAgentStateRef.current[task.key] = "pending";
         void resolveAgentPath(task.key, task.path, task.options).finally(() => {
-          resolvedAgentKeysRef.current[task.key] = true;
+          autoResolvedAgentStateRef.current[task.key] = "done";
         });
       }, task.delayMs));
     return () => {
