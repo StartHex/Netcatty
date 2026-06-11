@@ -6,7 +6,7 @@ function getCursorPlatformPackageName(platform = process.platform, arch = proces
   return null;
 }
 
-async function probeCursorSdkAvailability(shellEnv) {
+async function probeCursorSdkAvailability(shellEnv, options = {}) {
   const platformPackageName = getCursorPlatformPackageName();
   if (!platformPackageName) {
     return { installed: false, available: false, authenticated: false, authSource: null, version: null };
@@ -19,12 +19,14 @@ async function probeCursorSdkAvailability(shellEnv) {
     return { installed: false, available: false, authenticated: false, authSource: null, version: null };
   }
 
-  const authenticated = Boolean(shellEnv?.CURSOR_API_KEY);
+  const hasEnvApiKey = Boolean(shellEnv?.CURSOR_API_KEY);
+  const hasSettingsApiKey = Boolean(options?.apiKeyPresent);
+  const authenticated = hasEnvApiKey || hasSettingsApiKey;
   return {
     installed: true,
     available: authenticated,
     authenticated,
-    authSource: authenticated ? "CURSOR_API_KEY" : null,
+    authSource: hasEnvApiKey ? "CURSOR_API_KEY" : hasSettingsApiKey ? "settings" : null,
     version: "Cursor SDK",
   };
 }
@@ -113,7 +115,7 @@ function registerAgentDiscoveryHandlers(ctx) {
   });
 
   // Resolve a CLI binary path (auto-detect or validate custom path)
-  ipcMain.handle("netcatty:ai:resolve-cli", async (event, { command, customPath, refreshShellEnv }) => {
+  ipcMain.handle("netcatty:ai:resolve-cli", async (event, { command, customPath, refreshShellEnv, apiKeyPresent }) => {
     if (!validateSenderOrSettings(event)) return { ok: false, error: "Unauthorized IPC sender" };
     if (refreshShellEnv) {
       invalidateShellEnvCache();
@@ -131,18 +133,19 @@ function registerAgentDiscoveryHandlers(ctx) {
       resolvedPath = resolveCliFromPath(command, shellEnv);
     }
 
-    if (command === "cursor" && !shellEnv.CURSOR_API_KEY) {
-      return { path: null, binPath: null, version: null, available: false, installed: false };
-    }
-
     if (command === "cursor") {
-      const cursorSdkStatus = await probeCursorSdkAvailability(shellEnv);
+      const cursorSdkStatus = await probeCursorSdkAvailability(shellEnv, {
+        apiKeyPresent: Boolean(apiKeyPresent),
+      });
+      const cursorPath = resolveCliFromPath(command, shellEnv) || "cursor";
       return {
-        path: cursorSdkStatus.installed ? "cursor" : null,
-        binPath: cursorSdkStatus.installed ? "cursor" : null,
+        path: cursorSdkStatus.installed ? cursorPath : null,
+        binPath: cursorSdkStatus.installed ? cursorPath : null,
         version: cursorSdkStatus.version,
         available: cursorSdkStatus.available,
         installed: cursorSdkStatus.installed,
+        authenticated: cursorSdkStatus.authenticated,
+        authSource: cursorSdkStatus.authSource,
       };
     }
 

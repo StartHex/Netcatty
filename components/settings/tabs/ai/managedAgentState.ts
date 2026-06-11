@@ -37,6 +37,30 @@ export function buildManagedAgentState(
   const otherAgents = prevAgents.filter((agent) => agent.id !== managedId);
 
   if (!pathInfo?.available || !pathInfo.path) {
+    const existingManaged = managedAgents.find((agent) => agent.id === managedId);
+    if (agentKey === "cursor" && existingManaged?.apiKey) {
+      const defaults = AGENT_DEFAULTS[agentKey];
+      const {
+        acpCommand: _legacyCommand,
+        acpArgs: _legacyArgs,
+        ...existingManagedWithoutLegacy
+      } = existingManaged;
+      return {
+        agents: [
+          ...otherAgents,
+          {
+            ...existingManagedWithoutLegacy,
+            ...defaults,
+            id: managedId,
+            command: pathInfo?.path || existingManaged.command || "cursor",
+            enabled: false,
+            available: false,
+            apiKey: existingManaged.apiKey,
+          },
+        ],
+        defaultAgentId: existingManaged.id === defaultAgentId ? "catty" : defaultAgentId,
+      };
+    }
     return {
       agents: otherAgents,
       defaultAgentId: managedAgents.some((agent) => agent.id === defaultAgentId)
@@ -61,7 +85,10 @@ export function buildManagedAgentState(
     id: managedId,
     command: pathInfo.path,
     ...(managedEnv ? { env: managedEnv } : {}),
-    enabled: managedAgents.length === 0 ? true : managedAgents.some((agent) => agent.enabled),
+    available: true,
+    enabled: managedAgents.length === 0
+      ? true
+      : managedAgents.some((agent) => agent.enabled) || managedAgents.every((agent) => agent.available === false),
   };
 
   return {

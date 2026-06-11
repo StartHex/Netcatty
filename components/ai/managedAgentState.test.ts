@@ -115,6 +115,33 @@ test('buildManagedAgentState stores SDK backend key for discovered Cursor', () =
   assert.equal(state.agents[0].sdkBackend, 'cursor');
 });
 
+test('buildManagedAgentState preserves a saved Cursor API key when SDK is not ready', () => {
+  const agents: ExternalAgentConfig[] = [
+    {
+      id: 'discovered_cursor',
+      name: 'Cursor',
+      command: 'cursor',
+      enabled: true,
+      available: true,
+      sdkBackend: 'cursor',
+      apiKey: 'enc:v1:test',
+    },
+  ];
+
+  const state = buildManagedAgentState(
+    agents,
+    'discovered_cursor',
+    'cursor',
+    { path: 'cursor', version: 'Cursor SDK', available: false, installed: true },
+  );
+
+  assert.equal(state.agents[0].id, 'discovered_cursor');
+  assert.equal(state.agents[0].apiKey, 'enc:v1:test');
+  assert.equal(state.agents[0].enabled, false);
+  assert.equal(state.agents[0].available, false);
+  assert.equal(state.defaultAgentId, 'catty');
+});
+
 test('buildManagedAgentState does not remove user-created matching agents', () => {
   const agents: ExternalAgentConfig[] = [
     {

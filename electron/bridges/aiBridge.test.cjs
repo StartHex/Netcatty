@@ -320,7 +320,7 @@ test("resolve-cli probes Windows Claude exe paths with spaces", { skip: process.
   }
 });
 
-test("resolve-cli keeps Cursor SDK unavailable without an API key", async () => {
+test("resolve-cli reports Cursor SDK installed but unavailable without an API key", async () => {
   const { bridge, restore } = loadBridgeWithMocks({
     resolveCliFromPath: () => null,
   });
@@ -332,18 +332,20 @@ test("resolve-cli keeps Cursor SDK unavailable without an API key", async () => 
     const resolveCli = ipcMain.handlers.get("netcatty:ai:resolve-cli");
     const result = await resolveCli({ sender: { id: 1 } }, { command: "cursor", customPath: "" });
     assert.deepEqual(result, {
-      path: null,
-      binPath: null,
-      version: null,
+      path: "cursor",
+      binPath: "cursor",
+      version: "Cursor SDK",
       available: false,
-      installed: false,
+      installed: true,
+      authenticated: false,
+      authSource: null,
     });
   } finally {
     restore();
   }
 });
 
-test("resolve-cli keeps Cursor SDK unavailable without an API key even with a custom path", async () => {
+test("resolve-cli separates Cursor SDK installation from API key availability", async () => {
   const { bridge, restore } = loadBridgeWithMocks({
     normalizeCliPathForPlatform: () => "/Applications/Cursor.app/Contents/MacOS/Cursor",
     resolveCliFromPath: () => null,
@@ -359,11 +361,13 @@ test("resolve-cli keeps Cursor SDK unavailable without an API key even with a cu
       { command: "cursor", customPath: "/Applications/Cursor.app/Contents/MacOS/Cursor" },
     );
     assert.deepEqual(result, {
-      path: null,
-      binPath: null,
-      version: null,
+      path: "cursor",
+      binPath: "cursor",
+      version: "Cursor SDK",
       available: false,
-      installed: false,
+      installed: true,
+      authenticated: false,
+      authSource: null,
     });
   } finally {
     restore();
@@ -392,6 +396,8 @@ test("resolve-cli ignores custom Cursor paths and stores the SDK sentinel path",
       version: "Cursor SDK",
       available: true,
       installed: true,
+      authenticated: true,
+      authSource: "CURSOR_API_KEY",
     });
   } finally {
     restore();
@@ -416,6 +422,36 @@ test("resolve-cli exposes Cursor SDK support when installed and authenticated", 
       version: "Cursor SDK",
       available: true,
       installed: true,
+      authenticated: true,
+      authSource: "CURSOR_API_KEY",
+    });
+  } finally {
+    restore();
+  }
+});
+
+test("resolve-cli exposes Cursor SDK support when API key is saved in settings", async () => {
+  const { bridge, restore } = loadBridgeWithMocks({
+    resolveCliFromPath: () => "/usr/local/bin/cursor",
+  });
+  const ipcMain = createIpcMainStub();
+  bridge.init({ sessions: new Map(), sftpClients: new Map(), electronModule: { app: { getPath: () => process.cwd() } } });
+  bridge.registerHandlers(ipcMain);
+
+  try {
+    const resolveCli = ipcMain.handlers.get("netcatty:ai:resolve-cli");
+    const result = await resolveCli(
+      { sender: { id: 1 } },
+      { command: "cursor", customPath: "", apiKeyPresent: true },
+    );
+    assert.deepEqual(result, {
+      path: "/usr/local/bin/cursor",
+      binPath: "/usr/local/bin/cursor",
+      version: "Cursor SDK",
+      available: true,
+      installed: true,
+      authenticated: true,
+      authSource: "settings",
     });
   } finally {
     restore();

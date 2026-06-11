@@ -229,8 +229,10 @@ export interface ExternalAgentConfig {
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  apiKey?: string;           // encrypted via credentialBridge (enc:v1: prefix)
   icon?: string;
   enabled: boolean;
+  available?: boolean;
   /** SDK backend key for managed agents (claude|codex|copilot). */
   sdkBackend?: string;
   /** @deprecated Legacy persisted field from the pre-SDK migration. Read only for compatibility. */
