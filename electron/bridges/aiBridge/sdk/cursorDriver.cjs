@@ -109,6 +109,52 @@ function resultToText(result) {
   return JSON.stringify(result);
 }
 
+function redactCursorSecret(value) {
+  return String(value || "")
+    .replace(/crsr[_-]?[A-Za-z0-9_-]{8,}/g, "[redacted-cursor-key]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted-token]");
+}
+
+function cursorErrorDiagnostics(error) {
+  if (!error || typeof error !== "object") {
+    return { message: redactCursorSecret(error) };
+  }
+  return {
+    name: error.name || null,
+    message: redactCursorSecret(error.message || String(error)),
+    code: error.code || null,
+    status: error.status || null,
+    operation: error.operation || null,
+    endpoint: error.endpoint || null,
+    requestId: error.requestId || null,
+    isRetryable: typeof error.isRetryable === "boolean" ? error.isRetryable : null,
+    cause: error.cause && typeof error.cause === "object"
+      ? {
+        name: error.cause.name || null,
+        message: redactCursorSecret(error.cause.message || String(error.cause)),
+      }
+      : null,
+  };
+}
+
+function isCursorAuthMessage(message) {
+  return /api.?key|auth|unauthorized|unauthenticated/i.test(String(message || ""));
+}
+
+async function logCursorApiKeyValidation(resolvedModule, apiKey) {
+  if (!apiKey || typeof resolvedModule?.Cursor?.me !== "function") return;
+  try {
+    const user = await resolvedModule.Cursor.me({ apiKey });
+    console.info("[Cursor SDK] API key validation ok", {
+      hasUserId: user?.userId != null,
+      hasEmail: Boolean(user?.email),
+      createdAt: user?.createdAt || null,
+    });
+  } catch (error) {
+    console.warn("[Cursor SDK] API key validation failed", cursorErrorDiagnostics(error));
+  }
+}
+
 function closeReasoning(state, emitter) {
   if (state?.reasoningOpen) {
     emitter.reasoningEnd();
@@ -182,6 +228,10 @@ function translateCursorEvent(event, emitter, state = {}) {
       if (event.status === "ERROR") {
         closeReasoning(state, emitter);
         state.failed = true;
+        state.errorMessage = String(event.message || "");
+        console.warn("[Cursor SDK] status error", {
+          message: redactCursorSecret(event.message || ""),
+        });
         emitter.emitError(formatCursorErrorForUser(event.message));
         return true;
       }
@@ -301,6 +351,9 @@ async function runCursorTurn({
     }
     closeReasoning(state, emitter);
     if (failed) {
+      if (isCursorAuthMessage(state.errorMessage)) {
+        await logCursorApiKeyValidation(resolvedModule, agentOptions?.apiKey);
+      }
       return { sessionId };
     }
     if (!hasContent && !signal?.aborted) {
@@ -315,6 +368,10 @@ async function runCursorTurn({
     }
     {
       const message = error?.message || String(error);
+      console.warn("[Cursor SDK] run error", cursorErrorDiagnostics(error));
+      if (isCursorAuthMessage(message)) {
+        await logCursorApiKeyValidation(resolvedModule, agentOptions?.apiKey);
+      }
       emitter.emitError(formatCursorErrorForUser(message));
     }
     return { sessionId };

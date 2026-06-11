@@ -4,6 +4,7 @@ const { getDriver, listBackends } = require("./index.cjs");
 const { buildSdkAgentEnv } = require("./env.cjs");
 const { buildInjectedMcpServers } = require("./injectMcp.cjs");
 const { createStreamEmitter } = require("./emit.cjs");
+const crypto = require("node:crypto");
 
 const VALID_BACKENDS = new Set(listBackends());
 
@@ -37,6 +38,34 @@ function normalizeHistoryMessages(historyMessages) {
       content: String(msg.content || "").trim(),
     }))
     .filter((msg) => msg.content.length > 0);
+}
+
+function summarizeSecret(value) {
+  const text = String(value || "");
+  if (!text) return null;
+  return {
+    length: text.length,
+    prefix: text.slice(0, 4),
+    suffix: text.slice(-4),
+    sha256: crypto.createHash("sha256").update(text).digest("hex").slice(0, 16),
+  };
+}
+
+function logCursorApiKeySummary({ requestedAgentEnv, shellEnv, env }) {
+  const requestedKey = requestedAgentEnv?.CURSOR_API_KEY;
+  const shellKey = shellEnv?.CURSOR_API_KEY;
+  const effectiveKey = env?.CURSOR_API_KEY;
+  const source = requestedKey
+    ? "settings"
+    : shellKey
+      ? "environment"
+      : effectiveKey
+        ? "merged-env"
+        : "missing";
+  console.info("[Cursor SDK] API key summary", {
+    source,
+    effective: summarizeSecret(effectiveKey),
+  });
 }
 
 function defaultWriteAttachmentToTemp(attachment) {
@@ -162,6 +191,9 @@ function registerSdkStreamHandlers(ctx) {
             withCliDiscoveryEnv,
             normalizeClaudeCodeExecutableEnv: normalizeClaudeCodeExecutableEnvForSdk,
           });
+          if (backendKey === "cursor") {
+            logCursorApiKeySummary({ requestedAgentEnv: normalizedAgentEnv, shellEnv, env });
+          }
 
           // Resolve absolute CLI path for SDK backends. On Windows, rewrite npm
           // shell shims to the underlying native/script entry (codex.exe / cli.js)
