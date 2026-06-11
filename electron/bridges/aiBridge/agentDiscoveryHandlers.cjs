@@ -48,6 +48,8 @@ function registerAgentDiscoveryHandlers(ctx) {
         description: "GitHub's coding agent CLI", sdkBackend: "copilot", args: [] },
       { command: "cursor", name: "Cursor", icon: "cursor",
         description: "Cursor's coding agent via Cursor SDK", sdkBackend: "cursor", args: [] },
+      { command: "codebuddy", name: "CodeBuddy Code", icon: "codebuddy",
+        description: "Tencent's coding agent CLI (Agent SDK)", sdkBackend: "codebuddy", args: [] },
     ];
 
     const shellEnv = await getShellEnv();
@@ -90,6 +92,8 @@ function registerAgentDiscoveryHandlers(ctx) {
             authenticated: cursorSdkStatus.authenticated,
             authSource: cursorSdkStatus.authSource,
           };
+        } else if (agent.command === "codebuddy") {
+          auth = probeCodebuddyAuth({ env: shellEnv });
         }
       } catch { /* auth probe is best-effort */ }
 

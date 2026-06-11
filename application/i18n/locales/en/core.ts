@@ -42,6 +42,7 @@ export const enCoreMessages: Messages = {
   'common.more': 'More',
   'common.selectAHost': 'Select a host',
   'common.selectAHostPlaceholder': 'Select a host...',
+  'sort.manual': 'Manual order',
   'sort.az': 'A-z',
   'sort.za': 'Z-a',
   'sort.newest': 'Newest to oldest',
@@ -451,8 +452,6 @@ export const enCoreMessages: Messages = {
   'settings.terminal.rendering.renderer': 'Renderer',
   'settings.terminal.rendering.renderer.desc': 'Choose the terminal rendering technology. Auto will use DOM on low-memory devices. Changes take effect on new terminal sessions.',
   'settings.terminal.rendering.auto': 'Auto',
-  'settings.terminal.rendering.lineTimestamps': 'Prefix output with timestamps',
-  'settings.terminal.rendering.lineTimestamps.desc': 'Insert local time before terminal output lines. The timestamp becomes part of the visible terminal content.',
 
   // Settings > Terminal > Workspace Focus Indicator
   'settings.terminal.section.workspaceFocus': 'Workspace Focus Indicator',

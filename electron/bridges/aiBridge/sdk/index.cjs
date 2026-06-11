@@ -13,6 +13,7 @@ const claude = require("./claudeDriver.cjs");
 const codex = require("./codexDriver.cjs");
 const copilot = require("./copilotDriver.cjs");
 const cursor = require("./cursorDriver.cjs");
+const codebuddy = require("./codebuddyDriver.cjs");
 
 const DRIVER_REGISTRY = {
   claude: {
@@ -101,8 +102,30 @@ const DRIVER_REGISTRY = {
       return cursor.listCursorModels({ env: ctx.env });
     },
   },
+  codebuddy: {
+    async runTurn(ctx) {
+      const options = codebuddy.buildCodebuddyQueryOptions({
+        cwd: ctx.cwd,
+        model: ctx.model,
+        env: ctx.env,
+        injectedMcpServers: ctx.injectedMcpServers,
+        abortController: ctx.abortController,
+        resume: ctx.resumeSessionId,
+        pathToCodebuddyCode: ctx.binPath,
+        toolIntegrationMode: ctx.toolIntegrationMode,
+      });
+      return codebuddy.runCodebuddyTurn({
+        prompt: ctx.prompt,
+        attachments: ctx.attachments,
+        options,
+        emitter: ctx.emitter,
+      });
+    },
+    async listModels(ctx) {
+      return codebuddy.listCodebuddyModels({ pathToCodebuddyCode: ctx.binPath, env: ctx.env });
+    },
+  },
 };
-
 function getDriver(backend) {
   const driver = DRIVER_REGISTRY[backend];
   if (!driver) throw new Error(`No SDK driver registered for backend: ${backend}`);

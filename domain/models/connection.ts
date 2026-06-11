@@ -21,6 +21,7 @@ export interface ProxyProfile {
   config: ProxyConfig;
   createdAt: number;
   updatedAt?: number;
+  order?: number;
 }
 
 // Host chain configuration for jump host / bastion connections
@@ -167,6 +168,10 @@ export interface Host {
   keepaliveInterval?: number; // Seconds; 0 = disabled
   keepaliveCountMax?: number; // Unanswered keepalives before declaring dead
   keepaliveOverride?: boolean;
+  // Prefix visible terminal output for this host with local timestamps.
+  // Kept per-host because some shells/prompts (notably PowerShell + oh-my-posh)
+  // break when extra printable content is injected into the terminal stream.
+  showLineTimestamps?: boolean;
   // What the Backspace key sends: undefined = xterm default (no interception), 'ctrl-h' = ^H (0x08)
   backspaceBehavior?: 'ctrl-h';
   // Local SSH key file paths (from SSH config IdentityFile or user-added)
@@ -183,6 +188,7 @@ export interface Host {
   localShellIcon?: string;
   /** User-authored Markdown notes (project, hardware, region, etc.) */
   notes?: string;
+  order?: number;
 }
 
 export type KeyType = 'RSA' | 'ECDSA' | 'ED25519';
@@ -204,6 +210,7 @@ export interface SSHKey {
   category: KeyCategory;
   created: number;
   filePath?: string;
+  order?: number;
 }
 
 // Identity combines username with authentication method
@@ -215,6 +222,7 @@ export interface Identity {
   password?: string; // For password auth
   keyId?: string; // Reference to SSHKey for key/certificate auth
   created: number;
+  order?: number;
 }
 
 export interface Snippet {
@@ -226,6 +234,7 @@ export interface Snippet {
   targets?: string[]; // host ids
   shortkey?: string; // Keyboard shortcut to send this snippet in terminal (e.g., "F1", "Ctrl + F1")
   noAutoRun?: boolean; // If true, paste command without executing (no trailing Enter)
+  order?: number;
 }
 
 export interface ChatMessage {
@@ -245,6 +254,7 @@ export interface GroupNode {
 /** Default configuration for a group. Hosts in this group inherit these values when not explicitly set. */
 export interface GroupConfig {
   path: string;
+  order?: number;
   username?: string;
   password?: string;
   savePassword?: boolean;

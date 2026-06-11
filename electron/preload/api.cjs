@@ -42,6 +42,9 @@ function createPreloadApi(ctx) {
   listSerialPorts: async () => {
     return ipcRenderer.invoke("netcatty:serial:list");
   },
+  sendSerialYmodem: async (sessionId, filePath) => {
+    return ipcRenderer.invoke("netcatty:serial:ymodem-send", { sessionId, filePath });
+  },
   getDefaultShell: async () => {
     return ipcRenderer.invoke("netcatty:local:defaultShell");
   },
@@ -125,10 +128,23 @@ function createPreloadApi(ctx) {
   openTerminalPopup: async (payload) => {
     return ipcRenderer.invoke("netcatty:window:openTerminalPopup", payload);
   },
+  logDiagnostic: async (payload) => {
+    return ipcRenderer.invoke("netcatty:diagnostics:log", payload);
+  },
   onTerminalPopupConfig: (cb) => {
-    const handler = (_event, payload) => cb(payload);
-    ipcRenderer.on("netcatty:window:terminalPopupConfig", handler);
-    return () => ipcRenderer.removeListener("netcatty:window:terminalPopupConfig", handler);
+    terminalPopupConfigState.listeners.add(cb);
+    if (terminalPopupConfigState.pending) {
+      const pending = terminalPopupConfigState.pending;
+      terminalPopupConfigState.pending = null;
+      queueMicrotask(() => {
+        try {
+          cb(pending);
+        } catch (err) {
+          console.error("Terminal popup config callback failed", err);
+        }
+      });
+    }
+    return () => terminalPopupConfigState.listeners.delete(cb);
   },
   readRemoteHistory: async (sessionId, limit) => {
     return ipcRenderer.invoke("netcatty:ssh:readRemoteHistory", { sessionId, limit });

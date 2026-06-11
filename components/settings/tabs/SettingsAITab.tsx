@@ -4,7 +4,7 @@
  * Sub-components live in ./ai/ directory:
  *   - ProviderCard, ProviderConfigForm, AddProviderDropdown
  *   - ModelSelector, ProviderIconBadge
- *   - CodexConnectionCard, ClaudeCodeCard
+ *   - CodexConnectionCard, ClaudeCodeCard, CodebuddyCard
  *   - SafetySettings
  */
 import { AlertTriangle, Bot, FolderOpen, RefreshCcw } from "lucide-react";
@@ -41,6 +41,7 @@ import { AddProviderDropdown } from "./ai/AddProviderDropdown";
 import { CodexConnectionCard } from "./ai/CodexConnectionCard";
 import { ClaudeCodeCard } from "./ai/ClaudeCodeCard";
 import { CopilotCliCard } from "./ai/CopilotCliCard";
+import { CodebuddyCard } from "./ai/CodebuddyCard";
 import { SafetySettings } from "./ai/SafetySettings";
 import { WebSearchSettings } from "./ai/WebSearchSettings";
 import { QuickMessagesSettings } from "./ai/QuickMessagesSettings";
@@ -51,8 +52,10 @@ import {
   areExternalAgentListsEqual,
   buildManagedAgentState,
   getInitialManagedAgentPaths,
+  updateCodebuddyManagedEnv,
 } from "./ai/managedAgentState";
 import { splitClaudeEnv, buildClaudeEnv } from "./ai/claudeConfigEnv";
+import { splitCodebuddyEnv } from "./ai/codebuddyConfigEnv";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -163,6 +166,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
     claude: string;
     copilot: string;
     cursor: string;
+    codebuddy: string;
   } | null>(null);
   if (!initialManagedPathsRef.current) {
     initialManagedPathsRef.current = getInitialManagedAgentPaths(externalAgents);
@@ -171,8 +175,30 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   const [copilotPathInfo, setCopilotPathInfo] = useState<AgentPathInfo | null>(null);
   const [copilotCustomPath, setCopilotCustomPath] = useState("");
   const [isResolvingCopilot, setIsResolvingCopilot] = useState(false);
+
   const [cursorPathInfo, setCursorPathInfo] = useState<AgentPathInfo | null>(null);
   const [isResolvingCursor, setIsResolvingCursor] = useState(false);
+
+  const [codebuddyPathInfo, setCodebuddyPathInfo] = useState<AgentPathInfo | null>(null);
+  const [codebuddyCustomPath, setCodebuddyCustomPath] = useState("");
+  const [isResolvingCodebuddy, setIsResolvingCodebuddy] = useState(false);
+
+  const codebuddyManagedEnv = useMemo(
+    () => externalAgents.find((a) => a.id === "discovered_codebuddy")?.env,
+    [externalAgents],
+  );
+  const {
+    internetEnv: codebuddyInternetEnv,
+    envText: codebuddyEnvText,
+  } = useMemo(() => splitCodebuddyEnv(codebuddyManagedEnv), [codebuddyManagedEnv]);
+  const updateCodebuddyEnv = useCallback(
+    (nextInternetEnv: string, nextEnvText: string) => {
+      setExternalAgents((prev) =>
+        updateCodebuddyManagedEnv(prev, nextInternetEnv, nextEnvText),
+      );
+    },
+    [setExternalAgents],
+  );
   const [userSkillsStatus, setUserSkillsStatus] = useState<UserSkillsStatusResult | null>(null);
   const [isLoadingUserSkills, setIsLoadingUserSkills] = useState(false);
   const cursorManagedAgent = useMemo(
@@ -199,14 +225,18 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
         ? setClaudePathInfo
         : agentKey === "copilot"
           ? setCopilotPathInfo
-          : setCursorPathInfo;
+          : agentKey === "cursor"
+            ? setCursorPathInfo
+            : setCodebuddyPathInfo;
     const setResolving = agentKey === "codex"
       ? setIsResolvingCodex
       : agentKey === "claude"
         ? setIsResolvingClaude
         : agentKey === "copilot"
           ? setIsResolvingCopilot
-          : setIsResolvingCursor;
+          : agentKey === "cursor"
+            ? setIsResolvingCursor
+            : setIsResolvingCodebuddy;
 
     setResolving(true);
     try {
@@ -250,6 +280,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
     void resolveAgentPath("claude", initialManagedPathsRef.current?.claude ?? "");
     void resolveAgentPath("copilot", initialManagedPathsRef.current?.copilot ?? "");
     void resolveAgentPath("cursor", initialManagedPathsRef.current?.cursor ?? "", { apiKeyPresent: Boolean(cursorApiKeyEncrypted) });
+    void resolveAgentPath("codebuddy", initialManagedPathsRef.current?.codebuddy ?? "");
   }, [cursorApiKeyEncrypted, resolveAgentPath]);
 
   // Validate a custom path for an agent
@@ -260,9 +291,11 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
         ? claudeCustomPath
         : agentKey === "copilot"
           ? copilotCustomPath
-          : "";
+          : agentKey === "codebuddy"
+            ? codebuddyCustomPath
+            : "";
     await resolveAgentPath(agentKey, customPath);
-  }, [claudeCustomPath, codexCustomPath, copilotCustomPath, resolveAgentPath]);
+  }, [claudeCustomPath, codexCustomPath, copilotCustomPath, codebuddyCustomPath, resolveAgentPath]);
 
   const handleSaveCursorApiKey = useCallback(async (apiKey: string) => {
     const trimmed = apiKey.trim();
@@ -643,6 +676,23 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
               encryptedApiKey={cursorApiKeyEncrypted}
               onSaveApiKey={handleSaveCursorApiKey}
               onRecheckPath={() => void handleCheckCustomPath("cursor")}
+            />
+          </SettingsSection>
+
+          <SettingsSection
+            title={t('ai.codebuddy.title')}
+            leading={<ProviderIconBadge providerId="codebuddy" size="sm" />}
+          >
+            <CodebuddyCard
+              pathInfo={codebuddyPathInfo}
+              isResolvingPath={isResolvingCodebuddy}
+              customPath={codebuddyCustomPath}
+              onCustomPathChange={setCodebuddyCustomPath}
+              onRecheckPath={() => void handleCheckCustomPath("codebuddy")}
+              internetEnv={codebuddyInternetEnv}
+              onInternetEnvChange={(v) => updateCodebuddyEnv(v, codebuddyEnvText)}
+              envText={codebuddyEnvText}
+              onEnvTextChange={(v) => updateCodebuddyEnv(codebuddyInternetEnv, v)}
             />
           </SettingsSection>
 

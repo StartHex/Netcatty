@@ -22,6 +22,7 @@ type AgentIconKey =
   | 'openrouter'
   | 'zed'
   | 'atom'
+  | 'codebuddy'
   | 'terminal'
   | 'plus';
 
@@ -90,6 +91,11 @@ const AGENT_ICON_VISUALS: Record<AgentIconKey, AgentIconVisual> = {
   atom: {
     src: '/ai/agents/atom.svg',
     badgeClassName: 'border-amber-500/18 bg-amber-500/10',
+    imageClassName: 'object-contain dark:brightness-0 dark:invert opacity-90',
+  },
+  codebuddy: {
+    src: '/ai/agents/codebuddy.svg',
+    badgeClassName: 'border-indigo-500/22 bg-indigo-500/12',
     imageClassName: 'object-contain dark:brightness-0 dark:invert opacity-90',
   },
   terminal: {
@@ -167,6 +173,9 @@ function getAgentIconKey(agent: AgentLike | 'add-more'): AgentIconKey {
   }
   if (tokens.some((token) => token.includes('factory'))) {
     return 'atom';
+  }
+  if (tokens.some((token) => token.includes('codebuddy'))) {
+    return 'codebuddy';
   }
 
   return 'terminal';
