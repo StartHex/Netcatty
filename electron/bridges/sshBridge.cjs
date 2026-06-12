@@ -1027,6 +1027,33 @@ const {
   setSessionEncoding,
 } = sessionOpsApi;
 
+// System monitoring backend
+const { createSystemOpsApi } = require("./sshBridge/systemOps.cjs");
+const systemOpsApi = createSystemOpsApi({
+  get sessions() { return sessions; },
+  setTimeout, clearTimeout, Buffer, console,
+  get execOnEtSession() { return (...args) => require("./terminalBridge.cjs").execOnEtSession(...args); },
+  get ensureMoshStatsConnection() { return ensureMoshStatsConnection; },
+});
+const {
+  probeSystemCapabilities,
+  listSystemProcesses,
+  signalSystemProcess,
+  listTmuxSessions,
+  createTmuxSession,
+  listTmuxWindows,
+  listTmuxPanes,
+  listTmuxClients,
+  tmuxAction,
+  listDockerContainers,
+  listDockerImages,
+  getDockerStats,
+  dockerInspect,
+  dockerImageInspect,
+  dockerAction,
+  dockerImageAction,
+} = systemOpsApi;
+
 /**
  * Register IPC handlers for SSH operations
  */
@@ -1041,6 +1068,23 @@ function registerHandlers(ipcMain) {
   ipcMain.handle("netcatty:ssh:stats", getServerStats);
   ipcMain.handle("netcatty:key:generate", generateKeyPair);
   ipcMain.handle("netcatty:ssh:setEncoding", setSessionEncoding);
+  // System monitoring IPC handlers — channel names must match preload/api.cjs
+  ipcMain.handle("netcatty:system:probeCapabilities", probeSystemCapabilities);
+  ipcMain.handle("netcatty:system:listProcesses", listSystemProcesses);
+  ipcMain.handle("netcatty:system:signalProcess", signalSystemProcess);
+  ipcMain.handle("netcatty:system:listTmuxSessions", listTmuxSessions);
+  ipcMain.handle("netcatty:system:createTmuxSession", createTmuxSession);
+  ipcMain.handle("netcatty:system:listTmuxWindows", listTmuxWindows);
+  ipcMain.handle("netcatty:system:listTmuxPanes", listTmuxPanes);
+  ipcMain.handle("netcatty:system:listTmuxClients", listTmuxClients);
+  ipcMain.handle("netcatty:system:tmuxAction", tmuxAction);
+  ipcMain.handle("netcatty:system:listDockerContainers", listDockerContainers);
+  ipcMain.handle("netcatty:system:listDockerImages", listDockerImages);
+  ipcMain.handle("netcatty:system:dockerStats", getDockerStats);
+  ipcMain.handle("netcatty:system:dockerInspect", dockerInspect);
+  ipcMain.handle("netcatty:system:dockerImageInspect", dockerImageInspect);
+  ipcMain.handle("netcatty:system:dockerAction", dockerAction);
+  ipcMain.handle("netcatty:system:dockerImageAction", dockerImageAction);
   ipcMain.handle("netcatty:sshDebugLog:info", getSshDebugLogInfo);
   ipcMain.handle("netcatty:sshDebugLog:openDir", openSshDebugLogDir);
   ipcMain.handle("netcatty:ssh:check-agent", async () => {
