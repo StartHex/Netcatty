@@ -36,11 +36,9 @@ import {
   STORAGE_KEY_TERM_SETTINGS,
 } from "../../infrastructure/config/storageKeys";
 import { localStorageAdapter } from "../../infrastructure/persistence/localStorageAdapter";
-import {
-  mergeGlobalHistoryOnAppend,
-  sanitizeGlobalHistoryEntries,
-} from "../../domain/globalHistory";
+import { mergeGlobalHistoryOnAppend, sanitizeGlobalHistoryEntries } from "../../domain/globalHistory";
 import { getNextVaultOrder, normalizeVaultOrder } from "../../domain/vaultOrder";
+import { loadSanitizedShellHistory } from "./shellHistoryPersistence";
 import {
   decryptGroupConfigs,
   decryptHosts,
@@ -601,15 +599,9 @@ export const useVaultState = () => {
         }
 
         // Load shell history
-        const savedShellHistory = localStorageAdapter.read<ShellHistoryEntry[]>(
-          STORAGE_KEY_SHELL_HISTORY,
-        );
+        const savedShellHistory = loadSanitizedShellHistory();
         if (savedShellHistory) {
-          const cleanedShellHistory = sanitizeGlobalHistoryEntries(savedShellHistory);
-          setShellHistory(cleanedShellHistory);
-          if (cleanedShellHistory.length !== savedShellHistory.length) {
-            localStorageAdapter.write(STORAGE_KEY_SHELL_HISTORY, cleanedShellHistory);
-          }
+          setShellHistory(savedShellHistory);
         }
 
         // Load connection logs

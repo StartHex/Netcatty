@@ -10,6 +10,8 @@ import {
   isNetcattyAiHistoryCommand,
   isNetcattyManagedStartupHistoryCommand,
 } from './remoteHistory.ts';
+import { buildDockerExecShellCommand, buildDockerLogsCommand } from './systemManager/dockerShell.ts';
+import { buildTmuxAttachCommand } from './systemManager/tmuxShell.ts';
 
 test('parseBashHistory: plain lines', () => {
   const out = parseBashHistory(['ls -la', 'cd /tmp', 'echo hi'].join('\n'));
@@ -195,25 +197,13 @@ test('isNetcattyAiHistoryCommand: detects AI PTY marker lines', () => {
 });
 
 test('isNetcattyManagedStartupHistoryCommand: detects Docker and tmux terminal launch commands', () => {
-  assert.equal(
-    isNetcattyManagedStartupHistoryCommand(
-      "printf '\\033[H\\033[2J\\033[3J'; exec docker exec -it 587abcdef123 sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'",
-    ),
-    true,
-  );
-  assert.equal(
-    isNetcattyManagedStartupHistoryCommand(
-      "printf '\\033[H\\033[2J\\033[3J'; exec docker logs -f --tail 200 587abcdef123",
-    ),
-    true,
-  );
-  assert.equal(
-    isNetcattyManagedStartupHistoryCommand(
-      "printf '\\033[H\\033[2J\\033[3J'; exec tmux attach -t 'my-session'",
-    ),
-    true,
-  );
+  assert.equal(isNetcattyManagedStartupHistoryCommand(buildDockerExecShellCommand('587abcdef123')), true);
+  assert.equal(isNetcattyManagedStartupHistoryCommand(buildDockerLogsCommand('587abcdef123')), true);
+  assert.equal(isNetcattyManagedStartupHistoryCommand(buildTmuxAttachCommand('my-session')), true);
+  assert.equal(isNetcattyManagedStartupHistoryCommand(buildTmuxAttachCommand('my-session', 2)), true);
+  assert.equal(isNetcattyManagedStartupHistoryCommand('docker ps -a'), false);
   assert.equal(isNetcattyManagedStartupHistoryCommand('docker logs -f 587abcdef123'), false);
+  assert.equal(isNetcattyManagedStartupHistoryCommand('docker exec -it 587abcdef123 bash'), false);
   assert.equal(isNetcattyManagedStartupHistoryCommand('tmux attach -t my-session'), false);
 });
 
@@ -235,8 +225,8 @@ test('mergeRemoteHistory: drops Netcatty managed Docker and tmux startup lines',
     parseBashHistory(
       [
         'docker ps -a',
-        "printf '\\033[H\\033[2J\\033[3J'; exec docker logs -f --tail 200 587abcdef123",
-        "printf '\\033[H\\033[2J\\033[3J'; exec tmux attach -t 'my-session'",
+        buildDockerLogsCommand('587abcdef123'),
+        buildTmuxAttachCommand('my-session'),
         'history',
       ].join('\n'),
     ),
@@ -245,5 +235,28 @@ test('mergeRemoteHistory: drops Netcatty managed Docker and tmux startup lines',
   assert.deepEqual(
     merged.map((e) => e.command),
     ['history', 'docker ps -a'],
+  );
+});
+
+test('mergeRemoteHistory: drops Netcatty managed startup lines from zsh and fish history', () => {
+  const zsh = parseZshHistory(
+    [
+      ': 1700000000:0;git status',
+      `: 1700000100:0;${buildDockerExecShellCommand('587abcdef123')}`,
+    ].join('\n'),
+  );
+  const fish = parseFishHistory(
+    [
+      '- cmd: docker ps -a',
+      '  when: 1700000200',
+      `- cmd: ${buildTmuxAttachCommand('my-session')}`,
+      '  when: 1700000300',
+    ].join('\n'),
+  );
+
+  const merged = mergeRemoteHistory([zsh, fish]);
+  assert.deepEqual(
+    merged.map((e) => e.command),
+    ['docker ps -a', 'git status'],
   );
 });
