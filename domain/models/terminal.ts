@@ -4,7 +4,7 @@ import type { SerialConfig } from './connection';
 export type CursorShape = 'block' | 'bar' | 'underline';
 export type TerminalMouseClickBehavior = 'context-menu' | 'paste' | 'select-word';
 export type RightClickBehavior = TerminalMouseClickBehavior;
-export type MiddleClickBehavior = TerminalMouseClickBehavior | 'disabled';
+export type MiddleClickBehavior = 'context-menu' | 'paste' | 'disabled';
 export type LinkModifier = 'none' | 'ctrl' | 'alt' | 'meta';
 export type TerminalEmulationType = 'xterm-256color' | 'xterm-16color' | 'xterm';
 
@@ -219,7 +219,6 @@ const normalizeKeywordHighlightRules = (
 const isMiddleClickBehavior = (value: unknown): value is MiddleClickBehavior => (
   value === 'context-menu' ||
   value === 'paste' ||
-  value === 'select-word' ||
   value === 'disabled'
 );
 

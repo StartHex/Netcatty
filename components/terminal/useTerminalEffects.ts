@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useRef } from 'react';
 import { resolveFontWeightBold } from '../../lib/fontWeightAvailability';
-import { isMiddleClickContextMenuEvent } from './runtime/middleClickBehavior';
+import { shouldInterceptMouseTrackingContextMenu } from './runtime/middleClickBehavior';
 
 type TerminalEffectsContext = Record<string, any>;
 
@@ -961,13 +961,15 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
     if (!el) return;
 
     const handleContextMenuCapture = (e: MouseEvent) => {
-      if (!mouseTrackingRef.current) return;
-      if (statusRef.current !== 'connected') return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if (isMiddleClickContextMenuEvent(e)) {
+      if (!shouldInterceptMouseTrackingContextMenu({
+        event: e,
+        mouseTracking: mouseTrackingRef.current,
+        status: statusRef.current,
+      })) {
         return;
       }
+      e.preventDefault();
+      e.stopImmediatePropagation();
 
       // stopImmediatePropagation blocks the event from reaching React's
       // bubble-phase root listener, so the onContextMenu handler in

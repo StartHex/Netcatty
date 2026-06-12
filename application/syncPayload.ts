@@ -516,7 +516,6 @@ function applySyncableSettings(settings: NonNullable<SyncPayload['settings']>): 
       if (
         behavior === 'context-menu' ||
         behavior === 'paste' ||
-        behavior === 'select-word' ||
         behavior === 'disabled'
       ) {
         merged.middleClickPaste = behavior === 'paste';

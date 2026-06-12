@@ -345,7 +345,6 @@ export const enCoreMessages: Messages = {
   'settings.terminal.behavior.middleClick.desc': 'Action when middle-clicking in terminal',
   'settings.terminal.behavior.middleClick.menu': 'Show menu',
   'settings.terminal.behavior.middleClick.paste': 'Paste',
-  'settings.terminal.behavior.middleClick.selectWord': 'Select word',
   'settings.terminal.behavior.middleClick.disabled': 'Do nothing',
   'settings.terminal.behavior.bracketedPaste': 'Bracketed paste mode',
   'settings.terminal.behavior.bracketedPaste.desc':

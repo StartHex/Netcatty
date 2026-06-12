@@ -49,6 +49,7 @@ import { optionArrowWordJumpSequence } from "./optionArrowWordJump";
 import { watchDevicePixelRatio } from "./rendererDprWatch";
 import { shouldDeferWebglUntilVisible } from "./webglRendererPolicy";
 import {
+  captureMiddleClickTerminalMouseEvent,
   markMiddleClickContextMenuEvent,
   resolveMiddleClickBehavior,
 } from "./middleClickBehavior";
@@ -818,11 +819,6 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
       return;
     }
 
-    if (behavior === "select-word") {
-      ctx.terminalContextActionsRef?.current?.onSelectWord?.();
-      return;
-    }
-
     const contextMenuEvent = markMiddleClickContextMenuEvent(new MouseEvent("contextmenu", {
       bubbles: true,
       cancelable: true,
@@ -837,6 +833,8 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
     ctx.container.dispatchEvent(contextMenuEvent);
   };
 
+  ctx.container.addEventListener("mousedown", captureMiddleClickTerminalMouseEvent, true);
+  ctx.container.addEventListener("mouseup", captureMiddleClickTerminalMouseEvent, true);
   ctx.container.addEventListener("auxclick", handleMiddleClick);
 
   fitAddon.fit();
@@ -1126,6 +1124,8 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
         terminalFontSizeWheelListenerOptions,
       );
       ctx.container.removeEventListener("auxclick", handleMiddleClick);
+      ctx.container.removeEventListener("mousedown", captureMiddleClickTerminalMouseEvent, true);
+      ctx.container.removeEventListener("mouseup", captureMiddleClickTerminalMouseEvent, true);
       stopDprWatch();
       keywordHighlighter.dispose();
       eraseScrollbackDisposable.dispose();

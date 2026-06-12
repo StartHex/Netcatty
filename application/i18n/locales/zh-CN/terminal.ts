@@ -216,7 +216,6 @@ export const zhCNTerminalMessages: Messages = {
   'settings.terminal.behavior.middleClick.desc': '在终端中点击鼠标中键时执行的操作',
   'settings.terminal.behavior.middleClick.menu': '显示菜单',
   'settings.terminal.behavior.middleClick.paste': '粘贴',
-  'settings.terminal.behavior.middleClick.selectWord': '选择单词',
   'settings.terminal.behavior.middleClick.disabled': '无动作',
   'settings.terminal.behavior.bracketedPaste': '括号粘贴模式',
   'settings.terminal.behavior.bracketedPaste.desc':

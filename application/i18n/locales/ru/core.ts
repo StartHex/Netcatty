@@ -345,7 +345,6 @@ export const ruCoreMessages: Messages = {
   'settings.terminal.behavior.middleClick.desc': 'Действие при щелчке средней кнопкой в терминале',
   'settings.terminal.behavior.middleClick.menu': 'Показать меню',
   'settings.terminal.behavior.middleClick.paste': 'Вставить',
-  'settings.terminal.behavior.middleClick.selectWord': 'Выбрать слово',
   'settings.terminal.behavior.middleClick.disabled': 'Ничего не делать',
   'settings.terminal.behavior.bracketedPaste': 'Режим bracketed paste',
   'settings.terminal.behavior.bracketedPaste.desc':

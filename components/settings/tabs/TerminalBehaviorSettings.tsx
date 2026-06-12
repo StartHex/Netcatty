@@ -12,6 +12,15 @@ interface TerminalBehaviorSettingsProps {
   updateTerminalSetting: <K extends keyof TerminalSettings>(key: K, value: TerminalSettings[K]) => void;
 }
 
+export const MIDDLE_CLICK_BEHAVIOR_OPTIONS: Array<{
+  value: MiddleClickBehavior;
+  labelKey: string;
+}> = [
+  { value: "context-menu", labelKey: "settings.terminal.behavior.middleClick.menu" },
+  { value: "paste", labelKey: "settings.terminal.behavior.middleClick.paste" },
+  { value: "disabled", labelKey: "settings.terminal.behavior.middleClick.disabled" },
+];
+
 export const TerminalBehaviorSettings: React.FC<TerminalBehaviorSettingsProps> = ({
   t,
   terminalSettings,
@@ -49,12 +58,10 @@ export const TerminalBehaviorSettings: React.FC<TerminalBehaviorSettingsProps> =
         >
           <Select
             value={terminalSettings.middleClickBehavior}
-            options={[
-              { value: "context-menu", label: t("settings.terminal.behavior.middleClick.menu") },
-              { value: "paste", label: t("settings.terminal.behavior.middleClick.paste") },
-              { value: "select-word", label: t("settings.terminal.behavior.middleClick.selectWord") },
-              { value: "disabled", label: t("settings.terminal.behavior.middleClick.disabled") },
-            ]}
+            options={MIDDLE_CLICK_BEHAVIOR_OPTIONS.map((option) => ({
+              value: option.value,
+              label: t(option.labelKey),
+            }))}
             onChange={(v) => updateTerminalSetting("middleClickBehavior", v as MiddleClickBehavior)}
             className="w-36"
           />
