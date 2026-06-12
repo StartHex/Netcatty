@@ -884,6 +884,7 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
                 <Toggle
                   checked={showTerminalSelectionAIAction}
                   onChange={setShowTerminalSelectionAIAction}
+                  ariaLabel={t('ai.chatShortcuts.selectionAction')}
                 />
               </SettingRow>
             </SettingCard>

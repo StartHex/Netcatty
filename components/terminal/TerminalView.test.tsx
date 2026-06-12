@@ -42,6 +42,14 @@ test("selection AI overlay honors the visibility preference", () => {
       hasSelection: true,
       selectionOverlayPosition: overlayPosition,
       onAddSelectionToAI: addSelection,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldShowSelectionAIOverlay({
+      hasSelection: true,
+      selectionOverlayPosition: overlayPosition,
+      onAddSelectionToAI: addSelection,
       showSelectionAIAction: true,
     }),
     true,

@@ -269,7 +269,7 @@ export const enAiMessages: Messages = {
 
   // AI Chat Shortcuts
   'ai.chatShortcuts.title': 'Chat Shortcuts',
-  'ai.chatShortcuts.selectionAction': 'Show Add to Conversation on terminal selection',
+  'ai.chatShortcuts.selectionAction': 'Show Add to Conversation when selecting terminal text',
   'ai.chatShortcuts.selectionAction.description': 'Show a small AI button next to selected terminal text.',
 
   // AI Error
