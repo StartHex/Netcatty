@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   mergeGlobalHistoryOnAppend,
+  sanitizeGlobalHistoryEntries,
   shouldRecordGlobalHistoryCommand,
   toGlobalHistoryDisplayEntries,
 } from './globalHistory.ts';
@@ -30,6 +31,29 @@ test('shouldRecordGlobalHistoryCommand: rejects empty and AI marker commands', (
   assert.equal(shouldRecordGlobalHistoryCommand('ls -la'), true);
 });
 
+test('shouldRecordGlobalHistoryCommand: rejects Netcatty managed Docker and tmux startup commands', () => {
+  assert.equal(
+    shouldRecordGlobalHistoryCommand(
+      "printf '\\033[H\\033[2J\\033[3J'; exec docker exec -it 587abcdef123 sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'",
+    ),
+    false,
+  );
+  assert.equal(
+    shouldRecordGlobalHistoryCommand(
+      "printf '\\033[H\\033[2J\\033[3J'; exec docker logs -f --tail 200 587abcdef123",
+    ),
+    false,
+  );
+  assert.equal(
+    shouldRecordGlobalHistoryCommand(
+      "printf '\\033[H\\033[2J\\033[3J'; exec tmux attach -t 'my-session'",
+    ),
+    false,
+  );
+  assert.equal(shouldRecordGlobalHistoryCommand('docker exec -it 587abcdef123 bash'), true);
+  assert.equal(shouldRecordGlobalHistoryCommand('tmux attach -t my-session'), true);
+});
+
 test('mergeGlobalHistoryOnAppend: trims and prepends a new command', () => {
   const next = mergeGlobalHistoryOnAppend([], {
     command: '  pwd  ',
@@ -39,6 +63,19 @@ test('mergeGlobalHistoryOnAppend: trims and prepends a new command', () => {
   });
   assert.equal(next.length, 1);
   assert.equal(next[0].command, 'pwd');
+});
+
+test('sanitizeGlobalHistoryEntries: removes persisted Netcatty managed startup commands', () => {
+  const entries = [
+    baseEntry({ id: 'a', command: "printf '\\033[H\\033[2J\\033[3J'; exec docker logs -f --tail 200 587abcdef123" }),
+    baseEntry({ id: 'b', command: 'docker ps -a' }),
+    baseEntry({ id: 'c', command: "printf '\\033[H\\033[2J\\033[3J'; exec tmux attach -t 'my-session'" }),
+  ];
+  const out = sanitizeGlobalHistoryEntries(entries);
+  assert.deepEqual(
+    out.map((entry) => entry.command),
+    ['docker ps -a'],
+  );
 });
 
 test('mergeGlobalHistoryOnAppend: bumps timestamp for consecutive duplicate', () => {

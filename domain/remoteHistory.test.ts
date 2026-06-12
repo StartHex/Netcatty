@@ -8,6 +8,7 @@ import {
   parseShellHistory,
   mergeRemoteHistory,
   isNetcattyAiHistoryCommand,
+  isNetcattyManagedStartupHistoryCommand,
 } from './remoteHistory.ts';
 
 test('parseBashHistory: plain lines', () => {
@@ -193,6 +194,29 @@ test('isNetcattyAiHistoryCommand: detects AI PTY marker lines', () => {
   assert.equal(isNetcattyAiHistoryCommand('grep NCMCP log.txt'), false);
 });
 
+test('isNetcattyManagedStartupHistoryCommand: detects Docker and tmux terminal launch commands', () => {
+  assert.equal(
+    isNetcattyManagedStartupHistoryCommand(
+      "printf '\\033[H\\033[2J\\033[3J'; exec docker exec -it 587abcdef123 sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'",
+    ),
+    true,
+  );
+  assert.equal(
+    isNetcattyManagedStartupHistoryCommand(
+      "printf '\\033[H\\033[2J\\033[3J'; exec docker logs -f --tail 200 587abcdef123",
+    ),
+    true,
+  );
+  assert.equal(
+    isNetcattyManagedStartupHistoryCommand(
+      "printf '\\033[H\\033[2J\\033[3J'; exec tmux attach -t 'my-session'",
+    ),
+    true,
+  );
+  assert.equal(isNetcattyManagedStartupHistoryCommand('docker logs -f 587abcdef123'), false);
+  assert.equal(isNetcattyManagedStartupHistoryCommand('tmux attach -t my-session'), false);
+});
+
 test('mergeRemoteHistory: drops Netcatty AI PTY history lines', () => {
   const lists = [
     parseBashHistory(
@@ -203,5 +227,23 @@ test('mergeRemoteHistory: drops Netcatty AI PTY history lines', () => {
   assert.deepEqual(
     merged.map((e) => e.command),
     ['git status', 'ls -la'],
+  );
+});
+
+test('mergeRemoteHistory: drops Netcatty managed Docker and tmux startup lines', () => {
+  const lists = [
+    parseBashHistory(
+      [
+        'docker ps -a',
+        "printf '\\033[H\\033[2J\\033[3J'; exec docker logs -f --tail 200 587abcdef123",
+        "printf '\\033[H\\033[2J\\033[3J'; exec tmux attach -t 'my-session'",
+        'history',
+      ].join('\n'),
+    ),
+  ];
+  const merged = mergeRemoteHistory(lists);
+  assert.deepEqual(
+    merged.map((e) => e.command),
+    ['history', 'docker ps -a'],
   );
 });

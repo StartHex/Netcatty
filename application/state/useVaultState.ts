@@ -36,7 +36,10 @@ import {
   STORAGE_KEY_TERM_SETTINGS,
 } from "../../infrastructure/config/storageKeys";
 import { localStorageAdapter } from "../../infrastructure/persistence/localStorageAdapter";
-import { mergeGlobalHistoryOnAppend } from "../../domain/globalHistory";
+import {
+  mergeGlobalHistoryOnAppend,
+  sanitizeGlobalHistoryEntries,
+} from "../../domain/globalHistory";
 import { getNextVaultOrder, normalizeVaultOrder } from "../../domain/vaultOrder";
 import {
   decryptGroupConfigs,
@@ -601,7 +604,13 @@ export const useVaultState = () => {
         const savedShellHistory = localStorageAdapter.read<ShellHistoryEntry[]>(
           STORAGE_KEY_SHELL_HISTORY,
         );
-        if (savedShellHistory) setShellHistory(savedShellHistory);
+        if (savedShellHistory) {
+          const cleanedShellHistory = sanitizeGlobalHistoryEntries(savedShellHistory);
+          setShellHistory(cleanedShellHistory);
+          if (cleanedShellHistory.length !== savedShellHistory.length) {
+            localStorageAdapter.write(STORAGE_KEY_SHELL_HISTORY, cleanedShellHistory);
+          }
+        }
 
         // Load connection logs
         const savedConnectionLogs = localStorageAdapter.read<ConnectionLog[]>(
@@ -729,7 +738,9 @@ export const useVaultState = () => {
       }
 
       if (key === STORAGE_KEY_SHELL_HISTORY) {
-        const next = safeParse<ShellHistoryEntry[]>(event.newValue) ?? [];
+        const next = sanitizeGlobalHistoryEntries(
+          safeParse<ShellHistoryEntry[]>(event.newValue) ?? [],
+        );
         setShellHistory(next);
         return;
       }
