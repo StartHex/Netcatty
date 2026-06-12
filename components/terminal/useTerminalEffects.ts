@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useRef } from 'react';
 import { resolveFontWeightBold } from '../../lib/fontWeightAvailability';
+import { isMiddleClickContextMenuEvent } from './runtime/middleClickBehavior';
 
 type TerminalEffectsContext = Record<string, any>;
 
@@ -269,6 +270,7 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
           // Autocomplete integration
           onAutocompleteKeyEvent: (e: KeyboardEvent) => autocompleteKeyEventRef.current?.(e) ?? true,
           onAutocompleteInput: (data: string) => autocompleteInputRef.current?.(data),
+          terminalContextActionsRef,
           isRestoringSelectionRef,
           // Defer WebGL context creation for panes that mount hidden (e.g. the
           // background tabs of a batch connect) until they first become visible.
@@ -963,6 +965,9 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
       if (statusRef.current !== 'connected') return;
       e.preventDefault();
       e.stopImmediatePropagation();
+      if (isMiddleClickContextMenuEvent(e)) {
+        return;
+      }
 
       // stopImmediatePropagation blocks the event from reaching React's
       // bubble-phase root listener, so the onContextMenu handler in

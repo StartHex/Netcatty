@@ -1,5 +1,5 @@
 import React from "react";
-import type { LinkModifier, RightClickBehavior, TerminalSettings } from "../../../domain/models";
+import type { LinkModifier, MiddleClickBehavior, RightClickBehavior, TerminalSettings } from "../../../domain/models";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { SectionHeader, Select, SettingRow, Toggle } from "../settings-ui";
@@ -44,10 +44,20 @@ export const TerminalBehaviorSettings: React.FC<TerminalBehaviorSettingsProps> =
         </SettingRow>
 
         <SettingRow
-          label={t("settings.terminal.behavior.middleClickPaste")}
-          description={t("settings.terminal.behavior.middleClickPaste.desc")}
+          label={t("settings.terminal.behavior.middleClick")}
+          description={t("settings.terminal.behavior.middleClick.desc")}
         >
-          <Toggle checked={terminalSettings.middleClickPaste} onChange={(v) => updateTerminalSetting("middleClickPaste", v)} />
+          <Select
+            value={terminalSettings.middleClickBehavior}
+            options={[
+              { value: "context-menu", label: t("settings.terminal.behavior.middleClick.menu") },
+              { value: "paste", label: t("settings.terminal.behavior.middleClick.paste") },
+              { value: "select-word", label: t("settings.terminal.behavior.middleClick.selectWord") },
+              { value: "disabled", label: t("settings.terminal.behavior.middleClick.disabled") },
+            ]}
+            onChange={(v) => updateTerminalSetting("middleClickBehavior", v as MiddleClickBehavior)}
+            className="w-36"
+          />
         </SettingRow>
 
         <SettingRow

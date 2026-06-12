@@ -48,6 +48,10 @@ import { terminalAltKeyOptions } from "./altKeyOptions";
 import { optionArrowWordJumpSequence } from "./optionArrowWordJump";
 import { watchDevicePixelRatio } from "./rendererDprWatch";
 import { shouldDeferWebglUntilVisible } from "./webglRendererPolicy";
+import {
+  markMiddleClickContextMenuEvent,
+  resolveMiddleClickBehavior,
+} from "./middleClickBehavior";
 import { handleSerialLineModeInput } from "./serialLineInput";
 import {
   isTerminalFontSizeAction,
@@ -175,6 +179,11 @@ export type CreateXTermRuntimeContext = {
   onAutocompleteKeyEvent?: (e: KeyboardEvent) => boolean;
   // Autocomplete input handler — called on every character input
   onAutocompleteInput?: (data: string) => void;
+
+  terminalContextActionsRef?: RefObject<{
+    onPaste?: () => void | Promise<void>;
+    onSelectWord?: () => void;
+  } | undefined>;
 
   // Set to true while we're programmatically restoring a selection so that
   // copy-on-select listeners can suppress redundant clipboard writes.
@@ -797,29 +806,38 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
     return true;
   });
 
-  let cleanupMiddleClick: (() => void) | null = null;
-  const middleClickPaste = settings?.middleClickPaste ?? true;
-  if (middleClickPaste) {
-    const handleMiddleClick = async (e: MouseEvent) => {
-      if (e.button !== 1) return;
-      e.preventDefault();
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text && ctx.sessionRef.current) {
-          pasteTextIntoTerminal(term, text, {
-            scrollOnPaste: shouldScrollOnTerminalPaste(ctx.terminalSettingsRef.current),
-            onPasteData: broadcastUserPasteData,
-          });
-        }
-      } catch (err) {
-        logger.warn("[Terminal] Failed to paste from clipboard:", err);
-      }
-    };
+  const handleMiddleClick = (e: MouseEvent) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
 
-    ctx.container.addEventListener("auxclick", handleMiddleClick);
-    cleanupMiddleClick = () =>
-      ctx.container.removeEventListener("auxclick", handleMiddleClick);
-  }
+    const behavior = resolveMiddleClickBehavior(ctx.terminalSettingsRef.current);
+    if (behavior === "disabled") return;
+
+    if (behavior === "paste") {
+      void ctx.terminalContextActionsRef?.current?.onPaste?.();
+      return;
+    }
+
+    if (behavior === "select-word") {
+      ctx.terminalContextActionsRef?.current?.onSelectWord?.();
+      return;
+    }
+
+    const contextMenuEvent = markMiddleClickContextMenuEvent(new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      screenX: e.screenX,
+      screenY: e.screenY,
+      button: 2,
+      buttons: 0,
+      view: window,
+    }));
+    ctx.container.dispatchEvent(contextMenuEvent);
+  };
+
+  ctx.container.addEventListener("auxclick", handleMiddleClick);
 
   fitAddon.fit();
   term.focus();
@@ -1107,7 +1125,7 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
         handleFontSizeWheel,
         terminalFontSizeWheelListenerOptions,
       );
-      cleanupMiddleClick?.();
+      ctx.container.removeEventListener("auxclick", handleMiddleClick);
       stopDprWatch();
       keywordHighlighter.dispose();
       eraseScrollbackDisposable.dispose();
