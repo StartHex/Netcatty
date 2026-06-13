@@ -76,6 +76,7 @@ export const terminalPropsAreEqual = (
   && prev.onDetach === next.onDetach
   && prev.onStartSessionDrag === next.onStartSessionDrag
   && prev.onEndSessionDrag === next.onEndSessionDrag
+  && prev.onDetachPointerDown === next.onDetachPointerDown
   && prev.onDetachDragStart === next.onDetachDragStart
   && prev.onDetachDragEnd === next.onDetachDragEnd
 );

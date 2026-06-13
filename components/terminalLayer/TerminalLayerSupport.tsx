@@ -4,9 +4,10 @@ import { activeTabStore } from '../../application/state/activeTabStore';
 import { useTerminalLayoutSuppressActive } from '../../application/state/terminalLayoutSuppressStore';
 import type { TerminalSessionExitEvent } from '../../application/state/resolveTerminalSessionExitIntent';
 import { createTerminalSelectionAttachment } from '../../application/state/terminalSelectionAttachment';
+import { getTopTabInsertionTarget, isPointInsideRect, WORKSPACE_SESSION_DRAG_TYPE } from '../../application/state/terminalDragData';
 import { useAIState } from '../../application/state/useAIState';
 import { useStoredBoolean } from '../../application/state/useStoredBoolean';
-import { SplitDirection } from '../../domain/workspace';
+import { collectSessionIds, SplitDirection } from '../../domain/workspace';
 import { KeyBinding, TerminalSettings } from '../../domain/models';
 import { STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION } from '../../infrastructure/config/storageKeys';
 import { cn } from '../../lib/utils';
@@ -501,7 +502,13 @@ export interface TerminalLayerProps {
   onToggleWorkspaceViewMode?: (workspaceId: string) => void;
   onSetWorkspaceFocusedSession?: (workspaceId: string, sessionId: string) => void;
   onReorderWorkspaceSessions?: (workspaceId: string, draggedSessionId: string, targetSessionId: string, position: 'before' | 'after') => void;
-  onRemoveSessionFromWorkspace?: (sessionId: string) => void;
+  onReorderTabs?: (draggedId: string, targetId: string, position: 'before' | 'after', additionalTabIds?: readonly string[]) => void;
+  onCopySession?: (sessionId: string) => void;
+  onCopySessionToNewWindow?: (sessionId: string) => void;
+  onRemoveSessionFromWorkspace?: (
+    sessionId: string,
+    tabInsertionTarget?: { tabId: string; position: 'before' | 'after'; additionalTabIds?: readonly string[] },
+  ) => void;
   onSplitSession?: (sessionId: string, direction: SplitDirection) => void;
   onConnectToHost: (host: Host) => void;
   onCreateLocalTerminal?: () => void;
@@ -602,7 +609,11 @@ interface TerminalPaneProps {
   onAddSelectionToAI?: (sessionId: string, selection: string) => void;
   showSelectionAIAction: boolean;
   onStartSessionRename?: (sessionId: string) => void;
-  onRemoveSessionFromWorkspace?: (sessionId: string) => void;
+  onRemoveSessionFromWorkspace?: (
+    sessionId: string,
+    tabInsertionTarget?: { tabId: string; position: 'before' | 'after'; additionalTabIds?: readonly string[] },
+  ) => void;
+  onReorderTabs?: (draggedId: string, targetId: string, position: 'before' | 'after', additionalTabIds?: readonly string[]) => void;
   onStartSessionDrag?: (sessionId: string) => void;
   onEndSessionDrag?: () => void;
 }
@@ -695,6 +706,7 @@ const terminalPanePropsAreEqual = (
   prev.showSelectionAIAction === next.showSelectionAIAction &&
   prev.onStartSessionRename === next.onStartSessionRename &&
   prev.onRemoveSessionFromWorkspace === next.onRemoveSessionFromWorkspace &&
+  prev.onReorderTabs === next.onReorderTabs &&
   prev.onStartSessionDrag === next.onStartSessionDrag &&
   prev.onEndSessionDrag === next.onEndSessionDrag
 );
@@ -757,6 +769,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   showSelectionAIAction,
   onStartSessionRename,
   onRemoveSessionFromWorkspace,
+  onReorderTabs,
   onStartSessionDrag,
   onEndSessionDrag,
 }) => {
@@ -880,12 +893,183 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   const handleDetachDragStart = useCallback((e: React.DragEvent) => {
     if (!inActiveWorkspace) return;
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(WORKSPACE_SESSION_DRAG_TYPE, session.id);
     e.dataTransfer.setData('session-id', session.id);
+    e.dataTransfer.setData('text/plain', session.id);
     onStartSessionDrag?.(session.id);
   }, [inActiveWorkspace, onStartSessionDrag, session.id]);
   const handleDetachDragEnd = useCallback(() => {
     onEndSessionDrag?.();
   }, [onEndSessionDrag]);
+  const handleDetachPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    if (!inActiveWorkspace || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startPoint = { clientX: e.clientX, clientY: e.clientY };
+    const dragLabel = session.customName || session.hostLabel;
+    let dragStarted = false;
+    let ghostEl: HTMLDivElement | null = null;
+    let insertEl: HTMLDivElement | null = null;
+
+    const ensureDragElements = () => {
+      if (!ghostEl) {
+        ghostEl = document.createElement('div');
+        ghostEl.textContent = dragLabel;
+        ghostEl.style.position = 'fixed';
+        ghostEl.style.left = '0';
+        ghostEl.style.top = '0';
+        ghostEl.style.zIndex = '2147483647';
+        ghostEl.style.pointerEvents = 'none';
+        ghostEl.style.maxWidth = '220px';
+        ghostEl.style.padding = '5px 10px';
+        ghostEl.style.borderRadius = '7px';
+        ghostEl.style.border = '1px solid color-mix(in srgb, var(--top-tabs-accent, hsl(var(--accent))) 60%, transparent)';
+        ghostEl.style.background = 'color-mix(in srgb, var(--top-tabs-active-bg, hsl(var(--background))) 90%, transparent)';
+        ghostEl.style.color = 'var(--top-tabs-fg, hsl(var(--foreground)))';
+        ghostEl.style.boxShadow = '0 12px 28px rgba(0, 0, 0, 0.28)';
+        ghostEl.style.fontSize = '12px';
+        ghostEl.style.fontWeight = '600';
+        ghostEl.style.whiteSpace = 'nowrap';
+        ghostEl.style.overflow = 'hidden';
+        ghostEl.style.textOverflow = 'ellipsis';
+        document.body.appendChild(ghostEl);
+      }
+
+      if (!insertEl) {
+        insertEl = document.createElement('div');
+        insertEl.style.position = 'fixed';
+        insertEl.style.zIndex = '2147483646';
+        insertEl.style.pointerEvents = 'none';
+        insertEl.style.width = '2px';
+        insertEl.style.borderRadius = '999px';
+        insertEl.style.background = 'var(--top-tabs-accent, hsl(var(--accent)))';
+        insertEl.style.boxShadow = '0 0 10px color-mix(in srgb, var(--top-tabs-accent, hsl(var(--accent))) 70%, transparent)';
+        insertEl.style.display = 'none';
+        document.body.appendChild(insertEl);
+      }
+    };
+
+    const removeDragElements = () => {
+      ghostEl?.remove();
+      insertEl?.remove();
+      ghostEl = null;
+      insertEl = null;
+    };
+
+    const updateDragElements = (event: PointerEvent) => {
+      ensureDragElements();
+      if (ghostEl) {
+        ghostEl.style.transform = `translate(${event.clientX + 12}px, ${event.clientY + 10}px)`;
+      }
+
+      const topTabsRoot = document.querySelector<HTMLElement>('[data-top-tabs-root]');
+      const insertionTarget = getTopTabInsertionTarget(event, topTabsRoot);
+      if (!topTabsRoot || !insertionTarget || !insertEl) {
+        if (insertEl) insertEl.style.display = 'none';
+        return insertionTarget;
+      }
+
+      const targetTab = Array.from(topTabsRoot.querySelectorAll<HTMLElement>('[data-tab-id]'))
+        .find((tab) => tab.dataset.tabId === insertionTarget.tabId);
+      if (!targetTab) {
+        insertEl.style.display = 'none';
+        return insertionTarget;
+      }
+
+      const targetRect = targetTab.getBoundingClientRect();
+      const rootRect = topTabsRoot.getBoundingClientRect();
+      const lineX = insertionTarget.position === 'before' ? targetRect.left : targetRect.right;
+      insertEl.style.display = 'block';
+      insertEl.style.left = `${lineX - 1}px`;
+      insertEl.style.top = `${Math.max(rootRect.top + 5, targetRect.top + 3)}px`;
+      insertEl.style.height = `${Math.max(18, Math.min(rootRect.bottom - rootRect.top - 8, targetRect.height - 4))}px`;
+      return insertionTarget;
+    };
+
+    const resolveStableInsertionTarget = (insertionTarget: ReturnType<typeof getTopTabInsertionTarget>) => {
+      if (!insertionTarget || insertionTarget.tabId !== session.workspaceId) return insertionTarget;
+      const sourceWorkspace = session.workspaceId ? workspaceById.get(session.workspaceId) : undefined;
+      if (!sourceWorkspace) return insertionTarget;
+      const remainingSessionIds = collectSessionIds(sourceWorkspace.root)
+        .filter((candidateId) => candidateId !== session.id);
+      if (remainingSessionIds.length !== 1) return insertionTarget;
+      return {
+        tabId: remainingSessionIds[0],
+        position: insertionTarget.position,
+      };
+    };
+
+    const startDragIfNeeded = (event: PointerEvent) => {
+      if (dragStarted) return;
+      const dx = event.clientX - startPoint.clientX;
+      const dy = event.clientY - startPoint.clientY;
+      if (Math.hypot(dx, dy) < 4) return;
+      dragStarted = true;
+      onStartSessionDrag?.(session.id);
+      updateDragElements(event);
+    };
+
+    const cleanup = () => {
+      document.removeEventListener('pointermove', handlePointerMove, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointercancel', handlePointerCancel, true);
+      removeDragElements();
+      if (dragStarted) onEndSessionDrag?.();
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      startDragIfNeeded(event);
+      if (dragStarted) updateDragElements(event);
+    };
+
+    const handlePointerCancel = () => {
+      cleanup();
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      startDragIfNeeded(event);
+      const topTabsRoot = document.querySelector<HTMLElement>('[data-top-tabs-root]');
+      const insertionTarget = dragStarted ? updateDragElements(event) : null;
+      const shouldDetach = dragStarted && !!topTabsRoot && isPointInsideRect(event, topTabsRoot.getBoundingClientRect());
+      cleanup();
+      if (shouldDetach) {
+        const stableInsertionTarget = resolveStableInsertionTarget(insertionTarget);
+        if (onRemoveSessionFromWorkspace) {
+          onRemoveSessionFromWorkspace(
+            session.id,
+            stableInsertionTarget
+              ? {
+                  tabId: stableInsertionTarget.tabId,
+                  position: stableInsertionTarget.position,
+                  additionalTabIds: [session.id, stableInsertionTarget.tabId],
+                }
+              : undefined,
+          );
+        } else if (stableInsertionTarget) {
+          onReorderTabs?.(session.id, stableInsertionTarget.tabId, stableInsertionTarget.position, [
+            session.id,
+            stableInsertionTarget.tabId,
+          ]);
+        }
+      }
+    };
+
+    document.addEventListener('pointermove', handlePointerMove, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('pointercancel', handlePointerCancel, true);
+  }, [
+    inActiveWorkspace,
+    onEndSessionDrag,
+    onRemoveSessionFromWorkspace,
+    onReorderTabs,
+    onStartSessionDrag,
+    session.customName,
+    session.hostLabel,
+    session.id,
+    session.workspaceId,
+    workspaceById,
+  ]);
   const handleTerminalFontSizeChange = useCallback((nextFontSize: number) => {
     onTerminalFontSizeChange?.(session.id, nextFontSize);
   }, [onTerminalFontSizeChange, session.id]);
@@ -969,6 +1153,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         onDetach={inActiveWorkspace ? handleDetach : undefined}
         onStartSessionDrag={inActiveWorkspace ? onStartSessionDrag : undefined}
         onEndSessionDrag={inActiveWorkspace ? onEndSessionDrag : undefined}
+        onDetachPointerDown={inActiveWorkspace ? handleDetachPointerDown : undefined}
         onDetachDragStart={inActiveWorkspace ? handleDetachDragStart : undefined}
         onDetachDragEnd={inActiveWorkspace ? handleDetachDragEnd : undefined}
       />
@@ -1037,7 +1222,8 @@ interface TerminalPanesHostProps {
   ) => void;
   onAddSelectionToAI?: (sessionId: string, selection: string) => void;
   onStartSessionRename?: (sessionId: string) => void;
-  onRemoveSessionFromWorkspace?: (sessionId: string) => void;
+  onRemoveSessionFromWorkspace?: TerminalPaneProps['onRemoveSessionFromWorkspace'];
+  onReorderTabs?: (draggedId: string, targetId: string, position: 'before' | 'after', additionalTabIds?: readonly string[]) => void;
   onStartSessionDrag?: (sessionId: string) => void;
   onEndSessionDrag?: () => void;
 }
@@ -1101,6 +1287,7 @@ const terminalPanesHostPropsAreEqual = (
   if (prev.onAddSelectionToAI !== next.onAddSelectionToAI) return false;
   if (prev.onStartSessionRename !== next.onStartSessionRename) return false;
   if (prev.onRemoveSessionFromWorkspace !== next.onRemoveSessionFromWorkspace) return false;
+  if (prev.onReorderTabs !== next.onReorderTabs) return false;
   if (prev.onStartSessionDrag !== next.onStartSessionDrag) return false;
   if (prev.onEndSessionDrag !== next.onEndSessionDrag) return false;
 

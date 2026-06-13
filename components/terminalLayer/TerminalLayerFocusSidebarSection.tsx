@@ -15,6 +15,10 @@ function TerminalLayerFocusSidebarSectionInner({ ctx }: { ctx: FocusSidebarConte
       focusedSessionId={ctx.focusedSessionId}
       onReorderWorkspaceSessions={ctx.onReorderWorkspaceSessions}
       onRequestAddToWorkspace={ctx.onRequestAddToWorkspace}
+      onCloseSession={ctx.handleCloseSession}
+      onCopySession={ctx.onCopySession}
+      onCopySessionToNewWindow={ctx.onCopySessionToNewWindow}
+      onDetachSessionFromWorkspace={ctx.onRemoveSessionFromWorkspace}
       onSetWorkspaceFocusedSession={ctx.onSetWorkspaceFocusedSession}
       onToggleWorkspaceViewMode={ctx.onToggleWorkspaceViewMode}
       onSubmitSessionRename={ctx.onSubmitSessionRename}

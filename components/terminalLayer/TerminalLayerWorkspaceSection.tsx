@@ -85,6 +85,7 @@ function TerminalLayerWorkspaceSectionInner({ ctx }: { ctx: WorkspaceContext }) 
     cn,
     onStartSessionRename,
     onRemoveSessionFromWorkspace,
+    onReorderTabs,
     onStartSessionDrag,
     onEndSessionDrag,
   } = ctx;
@@ -186,6 +187,7 @@ function TerminalLayerWorkspaceSectionInner({ ctx }: { ctx: WorkspaceContext }) 
           onAddSelectionToAI={handleAddSelectionToAI}
           onStartSessionRename={onStartSessionRename}
           onRemoveSessionFromWorkspace={onRemoveSessionFromWorkspace}
+          onReorderTabs={onReorderTabs}
           onStartSessionDrag={onStartSessionDrag}
           onEndSessionDrag={onEndSessionDrag}
         />

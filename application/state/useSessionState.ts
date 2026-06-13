@@ -17,8 +17,9 @@ SplitHint,
 updateWorkspaceSplitSizes,
 } from '../../domain/workspace';
 import { clearSessionFontSizeOverride as clearSessionFontSizeOverrideFields } from '../../domain/terminalAppearance';
-import { buildOrderedWorkTabIds } from '../app/workTabSurface';
+import { buildOrderedWorkTabIds, reorderWorkTabIds } from '../app/workTabSurface';
 import { activeTabStore } from './activeTabStore';
+import { detachSessionFromWorkspaceState, replaceDissolvedWorkspaceTabOrder } from './sessionWorkspaceDetach';
 import {
   createCopiedTerminalSessionClone,
   createSplitTerminalSessionClone,
@@ -907,38 +908,49 @@ export const useSessionState = () => {
     [getOrderedWorkTabs],
   );
 
-  const removeSessionFromWorkspace = useCallback((sessionId: string) => {
+  const removeSessionFromWorkspace = useCallback((
+    sessionId: string,
+    tabInsertionTarget?: {
+      tabId: string;
+      position: 'before' | 'after';
+      additionalTabIds?: readonly string[];
+    },
+  ) => {
     setSessions(prevSessions => {
-      const session = prevSessions.find(s => s.id === sessionId);
-      if (!session?.workspaceId) return prevSessions;
-
-      const wsId = session.workspaceId;
-      setWorkspaces(prevWorkspaces => {
-        const targetWs = prevWorkspaces.find(w => w.id === wsId);
-        if (!targetWs) return prevWorkspaces;
-
-        const pruned = pruneWorkspaceNode(targetWs.root, sessionId);
-        if (!pruned) {
-          // Workspace becomes empty - remove it
-          return prevWorkspaces.filter(w => w.id !== wsId);
-        }
-
-        const remaining = collectSessionIds(pruned);
-        if (remaining.length === 1) {
-          // Only 1 remains - dissolve workspace, convert remaining to orphan
-          setSessions(prev => prev.map(s =>
-            s.id === remaining[0] ? { ...s, workspaceId: undefined } : s
-          ));
-          return prevWorkspaces.filter(w => w.id !== wsId);
-        }
-
-        return prevWorkspaces.map(w => w.id === wsId ? { ...w, root: pruned, focusedSessionId: remaining[0] || w.focusedSessionId } : w);
+      const result = detachSessionFromWorkspaceState({
+        sessions: prevSessions,
+        workspaces: workspacesRef.current,
+        sessionId,
       });
 
-      setActiveTabId(sessionId);
-      return prevSessions.map(s => s.id === sessionId ? { ...s, workspaceId: undefined } : s);
+      if (!result.changed) return prevSessions;
+      setWorkspaces(result.workspaces);
+      setTabOrder(prevTabOrder => {
+        const replacedOrder = replaceDissolvedWorkspaceTabOrder(
+          prevTabOrder,
+          result.dissolvedWorkspaceId,
+          result.replacementTabIds,
+        );
+        if (!tabInsertionTarget) return replacedOrder;
+
+        const allTabIds = [
+          ...result.sessions.filter(s => !s.workspaceId).map(s => s.id),
+          ...result.workspaces.map(w => w.id),
+          ...logViews.map(lv => lv.id),
+          ...(tabInsertionTarget.additionalTabIds ?? []),
+        ];
+        return reorderWorkTabIds(
+          replacedOrder,
+          allTabIds,
+          sessionId,
+          tabInsertionTarget.tabId,
+          tabInsertionTarget.position,
+        );
+      });
+      if (result.activeTabId) setActiveTabId(result.activeTabId);
+      return result.sessions;
     });
-  }, [setActiveTabId]);
+  }, [logViews, setActiveTabId]);
 
   const reorderTabs = useCallback((
     draggedId: string,
@@ -948,39 +960,13 @@ export const useSessionState = () => {
   ) => {
     if (draggedId === targetId) return;
     
-    setTabOrder(prevTabOrder => {
-      const allTabIds = [...baseWorkTabIds, ...additionalTabIds];
-      const allTabIdSet = new Set(allTabIds);
-      
-      // Build current effective order: existing order + new tabs at end
-      const orderedIds = prevTabOrder.filter(id => allTabIdSet.has(id));
-      const orderedIdSet = new Set(orderedIds);
-      const newIds = allTabIds.filter(id => !orderedIdSet.has(id));
-      const currentOrder = [...orderedIds, ...newIds];
-      
-      const draggedIndex = currentOrder.indexOf(draggedId);
-      const targetIndex = currentOrder.indexOf(targetId);
-      
-      if (draggedIndex === -1 || targetIndex === -1) return prevTabOrder;
-      
-      // Remove dragged item first
-      currentOrder.splice(draggedIndex, 1);
-      
-      // Calculate new target index (adjusted after removal)
-      let newTargetIndex = targetIndex;
-      if (draggedIndex < targetIndex) {
-        newTargetIndex -= 1;
-      }
-      
-      // Insert at the correct position
-      if (position === 'after') {
-        newTargetIndex += 1;
-      }
-      
-      currentOrder.splice(newTargetIndex, 0, draggedId);
-      
-      return currentOrder;
-    });
+    setTabOrder(prevTabOrder => reorderWorkTabIds(
+      prevTabOrder,
+      [...baseWorkTabIds, ...additionalTabIds],
+      draggedId,
+      targetId,
+      position,
+    ));
   }, [baseWorkTabIds]);
 
   return {

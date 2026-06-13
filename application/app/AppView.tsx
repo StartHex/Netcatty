@@ -282,6 +282,9 @@ export function AppView({ ctx }: { ctx: AppViewContext }) {
           onToggleWorkspaceViewMode={toggleWorkspaceViewMode}
           onSetWorkspaceFocusedSession={setWorkspaceFocusedSession}
           onReorderWorkspaceSessions={reorderWorkspaceSessions}
+          onReorderTabs={reorderWorkTabs}
+          onCopySession={copySessionWithCurrentShell}
+          onCopySessionToNewWindow={copySessionToNewWindowWithCurrentShell}
           onSplitSession={splitSessionWithCurrentShell}
           onConnectToHost={handleConnectToHost}
           onCreateLocalTerminal={handleCreateLocalTerminal}

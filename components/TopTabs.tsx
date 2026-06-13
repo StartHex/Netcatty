@@ -6,6 +6,7 @@ import type { EditorTab } from '../application/state/editorTabStore';
 import { buildWorkspaceActivityMap } from '../application/state/sessionActivity';
 import { collectSessionIds } from '../domain/workspace';
 import { useSessionActivityMap } from '../application/state/sessionActivityStore';
+import { getWorkspaceSessionDragId, hasWorkspaceSessionDrag } from '../application/state/terminalDragData';
 import {
   useTerminalHostTreeLayoutWidth,
   useTerminalHostTreeOpen,
@@ -445,6 +446,11 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
+    if (hasWorkspaceSessionDrag(e.dataTransfer)) {
+      setDropIndicator(null);
+      return;
+    }
+
     if (!draggedTabIdRef.current || draggedTabIdRef.current === tabId) {
       return;
     }
@@ -466,8 +472,8 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
 
   const handleTabDrop = useCallback((e: React.DragEvent, targetTabId: string) => {
     e.preventDefault();
-    const draggedSessionId = e.dataTransfer.getData('session-id');
-    if (draggedSessionId) {
+    if (hasWorkspaceSessionDrag(e.dataTransfer)) {
+      const draggedSessionId = getWorkspaceSessionDragId(e.dataTransfer);
       const draggedSession = sessions.find((s) => s.id === draggedSessionId);
       if (draggedSession?.workspaceId) {
         onRemoveSessionFromWorkspace(draggedSessionId);
@@ -489,7 +495,8 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
   }, [dropIndicator, onEndSessionDrag, onRemoveSessionFromWorkspace, onReorderTabs, sessions]);
 
   const handleTabBarDrop = useCallback((e: React.DragEvent) => {
-    const draggedSessionId = e.dataTransfer.getData('session-id');
+    if (!hasWorkspaceSessionDrag(e.dataTransfer)) return;
+    const draggedSessionId = getWorkspaceSessionDragId(e.dataTransfer);
     if (!draggedSessionId) return;
     const draggedSession = sessions.find((s) => s.id === draggedSessionId);
     if (!draggedSession?.workspaceId) return;
@@ -838,14 +845,10 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
           style={dragRegionStyle}
           // Add container-level drag handlers to prevent indicator loss
           onDragOver={(e) => {
-            if (e.dataTransfer.types.includes('session-id')) {
-              const draggedSessionId = e.dataTransfer.getData('session-id');
-              const draggedSession = sessions.find((s) => s.id === draggedSessionId);
-              if (draggedSession?.workspaceId) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                return;
-              }
+            if (hasWorkspaceSessionDrag(e.dataTransfer)) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              return;
             }
             // Keep drop indicator active while dragging over the container
             if (draggedTabIdRef.current && isDraggingForReorder && !dropIndicator) {
@@ -919,7 +922,7 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               onClick={handleScrollableTabClick}
               onDragOver={(e) => {
-                if (e.dataTransfer.types.includes('session-id')) {
+                if (hasWorkspaceSessionDrag(e.dataTransfer)) {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = 'move';
                 }

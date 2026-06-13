@@ -13,6 +13,7 @@ import { getShellIconPath, isMonochromeShellIcon } from '../../lib/useDiscovered
 import { handleTabMiddleClickClose, handleTabMiddleMouseDown } from '../../lib/tabInteractions';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '../ui/context-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { SessionTabContextMenuContent } from './SessionTabContextMenuContent';
 
 // File extensions that render the code-file icon instead of the plain text icon.
 const CODE_EXTENSIONS_RE = /\.(js|jsx|ts|tsx|py|rb|go|rs|c|cpp|cs|java|php|sh|bash|zsh|fish|lua|r|scala|swift|kt|html|css|scss|less|json|yaml|yml|toml|xml|sql|graphql|gql|md|mdx|conf|ini|env|tf|hcl|dockerfile)$/i;
@@ -567,21 +568,15 @@ export const SessionTopTab: React.FC<SessionTopTabProps> = memo(({
           </button>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem onClick={() => onRenameSession(session.id)}>
-          {t('common.rename')}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onCopySession(session.id)}>
-          {t('tabs.copyTab')}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onCopySessionToNewWindow(session.id)}>
-          {t('tabs.copyTabToNewWindow')}
-        </ContextMenuItem>
-        <ContextMenuItem className="text-destructive" onClick={() => onCloseSession(session.id)}>
-          {t('common.close')}
-        </ContextMenuItem>
-        {renderBulkCloseItems(session.id)}
-      </ContextMenuContent>
+      <SessionTabContextMenuContent
+        sessionId={session.id}
+        onCloseSession={onCloseSession}
+        onCopySession={onCopySession}
+        onCopySessionToNewWindow={onCopySessionToNewWindow}
+        onRenameSession={onRenameSession}
+        renderBulkCloseItems={renderBulkCloseItems}
+        t={t}
+      />
     </ContextMenu>
   );
 });

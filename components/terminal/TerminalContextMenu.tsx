@@ -6,10 +6,10 @@ import {
   ClipboardPaste,
   Copy,
   Download,
-  Minimize2,
   Pencil,
   RefreshCcw,
   Sparkles,
+  SquareArrowOutUpRight,
   SplitSquareHorizontal,
   SplitSquareVertical,
   Terminal as TerminalIcon,
@@ -319,7 +319,7 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
             <>
               <ContextMenuSeparator />
               <ContextMenuItem onClick={onDetach}>
-                <Minimize2 size={14} className="mr-2" />
+                <SquareArrowOutUpRight size={14} className="mr-2" />
                 {t('terminal.menu.detach')}
               </ContextMenuItem>
             </>

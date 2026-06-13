@@ -1,4 +1,4 @@
-import type { DragEvent } from "react";
+import type { DragEvent, PointerEvent } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 
 import { logger } from "../../lib/logger";
@@ -187,6 +187,7 @@ export interface TerminalProps {
   onDetach?: () => void;
   onStartSessionDrag?: (sessionId: string) => void;
   onEndSessionDrag?: () => void;
+  onDetachPointerDown?: (e: PointerEvent<HTMLElement>) => void;
   onDetachDragStart?: (e: DragEvent) => void;
   onDetachDragEnd?: (e: DragEvent) => void;
 }
