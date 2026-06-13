@@ -17,6 +17,7 @@ function TerminalLayerFocusSidebarSectionInner({ ctx }: { ctx: FocusSidebarConte
       onRequestAddToWorkspace={ctx.onRequestAddToWorkspace}
       onSetWorkspaceFocusedSession={ctx.onSetWorkspaceFocusedSession}
       onToggleWorkspaceViewMode={ctx.onToggleWorkspaceViewMode}
+      onRenameSessionInline={ctx.onRenameSessionInline}
       onStartSessionRename={ctx.onStartSessionRename}
       onSubmitSessionRename={ctx.onSubmitSessionRename}
       onCancelSessionRename={ctx.onCancelSessionRename}

@@ -20,6 +20,7 @@ interface TerminalFocusSidebarProps {
   onRequestAddToWorkspace?: (workspaceId: string) => void;
   onSetWorkspaceFocusedSession?: (workspaceId: string, sessionId: string) => void;
   onToggleWorkspaceViewMode?: (workspaceId: string) => void;
+  onRenameSessionInline?: (sessionId: string, name: string) => void;
   onStartSessionRename: (sessionId: string) => void;
   onSubmitSessionRename: () => void;
   onCancelSessionRename: () => void;
@@ -51,7 +52,7 @@ type WorkspaceFocusSessionRowProps = {
   renameValue: string;
   onRenameValueChange: (value: string) => void;
   onStartRename: (sessionId: string) => void;
-  onSubmitRename: () => void;
+  onSubmitRename: (name: string) => void;
   onCancelRename: () => void;
   isDragging: boolean;
   dropPosition: 'before' | 'after' | null;
@@ -208,6 +209,7 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
   onRequestAddToWorkspace,
   onSetWorkspaceFocusedSession,
   onToggleWorkspaceViewMode,
+  onRenameSessionInline,
   onStartSessionRename,
   onSubmitSessionRename,
   onCancelSessionRename,
@@ -228,6 +230,9 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
   const [focusSidebarWidth, setFocusSidebarWidth, persistFocusSidebarWidth] = useStoredNumber(
     STORAGE_KEY_WORKSPACE_FOCUS_SIDEBAR_WIDTH, 224, { min: 160, max: 480 },
   );
+
+  const [localRenamingId, setLocalRenamingId] = useState<string | null>(null);
+  const [localRenameValue, setLocalRenameValue] = useState('');
 
   const theme = useMemo<FocusSidebarTheme>(() => {
     const termBg = resolvedPreviewTheme.colors.background;
@@ -396,6 +401,29 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
     onSetWorkspaceFocusedSession?.(activeWorkspace.id, sessionId);
   }, [activeWorkspace.id, onSetWorkspaceFocusedSession]);
 
+  const handleLocalStartRename = useCallback((sessionId: string) => {
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) return;
+    setLocalRenamingId(sessionId);
+    setLocalRenameValue(session.customName || session.hostLabel || '');
+  }, [sessions]);
+
+  const handleLocalSubmitRename = useCallback((name: string) => {
+    if (!localRenamingId) return;
+    onRenameSessionInline?.(localRenamingId, name);
+    setLocalRenamingId(null);
+    setLocalRenameValue('');
+  }, [localRenamingId, onRenameSessionInline]);
+
+  const handleLocalCancelRename = useCallback(() => {
+    setLocalRenamingId(null);
+    setLocalRenameValue('');
+  }, []);
+
+  const handleLocalRenameValueChange = useCallback((value: string) => {
+    setLocalRenameValue(value);
+  }, []);
+
   return (
     <div
       className="flex-shrink-0 flex flex-col relative"
@@ -473,12 +501,12 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
               session={session}
               host={sessionHostsMap.get(session.id)}
               isSelected={session.id === focusedSessionId}
-              isRenaming={renamingSessionId === session.id}
-              renameValue={sessionRenameValue}
-              onRenameValueChange={setSessionRenameValue}
-              onStartRename={onStartSessionRename}
-              onSubmitRename={onSubmitSessionRename}
-              onCancelRename={onCancelSessionRename}
+              isRenaming={localRenamingId === session.id}
+              renameValue={localRenameValue}
+              onRenameValueChange={handleLocalRenameValueChange}
+              onStartRename={handleLocalStartRename}
+              onSubmitRename={handleLocalSubmitRename}
+              onCancelRename={handleLocalCancelRename}
               isDragging={focusSidebarDragSessionId === session.id}
               dropPosition={
                 focusSidebarDropIndicator?.sessionId === session.id
@@ -517,6 +545,7 @@ function terminalFocusSidebarPropsEqual(
   if (prev.onRequestAddToWorkspace !== next.onRequestAddToWorkspace) return false;
   if (prev.onSetWorkspaceFocusedSession !== next.onSetWorkspaceFocusedSession) return false;
   if (prev.onToggleWorkspaceViewMode !== next.onToggleWorkspaceViewMode) return false;
+  if (prev.onRenameSessionInline !== next.onRenameSessionInline) return false;
   const prevWs = prev.activeWorkspace;
   const nextWs = next.activeWorkspace;
   return (

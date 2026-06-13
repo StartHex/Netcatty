@@ -394,6 +394,7 @@ export function TerminalLayerTabBridge({ stableRef }: { stableRef: StableRef }) 
     onReorderWorkspaceSessions: s.onReorderWorkspaceSessions,
     onRequestAddToWorkspace: s.onRequestAddToWorkspace,
     onSetWorkspaceFocusedSession: s.onSetWorkspaceFocusedSession,
+    onRenameSessionInline: s.onRenameSessionInline,
     onStartSessionRename: s.onStartSessionRename,
     onSubmitSessionRename: s.onSubmitSessionRename,
     onCancelSessionRename: s.onCancelSessionRename,

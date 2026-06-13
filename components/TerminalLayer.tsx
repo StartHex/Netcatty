@@ -155,6 +155,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   sessionRenameValue,
   setSessionRenameValue,
   onStartSessionRename,
+  onRenameSessionInline,
   onSubmitSessionRename,
   onCancelSessionRename,
 }) => {
@@ -1150,6 +1151,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     onSetDraggingSessionId,
     onSetWorkspaceFocusedSession,
     onStartSessionRename,
+    onRenameSessionInline,
     onSubmitSessionRename,
     onCancelSessionRename,
     renamingSessionId,

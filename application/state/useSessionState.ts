@@ -211,6 +211,12 @@ export const useSessionState = () => {
     });
   }, []);
 
+  const renameSessionInline = useCallback((sessionId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, customName: trimmed } : s));
+  }, []);
+
   const submitSessionRename = useCallback(() => {
     setSessionRenameValue(prevValue => {
       const name = prevValue.trim();
@@ -942,6 +948,7 @@ export const useSessionState = () => {
     sessionRenameValue,
     setSessionRenameValue,
     startSessionRename,
+    renameSessionInline,
     submitSessionRename,
     resetSessionRename,
     workspaceRenameTarget,

@@ -535,6 +535,7 @@ export interface TerminalLayerProps {
   sessionRenameValue?: string;
   setSessionRenameValue?: (value: string) => void;
   onStartSessionRename?: (sessionId: string) => void;
+  onRenameSessionInline?: (sessionId: string, name: string) => void;
   onSubmitSessionRename?: () => void;
   onCancelSessionRename?: () => void;
 }
