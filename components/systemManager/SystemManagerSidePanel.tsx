@@ -100,7 +100,12 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
     let timerId: ReturnType<typeof setTimeout>;
 
     const pollOnce = async () => {
-      if (cancelled || probingRef.current) return;
+      if (cancelled) return;
+      if (probingRef.current) {
+        // probe 还在跑（如 tab-switch probe），等下一轮再试
+        timerId = setTimeout(pollOnce, capabilitiesTtlMs);
+        return;
+      }
       probingRef.current = true;
       try {
         await refreshRef.current();
