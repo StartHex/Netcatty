@@ -78,31 +78,32 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
   // Auto-poll for Docker capabilities while Docker tab is active and Docker not yet detected.
   // Use setTimeout recursion so the next probe only starts after the previous one finishes,
   // avoiding overlapping probes (e.g. SSH timeout 8s vs user-configured interval 2s).
+  // First poll is delayed by one interval to avoid overlapping with the tab-switch probe above.
   //
   // Use a ref to store refreshCapabilities so that if its reference changes on every render,
   // the useEffect below is NOT re-run (which would cancel the timer and bypass the interval).
   const refreshRef = React.useRef(refreshCapabilities);
   refreshRef.current = refreshCapabilities;
-
   const dockerPollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelledRef = React.useRef(false);
+  const pollOnce = React.useCallback(async () => {
+    if (cancelledRef.current) return;
+    await refreshRef.current();
+    if (!cancelledRef.current) {
+      dockerPollTimerRef.current = setTimeout(pollOnce, capabilitiesTtlMs);
+    }
+  }, [capabilitiesTtlMs]);
   React.useEffect(() => {
     if (!isVisible || resolvedTab !== 'docker' || capabilities?.hasDocker === true) return;
-    let cancelled = false;
-    async function pollOnce() {
-      await refreshRef.current();
-      if (!cancelled) {
-        dockerPollTimerRef.current = setTimeout(pollOnce, capabilitiesTtlMs);
-      }
-    }
-    void pollOnce();
+    dockerPollTimerRef.current = setTimeout(pollOnce, capabilitiesTtlMs);
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
       if (dockerPollTimerRef.current !== null) {
         clearTimeout(dockerPollTimerRef.current);
         dockerPollTimerRef.current = null;
       }
     };
-  }, [isVisible, resolvedTab, capabilities?.hasDocker, refreshRef, capabilitiesTtlMs]);
+  }, [isVisible, resolvedTab, capabilities?.hasDocker, pollOnce, capabilitiesTtlMs]);
 
   const workspaceHostHeader = showWorkspaceHostHeader && sessionHost ? (
     <WorkspaceSidebarHostHeader
