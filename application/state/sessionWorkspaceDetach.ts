@@ -10,6 +10,13 @@ export type DetachSessionFromWorkspaceStateResult = {
   replacementTabIds?: string[];
 };
 
+export type CloseSessionWorkspaceLayoutResult = {
+  workspaces: Workspace[];
+  removedWorkspaceId?: string;
+  dissolvedWorkspaceId?: string;
+  lastRemainingSessionId?: string;
+};
+
 type DetachSessionFromWorkspaceStateOptions = {
   sessions: TerminalSession[];
   workspaces: Workspace[];
@@ -27,6 +34,14 @@ export function replaceDissolvedWorkspaceTabOrder(
     tabId && list.indexOf(tabId) === index
   ));
   if (uniqueReplacementIds.length === 0) return [...tabOrder];
+
+  if (!tabOrder.includes(workspaceId)) {
+    const hasAllReplacementIds = uniqueReplacementIds.every((tabId) => tabOrder.includes(tabId));
+    return hasAllReplacementIds ? [...tabOrder] : [
+      ...tabOrder,
+      ...uniqueReplacementIds.filter((tabId) => !tabOrder.includes(tabId)),
+    ];
+  }
 
   const replacementIdSet = new Set(uniqueReplacementIds);
   let inserted = false;
@@ -46,6 +61,44 @@ export function replaceDissolvedWorkspaceTabOrder(
   }
 
   return nextOrder;
+}
+
+export function closeSessionWorkspaceLayoutState(
+  workspaces: readonly Workspace[],
+  workspaceId: string | undefined,
+  sessionId: string,
+): CloseSessionWorkspaceLayoutResult {
+  if (!workspaceId) return { workspaces: [...workspaces] };
+
+  let removedWorkspaceId: string | undefined;
+  let dissolvedWorkspaceId: string | undefined;
+  let lastRemainingSessionId: string | undefined;
+  const nextWorkspaces = workspaces
+    .map((workspace) => {
+      if (workspace.id !== workspaceId) return workspace;
+      const prunedRoot = pruneWorkspaceNode(workspace.root, sessionId);
+      if (!prunedRoot) {
+        removedWorkspaceId = workspace.id;
+        return null;
+      }
+
+      const remainingSessionIds = collectSessionIds(prunedRoot);
+      if (remainingSessionIds.length === 1) {
+        dissolvedWorkspaceId = workspace.id;
+        lastRemainingSessionId = remainingSessionIds[0];
+        return null;
+      }
+
+      return { ...workspace, root: prunedRoot };
+    })
+    .filter((workspace): workspace is Workspace => Boolean(workspace));
+
+  return {
+    workspaces: nextWorkspaces,
+    removedWorkspaceId,
+    dissolvedWorkspaceId,
+    lastRemainingSessionId,
+  };
 }
 
 export function detachSessionFromWorkspaceState({

@@ -18,6 +18,7 @@ Object.defineProperty(globalThis, "requestAnimationFrame", {
 
 const {
   computeHostTreeTabGutter,
+  resolveWorkspaceSessionTabDropTarget,
   shouldKeepHostTreeToggleSurface,
   shouldShowHostTreeToggle,
 } = await import("./TopTabs.tsx");
@@ -163,6 +164,77 @@ test("top tab insertion target ignores fixed root tabs", () => {
     position: "after",
   });
   assert.equal(getTopTabInsertionTarget({ clientX: 180, clientY: 120 }, root), null);
+});
+
+test("workspace session tab drop forwards the requested insertion target", () => {
+  assert.deepEqual(resolveWorkspaceSessionTabDropTarget({
+    targetTabId: "session-3",
+    position: "after",
+    draggedSessionId: "session-1",
+    draggedWorkspaceId: "workspace-1",
+    workspaces: [],
+  }), {
+    tabId: "session-3",
+    position: "after",
+    additionalTabIds: ["session-1", "session-3"],
+  });
+});
+
+test("workspace session tab drop targets the remaining terminal when its workspace dissolves", () => {
+  assert.deepEqual(resolveWorkspaceSessionTabDropTarget({
+    targetTabId: "workspace-1",
+    position: "before",
+    draggedSessionId: "session-1",
+    draggedWorkspaceId: "workspace-1",
+    workspaces: [{
+      id: "workspace-1",
+      title: "Workspace",
+      focusedSessionId: "session-1",
+      root: {
+        id: "split-1",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          { id: "pane-1", type: "pane", sessionId: "session-1" },
+          { id: "pane-2", type: "pane", sessionId: "session-2" },
+        ],
+        sizes: [1, 1],
+      },
+    }],
+  }), {
+    tabId: "session-2",
+    position: "before",
+    additionalTabIds: ["session-1", "session-2"],
+  });
+});
+
+test("workspace session tab-bar blank drop inserts after the last work tab", () => {
+  const makeTab = (id: string, type: string, left: number, right: number) => ({
+    dataset: { tabId: id, tabType: type },
+    getBoundingClientRect: () => ({ left, right, top: 20, bottom: 60, width: right - left, height: 40 }),
+  });
+  const root = {
+    getBoundingClientRect: () => ({ left: 0, right: 500, top: 0, bottom: 80, width: 500, height: 80 }),
+    querySelectorAll: () => [
+      makeTab("vault", "root", 0, 80),
+      makeTab("workspace-1", "workspace", 90, 210),
+      makeTab("session-3", "session", 210, 330),
+    ],
+  } as unknown as HTMLElement;
+  const insertionTarget = getTopTabInsertionTarget({ clientX: 460, clientY: 40 }, root);
+
+  assert.deepEqual(insertionTarget, { tabId: "session-3", position: "after" });
+  assert.deepEqual(resolveWorkspaceSessionTabDropTarget({
+    targetTabId: insertionTarget!.tabId,
+    position: insertionTarget!.position,
+    draggedSessionId: "session-1",
+    draggedWorkspaceId: "workspace-1",
+    workspaces: [],
+  }), {
+    tabId: "session-3",
+    position: "after",
+    additionalTabIds: ["session-1", "session-3"],
+  });
 });
 
 test("terminal top bar hides server stats before they crowd the host title", () => {

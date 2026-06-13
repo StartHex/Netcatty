@@ -19,7 +19,11 @@ updateWorkspaceSplitSizes,
 import { clearSessionFontSizeOverride as clearSessionFontSizeOverrideFields } from '../../domain/terminalAppearance';
 import { buildOrderedWorkTabIds, reorderWorkTabIds } from '../app/workTabSurface';
 import { activeTabStore } from './activeTabStore';
-import { detachSessionFromWorkspaceState, replaceDissolvedWorkspaceTabOrder } from './sessionWorkspaceDetach';
+import {
+  closeSessionWorkspaceLayoutState,
+  detachSessionFromWorkspaceState,
+  replaceDissolvedWorkspaceTabOrder,
+} from './sessionWorkspaceDetach';
 import {
   createCopiedTerminalSessionClone,
   createSplitTerminalSessionClone,
@@ -123,33 +127,12 @@ export const useSessionState = () => {
       const wsId = targetSession?.workspaceId;
 
       setWorkspaces(prevWorkspaces => {
-        let removedWorkspaceId: string | null = null;
-        let nextWorkspaces = prevWorkspaces;
-        let dissolvedWorkspaceId: string | null = null;
-        let lastRemainingSessionId: string | null = null;
-
-        if (wsId) {
-          nextWorkspaces = prevWorkspaces
-            .map(ws => {
-              if (ws.id !== wsId) return ws;
-              const pruned = pruneWorkspaceNode(ws.root, sessionId);
-              if (!pruned) {
-                removedWorkspaceId = ws.id;
-                return null;
-              }
-
-              // Check if only 1 session remains - dissolve workspace
-              const remainingSessionIds = collectSessionIds(pruned);
-              if (remainingSessionIds.length === 1) {
-                dissolvedWorkspaceId = ws.id;
-                lastRemainingSessionId = remainingSessionIds[0];
-                return null;
-              }
-
-              return { ...ws, root: pruned };
-            })
-            .filter((ws): ws is Workspace => Boolean(ws));
-        }
+        const {
+          workspaces: nextWorkspaces,
+          removedWorkspaceId,
+          dissolvedWorkspaceId,
+          lastRemainingSessionId,
+        } = closeSessionWorkspaceLayoutState(prevWorkspaces, wsId, sessionId);
 
         const remainingSessions = prevSessions.filter(s => s.id !== sessionId);
         const fallbackWorkspace = nextWorkspaces[nextWorkspaces.length - 1];
@@ -162,6 +145,14 @@ export const useSessionState = () => {
           if (fallbackSolo) return fallbackSolo.id;
           return 'vault';
         };
+
+        if (dissolvedWorkspaceId && lastRemainingSessionId) {
+          setTabOrder(prevTabOrder => replaceDissolvedWorkspaceTabOrder(
+            prevTabOrder,
+            dissolvedWorkspaceId,
+            [lastRemainingSessionId],
+          ));
+        }
 
         if (dissolvedWorkspaceId && currentActiveTabId === dissolvedWorkspaceId) {
           setActiveTabId(getFallback());

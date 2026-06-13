@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TerminalSession, Workspace } from "../../domain/models";
 import {
+  closeSessionWorkspaceLayoutState,
   detachSessionFromWorkspaceState,
   replaceDissolvedWorkspaceTabOrder,
 } from "./sessionWorkspaceDetach";
@@ -86,5 +87,37 @@ test("dissolved workspace replacement removes duplicate replacement ids", () => 
   assert.deepEqual(
     replaceDissolvedWorkspaceTabOrder(["s1", "ws-1", "session-3"], "ws-1", ["s1", "s2"]),
     ["s1", "s2", "session-3"],
+  );
+});
+
+test("dissolved workspace replacement is idempotent", () => {
+  const once = replaceDissolvedWorkspaceTabOrder(["log-1", "ws-1", "session-3"], "ws-1", ["s1", "s2"]);
+
+  assert.deepEqual(
+    replaceDissolvedWorkspaceTabOrder(once, "ws-1", ["s1", "s2"]),
+    once,
+  );
+});
+
+test("single remaining session preserves dissolved workspace tab position", () => {
+  assert.deepEqual(
+    replaceDissolvedWorkspaceTabOrder(["log-1", "ws-1", "session-3"], "ws-1", ["s2"]),
+    ["log-1", "s2", "session-3"],
+  );
+});
+
+test("closing a workspace session dissolves the workspace when one terminal remains", () => {
+  const result = closeSessionWorkspaceLayoutState([workspace(["s1", "s2"])], "ws-1", "s1");
+
+  assert.equal(result.dissolvedWorkspaceId, "ws-1");
+  assert.equal(result.lastRemainingSessionId, "s2");
+  assert.deepEqual(result.workspaces, []);
+  assert.deepEqual(
+    replaceDissolvedWorkspaceTabOrder(
+      ["log-1", result.dissolvedWorkspaceId!, "session-3"],
+      result.dissolvedWorkspaceId,
+      result.lastRemainingSessionId ? [result.lastRemainingSessionId] : undefined,
+    ),
+    ["log-1", "s2", "session-3"],
   );
 });
