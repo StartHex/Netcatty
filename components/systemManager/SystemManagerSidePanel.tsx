@@ -75,6 +75,13 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
     }
   }, [resolvedTab, capabilities, refreshCapabilities]);
 
+  // Auto-poll for Docker capabilities while Docker tab is active and Docker not yet detected.
+  React.useEffect(() => {
+    if (!isVisible || activeTab !== 'docker' || capabilities?.hasDocker === true) return;
+    const interval = setInterval(() => refreshCapabilities(), capabilitiesTtlMs);
+    return () => clearInterval(interval);
+  }, [isVisible, activeTab, capabilities?.hasDocker, refreshCapabilities, capabilitiesTtlMs]);
+
   const workspaceHostHeader = showWorkspaceHostHeader && sessionHost ? (
     <WorkspaceSidebarHostHeader
       host={sessionHost}
