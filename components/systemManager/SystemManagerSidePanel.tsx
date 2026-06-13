@@ -101,7 +101,7 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
 
     const pollOnce = async () => {
       if (cancelled) return;
-      if (probingRef.current) {
+      if (probingRef.current || probing) {
         // probe is in-flight, reschedule for next cycle
         timerId = setTimeout(pollOnce, capabilitiesTtlMs);
         return;
