@@ -64,12 +64,16 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
 
   // Must be defined before early returns to comply with React rules of hooks.
   const prevTabRef = React.useRef(resolvedTab);
+  const probingRef = React.useRef(false);
   React.useEffect(() => {
     const prev = prevTabRef.current;
     prevTabRef.current = resolvedTab;
     if (prev === resolvedTab) return;
     if (resolvedTab === 'docker' && capabilities?.hasDocker !== true) {
-      void refreshCapabilities();
+      if (!probingRef.current) {
+        probingRef.current = true;
+        refreshCapabilities().finally(() => { probingRef.current = false; });
+      }
     } else if (resolvedTab === 'tmux' && capabilities?.hasTmux !== true) {
       void refreshCapabilities();
     }
@@ -96,12 +100,14 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
     let timerId: ReturnType<typeof setTimeout>;
 
     const pollOnce = async () => {
-      if (cancelled) return;
+      if (cancelled || probingRef.current) return;
+      probingRef.current = true;
       try {
         await refreshRef.current();
       } catch {
         // Transient error — keep polling next round
       }
+      probingRef.current = false;
       if (cancelled) return;
       timerId = setTimeout(pollOnce, capabilitiesTtlMs);
     };
