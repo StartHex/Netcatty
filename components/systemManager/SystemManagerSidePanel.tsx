@@ -84,27 +84,31 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
   // the useEffect below is NOT re-run (which would cancel the timer and bypass the interval).
   const refreshRef = React.useRef(refreshCapabilities);
   refreshRef.current = refreshCapabilities;
-  const dockerPollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelledRef = React.useRef(false);
-  const pollOnce = React.useCallback(async () => {
-    if (cancelledRef.current) return;
-    await refreshRef.current();
-    if (!cancelledRef.current) {
-      dockerPollTimerRef.current = setTimeout(pollOnce, capabilitiesTtlMs);
-    }
-  }, [capabilitiesTtlMs]);
+
+  // Auto-poll for Docker capabilities while Docker tab is active and Docker not yet detected.
+  // Each effect generation gets its own cancelled flag and timerId via closure,
+  // preventing stale probes from surviving cleanup (unlike cancelledRef which is shared).
+  // First poll is delayed by one interval to avoid overlapping with the tab-switch probe.
   React.useEffect(() => {
-    cancelledRef.current = false;
     if (!isVisible || resolvedTab !== 'docker' || capabilities?.hasDocker === true) return;
-    dockerPollTimerRef.current = setTimeout(pollOnce, capabilitiesTtlMs);
-    return () => {
-      cancelledRef.current = true;
-      if (dockerPollTimerRef.current !== null) {
-        clearTimeout(dockerPollTimerRef.current);
-        dockerPollTimerRef.current = null;
-      }
+
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout>;
+
+    const pollOnce = async () => {
+      if (cancelled) return;
+      await refreshRef.current();
+      if (cancelled) return;
+      timerId = setTimeout(pollOnce, capabilitiesTtlMs);
     };
-  }, [isVisible, resolvedTab, capabilities?.hasDocker, pollOnce, capabilitiesTtlMs]);
+
+    timerId = setTimeout(pollOnce, capabilitiesTtlMs);
+
+    return () => {
+      cancelled = true;
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [isVisible, resolvedTab, capabilities?.hasDocker, capabilitiesTtlMs]);
 
   const workspaceHostHeader = showWorkspaceHostHeader && sessionHost ? (
     <WorkspaceSidebarHostHeader
