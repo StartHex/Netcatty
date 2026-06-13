@@ -260,7 +260,8 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
     const term = focusSidebarSearch.trim().toLowerCase();
     if (!term) return workspaceSessions;
     return workspaceSessions.filter((session) => (
-      session.hostLabel?.toLowerCase().includes(term)
+      session.customName?.toLowerCase().includes(term)
+      || session.hostLabel?.toLowerCase().includes(term)
       || session.hostname?.toLowerCase().includes(term)
       || session.username?.toLowerCase().includes(term)
     ));

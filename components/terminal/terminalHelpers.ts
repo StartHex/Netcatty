@@ -180,6 +180,8 @@ export interface TerminalProps {
   onAddSelectionToAI?: (sessionId: string, selection: string) => void;
   /** Override display name for the pane title bar (customName || hostLabel) */
   sessionDisplayName?: string;
+  /** Open rename dialog for this session */
+  onRename?: () => void;
 }
 
 export function formatNetSpeed(bytesPerSec: number): string {

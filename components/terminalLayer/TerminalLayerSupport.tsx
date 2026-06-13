@@ -605,6 +605,7 @@ interface TerminalPaneProps {
   ) => void;
   onAddSelectionToAI?: (sessionId: string, selection: string) => void;
   showSelectionAIAction: boolean;
+  onStartSessionRename?: (sessionId: string) => void;
 }
 
 const getPaneThemePreviewId = (props: TerminalPaneProps): string | null => (
@@ -692,7 +693,8 @@ const terminalPanePropsAreEqual = (
   prev.onToggleWorkspaceComposeBar === next.onToggleWorkspaceComposeBar &&
   prev.onSnippetExecutorChange === next.onSnippetExecutorChange &&
   prev.onAddSelectionToAI === next.onAddSelectionToAI &&
-  prev.showSelectionAIAction === next.showSelectionAIAction
+  prev.showSelectionAIAction === next.showSelectionAIAction &&
+  prev.onStartSessionRename === next.onStartSessionRename
 );
 
 const TerminalPane: React.FC<TerminalPaneProps> = memo(({
@@ -751,6 +753,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   onSnippetExecutorChange,
   onAddSelectionToAI,
   showSelectionAIAction,
+  onStartSessionRename,
 }) => {
   const layoutSuppressActive = useTerminalLayoutSuppressActive();
   const deferPaneLayoutUpdate = isResizing || layoutSuppressActive;
@@ -863,6 +866,9 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
     }
     onOpenSystem?.();
   }, [activeWorkspaceId, isFocusMode, onOpenSystem, onSetWorkspaceFocusedSession, session.id]);
+  const handleRename = useCallback(() => {
+    onStartSessionRename?.(session.id);
+  }, [onStartSessionRename, session.id]);
   const handleTerminalFontSizeChange = useCallback((nextFontSize: number) => {
     onTerminalFontSizeChange?.(session.id, nextFontSize);
   }, [onTerminalFontSizeChange, session.id]);
@@ -942,6 +948,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         sessionDisplayName={session.customName}
         showSelectionAIAction={showSelectionAIAction}
         onAddSelectionToAI={onAddSelectionToAI}
+        onRename={handleRename}
       />
     </div>
   );
@@ -1066,6 +1073,7 @@ const terminalPanesHostPropsAreEqual = (
   if (prev.onToggleWorkspaceComposeBar !== next.onToggleWorkspaceComposeBar) return false;
   if (prev.onSnippetExecutorChange !== next.onSnippetExecutorChange) return false;
   if (prev.onAddSelectionToAI !== next.onAddSelectionToAI) return false;
+  if (prev.onStartSessionRename !== next.onStartSessionRename) return false;
 
   if (prev.workspaceRectsById === next.workspaceRectsById) return true;
 

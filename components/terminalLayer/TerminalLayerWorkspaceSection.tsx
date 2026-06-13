@@ -83,6 +83,7 @@ function TerminalLayerWorkspaceSectionInner({ ctx }: { ctx: WorkspaceContext }) 
     TerminalComposeBar,
     Array,
     cn,
+    onStartSessionRename,
   } = ctx;
 
   return (
@@ -180,6 +181,7 @@ function TerminalLayerWorkspaceSectionInner({ ctx }: { ctx: WorkspaceContext }) 
           onToggleWorkspaceComposeBar={handleToggleWorkspaceComposeBar}
           onSnippetExecutorChange={handleSnippetExecutorChange}
           onAddSelectionToAI={handleAddSelectionToAI}
+          onStartSessionRename={onStartSessionRename}
         />
         {!isFocusMode && activeResizers.map((handle: any) => {
           const isVertical = handle.direction === 'vertical';
