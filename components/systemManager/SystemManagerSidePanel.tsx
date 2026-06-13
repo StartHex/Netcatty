@@ -94,6 +94,7 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
     }
   }, [capabilitiesTtlMs]);
   React.useEffect(() => {
+    cancelledRef.current = false;
     if (!isVisible || resolvedTab !== 'docker' || capabilities?.hasDocker === true) return;
     dockerPollTimerRef.current = setTimeout(pollOnce, capabilitiesTtlMs);
     return () => {
