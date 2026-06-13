@@ -88,6 +88,8 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
   // the useEffect below is NOT re-run (which would cancel the timer and bypass the interval).
   const refreshRef = React.useRef(refreshCapabilities);
   refreshRef.current = refreshCapabilities;
+  const probingLiveRef = React.useRef(probing);
+  probingLiveRef.current = probing;
 
   // Auto-poll for Docker capabilities while Docker tab is active and Docker not yet detected.
   // Each effect generation gets its own cancelled flag and timerId via closure,
@@ -101,7 +103,7 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
 
     const pollOnce = async () => {
       if (cancelled) return;
-      if (probingRef.current || probing) {
+      if (probingRef.current || probingLiveRef.current) {
         // probe is in-flight, reschedule for next cycle
         timerId = setTimeout(pollOnce, capabilitiesTtlMs);
         return;

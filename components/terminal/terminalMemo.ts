@@ -72,4 +72,5 @@ export const terminalPropsAreEqual = (
   && prev.onBroadcastInput === next.onBroadcastInput
   && prev.onSnippetExecutorChange === next.onSnippetExecutorChange
   && prev.onAddSelectionToAI === next.onAddSelectionToAI
+  && prev.onRename === next.onRename
 );

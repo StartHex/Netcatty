@@ -214,17 +214,30 @@ export const useSessionState = () => {
   const renameSessionInline = useCallback((sessionId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, customName: trimmed } : s));
+    setSessions(prev => prev.map(s => (
+      s.id === sessionId ? { ...s, customName: trimmed, hostLabel: trimmed } : s
+    )));
   }, []);
 
-  const submitSessionRename = useCallback(() => {
+  const submitSessionRename = useCallback((sessionId?: string, name?: string) => {
+    if (sessionId !== undefined && name !== undefined) {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setSessions(prev => prev.map(s => (
+        s.id === sessionId ? { ...s, customName: trimmed, hostLabel: trimmed } : s
+      )));
+      return;
+    }
+
     setSessionRenameValue(prevValue => {
-      const name = prevValue.trim();
-      if (!name) return prevValue;
+      const trimmed = prevValue.trim();
+      if (!trimmed) return prevValue;
 
       setSessionRenameTarget(prevTarget => {
         if (!prevTarget) return prevTarget;
-        setSessions(prev => prev.map(s => s.id === prevTarget.id ? { ...s, customName: name } : s));
+        setSessions(prev => prev.map(s => (
+          s.id === prevTarget.id ? { ...s, customName: trimmed, hostLabel: trimmed } : s
+        )));
         return null;
       });
 

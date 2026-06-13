@@ -20,13 +20,7 @@ interface TerminalFocusSidebarProps {
   onRequestAddToWorkspace?: (workspaceId: string) => void;
   onSetWorkspaceFocusedSession?: (workspaceId: string, sessionId: string) => void;
   onToggleWorkspaceViewMode?: (workspaceId: string) => void;
-  onRenameSessionInline?: (sessionId: string, name: string) => void;
-  onStartSessionRename: (sessionId: string) => void;
-  onSubmitSessionRename: () => void;
-  onCancelSessionRename: () => void;
-  renamingSessionId: string | null;
-  sessionRenameValue: string;
-  setSessionRenameValue: (value: string) => void;
+  onSubmitSessionRename: (sessionId: string, name: string) => void;
   resolvedPreviewTheme: TerminalTheme;
   sessionHostsMap: Map<string, Host>;
   sessions: TerminalSession[];
@@ -209,13 +203,7 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
   onRequestAddToWorkspace,
   onSetWorkspaceFocusedSession,
   onToggleWorkspaceViewMode,
-  onRenameSessionInline,
-  onStartSessionRename,
   onSubmitSessionRename,
-  onCancelSessionRename,
-  renamingSessionId,
-  sessionRenameValue,
-  setSessionRenameValue,
   resolvedPreviewTheme,
   sessionHostsMap,
   sessions,
@@ -231,8 +219,8 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
     STORAGE_KEY_WORKSPACE_FOCUS_SIDEBAR_WIDTH, 224, { min: 160, max: 480 },
   );
 
-  const [localRenamingId, setLocalRenamingId] = useState<string | null>(null);
-  const [localRenameValue, setLocalRenameValue] = useState('');
+  const [sidebarRenameSessionId, setSidebarRenameSessionId] = useState<string | null>(null);
+  const [sidebarRenameValue, setSidebarRenameValue] = useState('');
 
   const theme = useMemo<FocusSidebarTheme>(() => {
     const termBg = resolvedPreviewTheme.colors.background;
@@ -405,24 +393,24 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
   const handleLocalStartRename = useCallback((sessionId: string) => {
     const session = sessions.find((s) => s.id === sessionId);
     if (!session) return;
-    setLocalRenamingId(sessionId);
-    setLocalRenameValue(session.customName || session.hostLabel || '');
+    setSidebarRenameSessionId(sessionId);
+    setSidebarRenameValue(session.customName || session.hostLabel || '');
   }, [sessions]);
 
   const handleLocalSubmitRename = useCallback((name: string) => {
-    if (!localRenamingId) return;
-    onRenameSessionInline?.(localRenamingId, name);
-    setLocalRenamingId(null);
-    setLocalRenameValue('');
-  }, [localRenamingId, onRenameSessionInline]);
+    if (!sidebarRenameSessionId) return;
+    onSubmitSessionRename(sidebarRenameSessionId, name);
+    setSidebarRenameSessionId(null);
+    setSidebarRenameValue('');
+  }, [sidebarRenameSessionId, onSubmitSessionRename]);
 
   const handleLocalCancelRename = useCallback(() => {
-    setLocalRenamingId(null);
-    setLocalRenameValue('');
+    setSidebarRenameSessionId(null);
+    setSidebarRenameValue('');
   }, []);
 
   const handleLocalRenameValueChange = useCallback((value: string) => {
-    setLocalRenameValue(value);
+    setSidebarRenameValue(value);
   }, []);
 
   return (
@@ -502,8 +490,8 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
               session={session}
               host={sessionHostsMap.get(session.id)}
               isSelected={session.id === focusedSessionId}
-              isRenaming={localRenamingId === session.id}
-              renameValue={localRenameValue}
+              isRenaming={sidebarRenameSessionId === session.id}
+              renameValue={sidebarRenameValue}
               onRenameValueChange={handleLocalRenameValueChange}
               onStartRename={handleLocalStartRename}
               onSubmitRename={handleLocalSubmitRename}
@@ -533,11 +521,7 @@ function terminalFocusSidebarPropsEqual(
   next: TerminalFocusSidebarProps,
 ): boolean {
   if (prev.focusedSessionId !== next.focusedSessionId) return false;
-  if (prev.renamingSessionId !== next.renamingSessionId) return false;
-  if (prev.sessionRenameValue !== next.sessionRenameValue) return false;
-  if (prev.onStartSessionRename !== next.onStartSessionRename) return false;
   if (prev.onSubmitSessionRename !== next.onSubmitSessionRename) return false;
-  if (prev.onCancelSessionRename !== next.onCancelSessionRename) return false;
   if (prev.resolvedPreviewTheme !== next.resolvedPreviewTheme) return false;
   if (prev.sessionHostsMap !== next.sessionHostsMap) return false;
   if (prev.sessions !== next.sessions) return false;
@@ -546,7 +530,6 @@ function terminalFocusSidebarPropsEqual(
   if (prev.onRequestAddToWorkspace !== next.onRequestAddToWorkspace) return false;
   if (prev.onSetWorkspaceFocusedSession !== next.onSetWorkspaceFocusedSession) return false;
   if (prev.onToggleWorkspaceViewMode !== next.onToggleWorkspaceViewMode) return false;
-  if (prev.onRenameSessionInline !== next.onRenameSessionInline) return false;
   const prevWs = prev.activeWorkspace;
   const nextWs = next.activeWorkspace;
   return (

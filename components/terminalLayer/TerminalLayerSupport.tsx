@@ -530,14 +530,9 @@ export interface TerminalLayerProps {
   showHostTreeSidebar?: boolean;
   toggleScriptsSidePanelRef?: React.MutableRefObject<(() => void) | null>;
   toggleSidePanelRef?: React.MutableRefObject<(() => void) | null>;
-  // Session rename state
-  renamingSessionId?: string | null;
-  sessionRenameValue?: string;
-  setSessionRenameValue?: (value: string) => void;
+  // Session rename
   onStartSessionRename?: (sessionId: string) => void;
-  onRenameSessionInline?: (sessionId: string, name: string) => void;
-  onSubmitSessionRename?: () => void;
-  onCancelSessionRename?: () => void;
+  onSubmitSessionRename?: (sessionId?: string, name?: string) => void;
 }
 
 interface TerminalPaneProps {
@@ -1014,6 +1009,7 @@ interface TerminalPanesHostProps {
     executor: SnippetExecutor | null,
   ) => void;
   onAddSelectionToAI?: (sessionId: string, selection: string) => void;
+  onStartSessionRename?: (sessionId: string) => void;
 }
 
 const terminalPanesHostPropsAreEqual = (
