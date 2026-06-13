@@ -102,7 +102,7 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
     const pollOnce = async () => {
       if (cancelled) return;
       if (probingRef.current) {
-        // probe 还在跑（如 tab-switch probe），等下一轮再试
+        // probe is in-flight, reschedule for next cycle
         timerId = setTimeout(pollOnce, capabilitiesTtlMs);
         return;
       }
@@ -110,7 +110,7 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
       try {
         await refreshRef.current();
       } catch {
-        // Transient error — keep polling next round
+        // Transient error - keep polling next round
       }
       probingRef.current = false;
       if (cancelled) return;
