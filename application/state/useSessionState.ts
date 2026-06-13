@@ -205,7 +205,7 @@ export const useSessionState = () => {
       const target = prevSessions.find(s => s.id === sessionId);
       if (target) {
         setSessionRenameTarget(target);
-        setSessionRenameValue(target.hostLabel);
+        setSessionRenameValue(target.customName || target.hostLabel);
       }
       return prevSessions;
     });
@@ -218,7 +218,7 @@ export const useSessionState = () => {
 
       setSessionRenameTarget(prevTarget => {
         if (!prevTarget) return prevTarget;
-        setSessions(prev => prev.map(s => s.id === prevTarget.id ? { ...s, hostLabel: name } : s));
+        setSessions(prev => prev.map(s => s.id === prevTarget.id ? { ...s, customName: name } : s));
         return null;
       });
 

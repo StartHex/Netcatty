@@ -555,7 +555,7 @@ export const SessionTopTab: React.FC<SessionTopTabProps> = memo(({
           )}
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <SessionTabIcon host={host} isActive={isActive} protocol={session.protocol} shellIcon={session.localShellIcon} />
-            <span className="truncate">{session.hostLabel}</span>
+            <span className="truncate">{session.customName || session.hostLabel}</span>
             <div className="flex-shrink-0">{sessionStatusDot(session.status, hasActivity)}</div>
           </div>
           <button

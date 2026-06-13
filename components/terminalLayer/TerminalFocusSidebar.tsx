@@ -1,4 +1,4 @@
-import { Circle, Columns2, Plus, Search, Server } from 'lucide-react';
+import { Circle, Columns2, Pencil, Plus, Search, Server } from 'lucide-react';
 import React, { memo, useCallback, useMemo, useState, type DragEvent, type MouseEvent } from 'react';
 
 import { useStoredNumber } from '../../application/state/useStoredNumber';
@@ -7,6 +7,7 @@ import { STORAGE_KEY_WORKSPACE_FOCUS_SIDEBAR_WIDTH } from '../../infrastructure/
 import { cn } from '../../lib/utils';
 import type { Host, TerminalSession, TerminalTheme, Workspace } from '../../types';
 import { DistroAvatar } from '../DistroAvatar';
+import { SessionInlineRenameInput } from '../terminal/SessionInlineRenameInput';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
@@ -19,6 +20,12 @@ interface TerminalFocusSidebarProps {
   onRequestAddToWorkspace?: (workspaceId: string) => void;
   onSetWorkspaceFocusedSession?: (workspaceId: string, sessionId: string) => void;
   onToggleWorkspaceViewMode?: (workspaceId: string) => void;
+  onStartSessionRename: (sessionId: string) => void;
+  onSubmitSessionRename: () => void;
+  onCancelSessionRename: () => void;
+  renamingSessionId: string | null;
+  sessionRenameValue: string;
+  setSessionRenameValue: (value: string) => void;
   resolvedPreviewTheme: TerminalTheme;
   sessionHostsMap: Map<string, Host>;
   sessions: TerminalSession[];
@@ -40,6 +47,12 @@ type WorkspaceFocusSessionRowProps = {
   session: TerminalSession;
   host: Host | undefined;
   isSelected: boolean;
+  isRenaming: boolean;
+  renameValue: string;
+  onRenameValueChange: (value: string) => void;
+  onStartRename: (sessionId: string) => void;
+  onSubmitRename: () => void;
+  onCancelRename: () => void;
   isDragging: boolean;
   dropPosition: 'before' | 'after' | null;
   theme: FocusSidebarTheme;
@@ -54,6 +67,12 @@ const WorkspaceFocusSessionRow = memo<WorkspaceFocusSessionRowProps>(({
   session,
   host,
   isSelected,
+  isRenaming,
+  renameValue,
+  onRenameValueChange,
+  onStartRename,
+  onSubmitRename,
+  onCancelRename,
   isDragging,
   dropPosition,
   theme,
@@ -136,12 +155,29 @@ const WorkspaceFocusSessionRow = memo<WorkspaceFocusSessionRowProps>(({
         />
       </div>
       <div className="flex h-6 flex-1 min-w-0 flex-col justify-center self-center text-left">
-        <div className={cn('truncate text-xs leading-none', isSelected ? 'font-semibold' : 'font-medium')}>
-          {session.hostLabel}
-        </div>
-        <div className="mt-0.5 truncate text-[10px] leading-none" style={{ color: mutedFg }}>
-          {session.username}@{session.hostname}
-        </div>
+        {isRenaming ? (
+          <SessionInlineRenameInput
+            initialName={renameValue}
+            onCommit={onSubmitRename}
+            onCancel={onCancelRename}
+            className="h-5 text-xs leading-none"
+          />
+        ) : (
+          <>
+            <div
+              className={cn('truncate text-xs leading-none', isSelected ? 'font-semibold' : 'font-medium')}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                onStartRename(session.id);
+              }}
+            >
+              {session.customName || session.hostLabel}
+            </div>
+            <div className="mt-0.5 truncate text-[10px] leading-none" style={{ color: mutedFg }}>
+              {session.username}@{session.hostname}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -149,10 +185,15 @@ const WorkspaceFocusSessionRow = memo<WorkspaceFocusSessionRowProps>(({
   prev.session === next.session
   && prev.host === next.host
   && prev.isSelected === next.isSelected
+  && prev.isRenaming === next.isRenaming
+  && prev.renameValue === next.renameValue
   && prev.isDragging === next.isDragging
   && prev.dropPosition === next.dropPosition
   && prev.theme === next.theme
   && prev.onSelect === next.onSelect
+  && prev.onStartRename === next.onStartRename
+  && prev.onSubmitRename === next.onSubmitRename
+  && prev.onCancelRename === next.onCancelRename
   && prev.onDragStart === next.onDragStart
   && prev.onDragOver === next.onDragOver
   && prev.onDrop === next.onDrop
@@ -167,6 +208,12 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
   onRequestAddToWorkspace,
   onSetWorkspaceFocusedSession,
   onToggleWorkspaceViewMode,
+  onStartSessionRename,
+  onSubmitSessionRename,
+  onCancelSessionRename,
+  renamingSessionId,
+  sessionRenameValue,
+  setSessionRenameValue,
   resolvedPreviewTheme,
   sessionHostsMap,
   sessions,
@@ -426,6 +473,12 @@ const TerminalFocusSidebarInner: React.FC<TerminalFocusSidebarProps> = ({
               session={session}
               host={sessionHostsMap.get(session.id)}
               isSelected={session.id === focusedSessionId}
+              isRenaming={renamingSessionId === session.id}
+              renameValue={sessionRenameValue}
+              onRenameValueChange={setSessionRenameValue}
+              onStartRename={onStartSessionRename}
+              onSubmitRename={onSubmitSessionRename}
+              onCancelRename={onCancelSessionRename}
               isDragging={focusSidebarDragSessionId === session.id}
               dropPosition={
                 focusSidebarDropIndicator?.sessionId === session.id
@@ -451,6 +504,11 @@ function terminalFocusSidebarPropsEqual(
   next: TerminalFocusSidebarProps,
 ): boolean {
   if (prev.focusedSessionId !== next.focusedSessionId) return false;
+  if (prev.renamingSessionId !== next.renamingSessionId) return false;
+  if (prev.sessionRenameValue !== next.sessionRenameValue) return false;
+  if (prev.onStartSessionRename !== next.onStartSessionRename) return false;
+  if (prev.onSubmitSessionRename !== next.onSubmitSessionRename) return false;
+  if (prev.onCancelSessionRename !== next.onCancelSessionRename) return false;
   if (prev.resolvedPreviewTheme !== next.resolvedPreviewTheme) return false;
   if (prev.sessionHostsMap !== next.sessionHostsMap) return false;
   if (prev.sessions !== next.sessions) return false;

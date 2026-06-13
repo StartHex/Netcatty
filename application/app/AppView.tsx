@@ -307,6 +307,12 @@ export function AppView({ ctx }: { ctx: AppViewContext }) {
           showHostTreeSidebar={settings.showHostTreeSidebar}
           toggleScriptsSidePanelRef={toggleScriptsSidePanelRef}
           toggleSidePanelRef={toggleSidePanelRef}
+          renamingSessionId={sessionRenameTarget?.id ?? null}
+          sessionRenameValue={sessionRenameValue}
+          setSessionRenameValue={setSessionRenameValue}
+          onStartSessionRename={startSessionRename}
+          onSubmitSessionRename={submitSessionRename}
+          onCancelSessionRename={resetSessionRename}
         />
 
         {/* Log Views - readonly terminal replays */}

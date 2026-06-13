@@ -338,5 +338,11 @@ export function terminalLayerFocusSidebarPropsEqual(prev: Ctx, next: Ctx): boole
     && eq(prev, next, 'onReorderWorkspaceSessions')
     && eq(prev, next, 'onRequestAddToWorkspace')
     && eq(prev, next, 'onSetWorkspaceFocusedSession')
-    && eq(prev, next, 'onToggleWorkspaceViewMode');
+    && eq(prev, next, 'onToggleWorkspaceViewMode')
+    && eq(prev, next, 'onStartSessionRename')
+    && eq(prev, next, 'onSubmitSessionRename')
+    && eq(prev, next, 'onCancelSessionRename')
+    && eq(prev, next, 'renamingSessionId')
+    && eq(prev, next, 'sessionRenameValue')
+    && eq(prev, next, 'setSessionRenameValue');
 }

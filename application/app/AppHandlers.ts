@@ -539,6 +539,35 @@ export function executeHotkeyActionImpl(getCtx: AppContextGetter, action: string
 
         break;
       }
+      case 'closeSession': {
+        const currentId = activeTabStore.getActiveTabId();
+        if (!currentId || currentId === 'vault' || currentId === 'sftp') break;
+        if (closeTabInFlightRef.current) break;
+
+        const session = sessions.find((s) => s.id === currentId) ?? null;
+        const workspace = workspaces.find((w) => w.id === currentId) ?? null;
+
+        closeTabInFlightRef.current = true;
+        (async () => {
+          try {
+            // If active tab is a workspace, close the focused session (pane)
+            if (workspace) {
+              const focusedId = workspace.focusedSessionId;
+              if (focusedId) {
+                const ok = await confirmIfBusyLocalTerminal([focusedId]);
+                if (ok) closeSession(focusedId);
+              }
+            } else if (session) {
+              // Standalone session tab — close the session
+              const ok = await confirmIfBusyLocalTerminal([session.id]);
+              if (ok) closeSession(session.id);
+            }
+          } finally {
+            closeTabInFlightRef.current = false;
+          }
+        })();
+        break;
+      }
       case 'newTab':
       case 'openLocal':
         // Add connection log for local terminal
@@ -641,6 +670,15 @@ export function executeHotkeyActionImpl(getCtx: AppContextGetter, action: string
             ? activeWs.focusedSessionId
             : liveIds[0];
           if (targetId) splitSessionWithCurrentShell(targetId, 'vertical');
+        }
+        break;
+      }
+      case 'togglePaneZoom': {
+        // Toggle workspace between split and focus (zoom) mode
+        const currentId = activeTabStore.getActiveTabId();
+        const activeWs = workspaces.find(w => w.id === currentId);
+        if (activeWs) {
+          toggleWorkspaceViewMode(activeWs.id);
         }
         break;
       }

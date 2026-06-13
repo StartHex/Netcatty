@@ -530,6 +530,13 @@ export interface TerminalLayerProps {
   showHostTreeSidebar?: boolean;
   toggleScriptsSidePanelRef?: React.MutableRefObject<(() => void) | null>;
   toggleSidePanelRef?: React.MutableRefObject<(() => void) | null>;
+  // Session rename state
+  renamingSessionId?: string | null;
+  sessionRenameValue?: string;
+  setSessionRenameValue?: (value: string) => void;
+  onStartSessionRename?: (sessionId: string) => void;
+  onSubmitSessionRename?: () => void;
+  onCancelSessionRename?: () => void;
 }
 
 interface TerminalPaneProps {
@@ -931,6 +938,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         sessionLog={sessionLog}
         sshDebugLogEnabled={sshDebugLogEnabled}
         sudoAutofillPassword={sudoAutofillPassword}
+        sessionDisplayName={session.customName}
         showSelectionAIAction={showSelectionAIAction}
         onAddSelectionToAI={onAddSelectionToAI}
       />

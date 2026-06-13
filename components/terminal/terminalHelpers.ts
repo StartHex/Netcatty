@@ -18,6 +18,14 @@ import type {
 export const MAX_CONNECTION_LOG_DATA_CHARS = 1_000_000;
 
 /**
+ * Get the display name for a terminal session.
+ * Uses customName if set, otherwise falls back to hostLabel.
+ */
+export function getSessionDisplayName(session: TerminalSession): string {
+  return session.customName || session.hostLabel || '';
+}
+
+/**
  * Extract unique root paths from drop entries for local terminal path insertion.
  * For nested files, extracts the root folder path; for single files, uses the full path.
  * Paths with spaces are quoted.
@@ -170,6 +178,8 @@ export interface TerminalProps {
   sudoAutofillPassword?: string;
   showSelectionAIAction?: boolean;
   onAddSelectionToAI?: (sessionId: string, selection: string) => void;
+  /** Override display name for the pane title bar (customName || hostLabel) */
+  sessionDisplayName?: string;
 }
 
 export function formatNetSpeed(bytesPerSec: number): string {
