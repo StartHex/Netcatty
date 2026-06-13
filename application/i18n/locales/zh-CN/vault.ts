@@ -304,6 +304,7 @@ export const zhCNVaultMessages: Messages = {
   'terminal.menu.splitVertical': '垂直分屏',
   'terminal.menu.clearBuffer': '清空缓冲区',
   'terminal.menu.closeTerminal': '关闭终端',
+  'terminal.menu.rename': '重命名',
   'terminal.ymodem.selectFile': '选择要发送的文件',
   'terminal.ymodem.allFiles': '所有文件',
   'terminal.ymodem.started': '正在通过 YMODEM 发送 {fileName}',

@@ -132,6 +132,7 @@ export const ruTerminalMessages: Messages = {
   'terminal.menu.splitVertical': 'Разделить по вертикали',
   'terminal.menu.clearBuffer': 'Очистить буфер',
   'terminal.menu.closeTerminal': 'Закрыть терминал',
+  'terminal.menu.rename': 'Переименовать',
   'terminal.ymodem.selectFile': 'Выберите файл для отправки',
   'terminal.ymodem.allFiles': 'Все файлы',
   'terminal.ymodem.started': 'YMODEM отправляет {fileName}',

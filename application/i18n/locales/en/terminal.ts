@@ -111,6 +111,7 @@ export const enTerminalMessages: Messages = {
   'terminal.menu.splitVertical': 'Split Vertical',
   'terminal.menu.clearBuffer': 'Clear Buffer',
   'terminal.menu.closeTerminal': 'Close terminal',
+  'terminal.menu.rename': 'Rename',
   'terminal.ymodem.selectFile': 'Select file to send',
   'terminal.ymodem.allFiles': 'All files',
   'terminal.ymodem.started': 'YMODEM sending {fileName}',
