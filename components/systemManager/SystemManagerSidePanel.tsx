@@ -78,12 +78,18 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
   // Auto-poll for Docker capabilities while Docker tab is active and Docker not yet detected.
   // Use setTimeout recursion so the next probe only starts after the previous one finishes,
   // avoiding overlapping probes (e.g. SSH timeout 8s vs user-configured interval 2s).
+  //
+  // Use a ref to store refreshCapabilities so that if its reference changes on every render,
+  // the useEffect below is NOT re-run (which would cancel the timer and bypass the interval).
+  const refreshRef = React.useRef(refreshCapabilities);
+  refreshRef.current = refreshCapabilities;
+
   const dockerPollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
     if (!isVisible || resolvedTab !== 'docker' || capabilities?.hasDocker === true) return;
     let cancelled = false;
     async function pollOnce() {
-      await refreshCapabilities();
+      await refreshRef.current();
       if (!cancelled) {
         dockerPollTimerRef.current = setTimeout(pollOnce, capabilitiesTtlMs);
       }
@@ -96,7 +102,7 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
         dockerPollTimerRef.current = null;
       }
     };
-  }, [isVisible, resolvedTab, capabilities?.hasDocker, refreshCapabilities, capabilitiesTtlMs]);
+  }, [isVisible, resolvedTab, capabilities?.hasDocker, refreshRef, capabilitiesTtlMs]);
 
   const workspaceHostHeader = showWorkspaceHostHeader && sessionHost ? (
     <WorkspaceSidebarHostHeader
