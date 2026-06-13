@@ -97,7 +97,11 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
 
     const pollOnce = async () => {
       if (cancelled) return;
-      await refreshRef.current();
+      try {
+        await refreshRef.current();
+      } catch {
+        // Transient error — keep polling next round
+      }
       if (cancelled) return;
       timerId = setTimeout(pollOnce, capabilitiesTtlMs);
     };
