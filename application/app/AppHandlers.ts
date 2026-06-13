@@ -552,7 +552,12 @@ export function executeHotkeyActionImpl(getCtx: AppContextGetter, action: string
           try {
             // If active tab is a workspace, close the focused session (pane)
             if (workspace) {
-              const focusedId = workspace.focusedSessionId;
+              // Validate focusedSessionId is still valid — it can become stale
+              // if the previously focused session was already closed
+              const aliveIds = collectSessionIds(workspace.root);
+              const focusedId = aliveIds.includes(workspace.focusedSessionId)
+                ? workspace.focusedSessionId
+                : aliveIds[0];
               if (focusedId) {
                 const ok = await confirmIfBusyLocalTerminal([focusedId]);
                 if (ok) closeSession(focusedId);
