@@ -5,6 +5,7 @@ import { useSystemManagerBackend } from '../../application/state/useSystemManage
 import type { TerminalSettings } from '../../domain/models';
 import type { Host } from '../../domain/models/connection';
 import type { SystemManagerSubTab } from '../../domain/systemManager/types';
+import { resolveCapabilityPanelState } from '../../domain/systemManagerPanelState';
 import { buildSystemManagerTabs } from '../../domain/systemManager/systemTarget';
 import type { Snippet, TerminalSession } from '../../types';
 import { cn } from '../../lib/utils';
@@ -52,7 +53,7 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
 
   const capabilitiesTtlMs = terminalSettings.systemManagerProcessRefreshInterval * 1000;
 
-  const { capabilities, probing, refreshCapabilities } = useSessionCapabilities(sessionId, isConnected, backend, isVisible, capabilitiesTtlMs);
+  const { capabilities, refreshCapabilities } = useSessionCapabilities(sessionId, isConnected, backend, isVisible, capabilitiesTtlMs);
 
   const availableTabs = useMemo(
     () => buildSystemManagerTabs(sessionHost, capabilities, session),
@@ -88,8 +89,6 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
   // the useEffect below is NOT re-run (which would cancel the timer and bypass the interval).
   const refreshRef = React.useRef(refreshCapabilities);
   refreshRef.current = refreshCapabilities;
-  const probingLiveRef = React.useRef(probing);
-  probingLiveRef.current = probing;
 
   // Auto-poll for Docker capabilities while Docker tab is active and Docker not yet detected.
   // Each effect generation gets its own cancelled flag and timerId via closure,
@@ -103,7 +102,7 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
 
     const pollOnce = async () => {
       if (cancelled) return;
-      if (probingRef.current || probingLiveRef.current) {
+      if (probingRef.current) {
         // probe is in-flight, reschedule for next cycle
         timerId = setTimeout(pollOnce, capabilitiesTtlMs);
         return;
@@ -160,10 +159,16 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
 
   const tmuxReady = capabilities?.hasTmux === true;
   const dockerReady = capabilities?.hasDocker === true;
-  const tmuxUnavailable = !probing && capabilities !== undefined && !tmuxReady;
-  const dockerUnavailable = !probing && capabilities !== undefined && !dockerReady;
-  const tmuxChecking = resolvedTab === 'tmux' && !tmuxReady && !tmuxUnavailable;
-  const dockerChecking = resolvedTab === 'docker' && !dockerReady && !dockerUnavailable;
+  const tmuxPanelState = resolveCapabilityPanelState({
+    isActive: resolvedTab === 'tmux',
+    ready: tmuxReady,
+    capabilitiesKnown: capabilities !== undefined,
+  });
+  const dockerPanelState = resolveCapabilityPanelState({
+    isActive: resolvedTab === 'docker',
+    ready: dockerReady,
+    capabilitiesKnown: capabilities !== undefined,
+  });
 
   return (
     <SystemPanelShell section="system-manager-panel">
@@ -196,15 +201,15 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
             refreshIntervalSec={terminalSettings.systemManagerProcessRefreshInterval}
           />
         </div>
-        {tmuxUnavailable && resolvedTab === 'tmux' ? (
+        {tmuxPanelState === 'unavailable' ? (
           <div className="flex-1 min-h-0">
             <SystemPanelEmpty icon={TerminalSquare} message={t('systemManager.tmux.unavailable')} />
           </div>
-        ) : tmuxChecking ? (
+        ) : tmuxPanelState === 'checking' ? (
           <div className="flex-1 min-h-0">
             <SystemPanelChecking message={t('systemManager.common.checkingAvailability')} />
           </div>
-        ) : tmuxReady ? (
+        ) : tmuxPanelState === 'ready' ? (
           <div className={cn('flex-1 min-h-0 flex flex-col', resolvedTab !== 'tmux' && 'hidden')}>
             <TmuxManagerTab
               sessionId={sessionId}
@@ -217,15 +222,15 @@ export const SystemManagerSidePanel = memo(function SystemManagerSidePanel({
             />
           </div>
         ) : null}
-        {dockerUnavailable && resolvedTab === 'docker' ? (
+        {dockerPanelState === 'unavailable' ? (
           <div className="flex-1 min-h-0">
             <SystemPanelEmpty icon={Box} message={t('systemManager.docker.unavailable')} />
           </div>
-        ) : dockerChecking ? (
+        ) : dockerPanelState === 'checking' ? (
           <div className="flex-1 min-h-0">
             <SystemPanelChecking message={t('systemManager.common.checkingAvailability')} />
           </div>
-        ) : dockerReady ? (
+        ) : dockerPanelState === 'ready' ? (
           <div className={cn('flex-1 min-h-0 flex flex-col', resolvedTab !== 'docker' && 'hidden')}>
             <DockerManagerTab
               sessionId={sessionId}
