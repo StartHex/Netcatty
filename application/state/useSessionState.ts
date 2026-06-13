@@ -907,6 +907,39 @@ export const useSessionState = () => {
     [getOrderedWorkTabs],
   );
 
+  const removeSessionFromWorkspace = useCallback((sessionId: string) => {
+    setSessions(prevSessions => {
+      const session = prevSessions.find(s => s.id === sessionId);
+      if (!session?.workspaceId) return prevSessions;
+
+      const wsId = session.workspaceId;
+      setWorkspaces(prevWorkspaces => {
+        const targetWs = prevWorkspaces.find(w => w.id === wsId);
+        if (!targetWs) return prevWorkspaces;
+
+        const pruned = pruneWorkspaceNode(targetWs.root, sessionId);
+        if (!pruned) {
+          // Workspace becomes empty - remove it
+          return prevWorkspaces.filter(w => w.id !== wsId);
+        }
+
+        const remaining = collectSessionIds(pruned);
+        if (remaining.length === 1) {
+          // Only 1 remains - dissolve workspace, convert remaining to orphan
+          setSessions(prev => prev.map(s =>
+            s.id === remaining[0] ? { ...s, workspaceId: undefined } : s
+          ));
+          return prevWorkspaces.filter(w => w.id !== wsId);
+        }
+
+        return prevWorkspaces.map(w => w.id === wsId ? { ...w, root: pruned, focusedSessionId: remaining[0] || w.focusedSessionId } : w);
+      });
+
+      setActiveTabId(sessionId);
+      return prevSessions.map(s => s.id === sessionId ? { ...s, workspaceId: undefined } : s);
+    });
+  }, [setActiveTabId]);
+
   const reorderTabs = useCallback((
     draggedId: string,
     targetId: string,
@@ -982,6 +1015,7 @@ export const useSessionState = () => {
     createWorkspaceFromTargets,
     createWorkspaceFromSessions,
     addSessionToWorkspace,
+    removeSessionFromWorkspace,
     appendHostToWorkspace,
     appendLocalTerminalToWorkspace,
     updateSplitSizes,

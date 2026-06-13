@@ -501,6 +501,7 @@ export interface TerminalLayerProps {
   onToggleWorkspaceViewMode?: (workspaceId: string) => void;
   onSetWorkspaceFocusedSession?: (workspaceId: string, sessionId: string) => void;
   onReorderWorkspaceSessions?: (workspaceId: string, draggedSessionId: string, targetSessionId: string, position: 'before' | 'after') => void;
+  onRemoveSessionFromWorkspace?: (sessionId: string) => void;
   onSplitSession?: (sessionId: string, direction: SplitDirection) => void;
   onConnectToHost: (host: Host) => void;
   onCreateLocalTerminal?: () => void;
@@ -601,6 +602,9 @@ interface TerminalPaneProps {
   onAddSelectionToAI?: (sessionId: string, selection: string) => void;
   showSelectionAIAction: boolean;
   onStartSessionRename?: (sessionId: string) => void;
+  onRemoveSessionFromWorkspace?: (sessionId: string) => void;
+  onStartSessionDrag?: (sessionId: string) => void;
+  onEndSessionDrag?: () => void;
 }
 
 const getPaneThemePreviewId = (props: TerminalPaneProps): string | null => (
@@ -689,7 +693,10 @@ const terminalPanePropsAreEqual = (
   prev.onSnippetExecutorChange === next.onSnippetExecutorChange &&
   prev.onAddSelectionToAI === next.onAddSelectionToAI &&
   prev.showSelectionAIAction === next.showSelectionAIAction &&
-  prev.onStartSessionRename === next.onStartSessionRename
+  prev.onStartSessionRename === next.onStartSessionRename &&
+  prev.onRemoveSessionFromWorkspace === next.onRemoveSessionFromWorkspace &&
+  prev.onStartSessionDrag === next.onStartSessionDrag &&
+  prev.onEndSessionDrag === next.onEndSessionDrag
 );
 
 const TerminalPane: React.FC<TerminalPaneProps> = memo(({
@@ -749,6 +756,9 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   onAddSelectionToAI,
   showSelectionAIAction,
   onStartSessionRename,
+  onRemoveSessionFromWorkspace,
+  onStartSessionDrag,
+  onEndSessionDrag,
 }) => {
   const layoutSuppressActive = useTerminalLayoutSuppressActive();
   const deferPaneLayoutUpdate = isResizing || layoutSuppressActive;
@@ -864,6 +874,18 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   const handleRename = useCallback(() => {
     onStartSessionRename?.(session.id);
   }, [onStartSessionRename, session.id]);
+  const handleDetach = useCallback(() => {
+    onRemoveSessionFromWorkspace?.(session.id);
+  }, [onRemoveSessionFromWorkspace, session.id]);
+  const handleDetachDragStart = useCallback((e: React.DragEvent) => {
+    if (!inActiveWorkspace) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('session-id', session.id);
+    onStartSessionDrag?.(session.id);
+  }, [inActiveWorkspace, onStartSessionDrag, session.id]);
+  const handleDetachDragEnd = useCallback(() => {
+    onEndSessionDrag?.();
+  }, [onEndSessionDrag]);
   const handleTerminalFontSizeChange = useCallback((nextFontSize: number) => {
     onTerminalFontSizeChange?.(session.id, nextFontSize);
   }, [onTerminalFontSizeChange, session.id]);
@@ -944,6 +966,11 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         showSelectionAIAction={showSelectionAIAction}
         onAddSelectionToAI={onAddSelectionToAI}
         onRename={handleRename}
+        onDetach={inActiveWorkspace ? handleDetach : undefined}
+        onStartSessionDrag={inActiveWorkspace ? onStartSessionDrag : undefined}
+        onEndSessionDrag={inActiveWorkspace ? onEndSessionDrag : undefined}
+        onDetachDragStart={inActiveWorkspace ? handleDetachDragStart : undefined}
+        onDetachDragEnd={inActiveWorkspace ? handleDetachDragEnd : undefined}
       />
     </div>
   );
@@ -1010,6 +1037,9 @@ interface TerminalPanesHostProps {
   ) => void;
   onAddSelectionToAI?: (sessionId: string, selection: string) => void;
   onStartSessionRename?: (sessionId: string) => void;
+  onRemoveSessionFromWorkspace?: (sessionId: string) => void;
+  onStartSessionDrag?: (sessionId: string) => void;
+  onEndSessionDrag?: () => void;
 }
 
 const terminalPanesHostPropsAreEqual = (
@@ -1070,6 +1100,9 @@ const terminalPanesHostPropsAreEqual = (
   if (prev.onSnippetExecutorChange !== next.onSnippetExecutorChange) return false;
   if (prev.onAddSelectionToAI !== next.onAddSelectionToAI) return false;
   if (prev.onStartSessionRename !== next.onStartSessionRename) return false;
+  if (prev.onRemoveSessionFromWorkspace !== next.onRemoveSessionFromWorkspace) return false;
+  if (prev.onStartSessionDrag !== next.onStartSessionDrag) return false;
+  if (prev.onEndSessionDrag !== next.onEndSessionDrag) return false;
 
   if (prev.workspaceRectsById === next.workspaceRectsById) return true;
 

@@ -4,6 +4,7 @@ import { fromEditorTabId, isEditorTabId, useActiveTabId } from '../application/s
 import { isHostTreeWorkTabSurface } from '../application/app/workTabSurface';
 import type { EditorTab } from '../application/state/editorTabStore';
 import { buildWorkspaceActivityMap } from '../application/state/sessionActivity';
+import { collectSessionIds } from '../domain/workspace';
 import { useSessionActivityMap } from '../application/state/sessionActivityStore';
 import {
   useTerminalHostTreeLayoutWidth,
@@ -109,6 +110,7 @@ interface TopTabsProps {
   onStartSessionDrag: (sessionId: string) => void;
   onEndSessionDrag: () => void;
   onReorderTabs: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
+  onRemoveSessionFromWorkspace: (sessionId: string) => void;
   showSftpTab: boolean;
   showHostTreeSidebar: boolean;
   editorTabs: readonly EditorTab[];
@@ -143,6 +145,7 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
   onStartSessionDrag,
   onEndSessionDrag,
   onReorderTabs,
+  onRemoveSessionFromWorkspace,
   showSftpTab,
   showHostTreeSidebar,
   editorTabs,
@@ -386,7 +389,7 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
 
   useLayoutEffect(() => {
     const syncGutter = () => updateHostTreeTabGutterRef.current();
-    syncGutter({ deferClose: true });
+    updateHostTreeTabGutterRef.current({ deferClose: true });
     const rafId = window.requestAnimationFrame(() => syncGutter());
     const settleTimer = window.setTimeout(syncGutter, 320);
     const root = tabsContainerRef.current?.closest('[data-top-tabs-root]') as HTMLElement | null;
@@ -463,6 +466,18 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
 
   const handleTabDrop = useCallback((e: React.DragEvent, targetTabId: string) => {
     e.preventDefault();
+    const draggedSessionId = e.dataTransfer.getData('session-id');
+    if (draggedSessionId) {
+      const draggedSession = sessions.find((s) => s.id === draggedSessionId);
+      if (draggedSession?.workspaceId) {
+        onRemoveSessionFromWorkspace(draggedSessionId);
+        setDropIndicator(null);
+        setIsDraggingForReorder(false);
+        onEndSessionDrag();
+        return;
+      }
+    }
+
     const draggedId = e.dataTransfer.getData('tab-reorder-id') || draggedTabIdRef.current;
 
     if (draggedId && draggedId !== targetTabId && dropIndicator) {
@@ -471,7 +486,19 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
 
     setDropIndicator(null);
     setIsDraggingForReorder(false);
-  }, [dropIndicator, onReorderTabs]);
+  }, [dropIndicator, onEndSessionDrag, onRemoveSessionFromWorkspace, onReorderTabs, sessions]);
+
+  const handleTabBarDrop = useCallback((e: React.DragEvent) => {
+    const draggedSessionId = e.dataTransfer.getData('session-id');
+    if (!draggedSessionId) return;
+    const draggedSession = sessions.find((s) => s.id === draggedSessionId);
+    if (!draggedSession?.workspaceId) return;
+    e.preventDefault();
+    onRemoveSessionFromWorkspace(draggedSessionId);
+    setDropIndicator(null);
+    setIsDraggingForReorder(false);
+    onEndSessionDrag();
+  }, [onEndSessionDrag, onRemoveSessionFromWorkspace, sessions]);
 
   const handleScrollableTabClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -682,6 +709,14 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
         const shiftStyle = tabShiftStyles[workspace.id] || emptyTabStyle;
         const showDropIndicatorBefore = dropIndicator?.tabId === workspace.id && dropIndicator.position === 'before';
         const showDropIndicatorAfter = dropIndicator?.tabId === workspace.id && dropIndicator.position === 'after';
+        const workspaceSessionIds = collectSessionIds(workspace.root);
+        const workspaceSessionLabels: Record<string, string> = {};
+        for (const sessionId of workspaceSessionIds) {
+          const wsSession = sessions.find((s) => s.id === sessionId);
+          if (wsSession) {
+            workspaceSessionLabels[sessionId] = wsSession.customName || wsSession.hostLabel;
+          }
+        }
 
         return (
           <WorkspaceTopTab
@@ -701,6 +736,8 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
             onTabDrop={handleTabDrop}
             onRenameWorkspace={onRenameWorkspace}
             onCloseWorkspace={onCloseWorkspace}
+            onDetachSessionFromWorkspace={(_workspaceId, sessionId) => onRemoveSessionFromWorkspace(sessionId)}
+            workspaceSessionLabels={workspaceSessionLabels}
             renderBulkCloseItems={renderBulkCloseItems}
             t={t}
             tabAnimationClass={getTabAnimationClass(workspace.id)}
@@ -801,12 +838,22 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
           style={dragRegionStyle}
           // Add container-level drag handlers to prevent indicator loss
           onDragOver={(e) => {
+            if (e.dataTransfer.types.includes('session-id')) {
+              const draggedSessionId = e.dataTransfer.getData('session-id');
+              const draggedSession = sessions.find((s) => s.id === draggedSessionId);
+              if (draggedSession?.workspaceId) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                return;
+              }
+            }
             // Keep drop indicator active while dragging over the container
             if (draggedTabIdRef.current && isDraggingForReorder && !dropIndicator) {
               e.preventDefault();
               e.dataTransfer.dropEffect = 'move';
             }
           }}
+          onDrop={handleTabBarDrop}
         >
           {hasHostTreeToggleSurface && (
             <div
@@ -871,6 +918,13 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
               className="flex items-end gap-0 overflow-x-auto scrollbar-none app-drag max-w-full"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               onClick={handleScrollableTabClick}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes('session-id')) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                }
+              }}
+              onDrop={handleTabBarDrop}
             >
               {renderOrderedTabs()}
               {/* Add new tab button - follows last tab when not overflowing */}

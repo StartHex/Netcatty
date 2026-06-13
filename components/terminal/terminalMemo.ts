@@ -73,4 +73,9 @@ export const terminalPropsAreEqual = (
   && prev.onSnippetExecutorChange === next.onSnippetExecutorChange
   && prev.onAddSelectionToAI === next.onAddSelectionToAI
   && prev.onRename === next.onRename
+  && prev.onDetach === next.onDetach
+  && prev.onStartSessionDrag === next.onStartSessionDrag
+  && prev.onEndSessionDrag === next.onEndSessionDrag
+  && prev.onDetachDragStart === next.onDetachDragStart
+  && prev.onDetachDragEnd === next.onDetachDragEnd
 );

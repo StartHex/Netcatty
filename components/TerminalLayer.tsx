@@ -153,6 +153,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   // Session rename props
   onStartSessionRename,
   onSubmitSessionRename,
+  onRemoveSessionFromWorkspace,
 }) => {
   const { t } = useI18n();
   const terminalRendererCwdBySessionRef = useRef<Map<string, string>>(new Map());
@@ -1147,6 +1148,9 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     onSetWorkspaceFocusedSession,
     onStartSessionRename,
     onSubmitSessionRename,
+    onRemoveSessionFromWorkspace,
+    onStartSessionDrag: onSetDraggingSessionId,
+    onEndSessionDrag: () => onSetDraggingSessionId(null),
     onSplitSession,
     onSplitSessionRef,
     onToggleBroadcastRef,

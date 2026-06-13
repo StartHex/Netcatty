@@ -1,3 +1,4 @@
+import type { DragEvent } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 
 import { logger } from "../../lib/logger";
@@ -182,6 +183,12 @@ export interface TerminalProps {
   sessionDisplayName?: string;
   /** Open rename dialog for this session */
   onRename?: () => void;
+  /** Detach this session from its workspace to a standalone tab */
+  onDetach?: () => void;
+  onStartSessionDrag?: (sessionId: string) => void;
+  onEndSessionDrag?: () => void;
+  onDetachDragStart?: (e: DragEvent) => void;
+  onDetachDragEnd?: (e: DragEvent) => void;
 }
 
 export function formatNetSpeed(bytesPerSec: number): string {

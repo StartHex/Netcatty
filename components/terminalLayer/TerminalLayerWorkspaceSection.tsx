@@ -84,6 +84,9 @@ function TerminalLayerWorkspaceSectionInner({ ctx }: { ctx: WorkspaceContext }) 
     Array,
     cn,
     onStartSessionRename,
+    onRemoveSessionFromWorkspace,
+    onStartSessionDrag,
+    onEndSessionDrag,
   } = ctx;
 
   return (
@@ -182,6 +185,9 @@ function TerminalLayerWorkspaceSectionInner({ ctx }: { ctx: WorkspaceContext }) 
           onSnippetExecutorChange={handleSnippetExecutorChange}
           onAddSelectionToAI={handleAddSelectionToAI}
           onStartSessionRename={onStartSessionRename}
+          onRemoveSessionFromWorkspace={onRemoveSessionFromWorkspace}
+          onStartSessionDrag={onStartSessionDrag}
+          onEndSessionDrag={onEndSessionDrag}
         />
         {!isFocusMode && activeResizers.map((handle: any) => {
           const isVertical = handle.direction === 'vertical';

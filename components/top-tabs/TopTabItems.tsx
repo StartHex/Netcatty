@@ -11,7 +11,7 @@ import { Host, TerminalSession, Workspace } from '../../types';
 import { DISTRO_LOGOS, DISTRO_COLORS } from '../DistroAvatar';
 import { getShellIconPath, isMonochromeShellIcon } from '../../lib/useDiscoveredShells';
 import { handleTabMiddleClickClose, handleTabMiddleMouseDown } from '../../lib/tabInteractions';
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '../ui/context-menu';
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '../ui/context-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 // File extensions that render the code-file icon instead of the plain text icon.
@@ -603,6 +603,8 @@ interface WorkspaceTopTabProps {
   onTabDrop: (e: React.DragEvent, targetTabId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
   onCloseWorkspace: (workspaceId: string) => void;
+  onDetachSessionFromWorkspace?: (workspaceId: string, sessionId: string) => void;
+  workspaceSessionLabels?: Record<string, string>;
   renderBulkCloseItems: RenderBulkCloseItems;
   t: TranslateFn;
   tabAnimationClass?: string;
@@ -624,6 +626,8 @@ export const WorkspaceTopTab: React.FC<WorkspaceTopTabProps> = memo(({
   onTabDrop,
   onRenameWorkspace,
   onCloseWorkspace,
+  onDetachSessionFromWorkspace,
+  workspaceSessionLabels,
   renderBulkCloseItems,
   t,
   tabAnimationClass,
@@ -715,6 +719,17 @@ export const WorkspaceTopTab: React.FC<WorkspaceTopTabProps> = memo(({
         <ContextMenuItem onClick={() => onRenameWorkspace(workspace.id)}>
           {t('common.rename')}
         </ContextMenuItem>
+        {onDetachSessionFromWorkspace && workspaceSessionLabels && Object.entries(workspaceSessionLabels).map(([sessionId, label]) => (
+          <ContextMenuItem
+            key={sessionId}
+            onClick={() => onDetachSessionFromWorkspace(workspace.id, sessionId)}
+          >
+            {t('terminal.menu.detachSession', { name: label })}
+          </ContextMenuItem>
+        ))}
+        {onDetachSessionFromWorkspace && workspaceSessionLabels && Object.keys(workspaceSessionLabels).length > 0 && (
+          <ContextMenuSeparator />
+        )}
         <ContextMenuItem className="text-destructive" onClick={() => onCloseWorkspace(workspace.id)}>
           {t('common.close')}
         </ContextMenuItem>
