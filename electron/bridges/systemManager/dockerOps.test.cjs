@@ -4,17 +4,44 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createDockerOpsApi } = require("./dockerOps.cjs");
 
-test("listContainers retries with sudo and saved session password after Docker socket permission denial", async () => {
+test("listContainers uses sudo first when a saved session password exists", async () => {
   const calls = [];
   const dockerOps = createDockerOpsApi({
     getSession: () => ({ systemManagerSudoPassword: "host-secret" }),
+    execOnSession: async (_event, sessionId, command, timeoutMs, execOptions) => {
+      calls.push({ sessionId, command, timeoutMs, execOptions });
+      return {
+        success: true,
+        stdout: '{"ID":"abc123","Names":"web","Image":"nginx","State":"running"}\n',
+        stderr: "",
+        code: 0,
+      };
+    },
+  });
+
+  const result = await dockerOps.listContainers(null, "s1");
+
+  assert.equal(result.success, true);
+  assert.equal(result.containers.length, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].command,
+    "sudo -S -p '' docker ps -a --format '{{json .}}'",
+  );
+  assert.deepEqual(calls[0].execOptions, { stdin: "host-secret\n" });
+});
+
+test("listContainers falls back to plain docker when sudo fails", async () => {
+  const calls = [];
+  const dockerOps = createDockerOpsApi({
+    getSession: () => ({ systemManagerSudoPassword: "wrong-secret" }),
     execOnSession: async (_event, sessionId, command, timeoutMs, execOptions) => {
       calls.push({ sessionId, command, timeoutMs, execOptions });
       if (calls.length === 1) {
         return {
           success: true,
           stdout: "",
-          stderr: "permission denied while trying to connect to the Docker daemon socket",
+          stderr: "Sorry, try again.",
           code: 1,
         };
       }
@@ -32,15 +59,16 @@ test("listContainers retries with sudo and saved session password after Docker s
   assert.equal(result.success, true);
   assert.equal(result.containers.length, 1);
   assert.equal(calls.length, 2);
-  assert.equal(calls[0].command, "docker ps -a --format '{{json .}}'");
   assert.equal(
-    calls[1].command,
+    calls[0].command,
     "sudo -S -p '' docker ps -a --format '{{json .}}'",
   );
-  assert.deepEqual(calls[1].execOptions, { stdin: "host-secret\n" });
+  assert.deepEqual(calls[0].execOptions, { stdin: "wrong-secret\n" });
+  assert.equal(calls[1].command, "docker ps -a --format '{{json .}}'");
+  assert.equal(calls[1].execOptions, undefined);
 });
 
-test("listContainers reports Docker permission denial without sudo retry when no saved password exists", async () => {
+test("listContainers uses plain docker when no saved password exists", async () => {
   const calls = [];
   const dockerOps = createDockerOpsApi({
     getSession: () => ({}),
@@ -87,7 +115,7 @@ test("listContainers does not retry with transport auth passwords that were not 
   assert.equal(calls.length, 1);
 });
 
-test("listContainers still retries with explicit sudo autofill password on mosh or et sessions", async () => {
+test("listContainers uses explicit sudo autofill password on mosh or et sessions", async () => {
   const calls = [];
   const dockerOps = createDockerOpsApi({
     getSession: () => ({
@@ -96,14 +124,6 @@ test("listContainers still retries with explicit sudo autofill password on mosh 
     }),
     execOnSession: async (_event, sessionId, command, timeoutMs, execOptions) => {
       calls.push({ sessionId, command, timeoutMs, execOptions });
-      if (calls.length === 1) {
-        return {
-          success: true,
-          stdout: "",
-          stderr: "permission denied while trying to connect to the Docker daemon socket",
-          code: 1,
-        };
-      }
       return {
         success: true,
         stdout: '{"ID":"abc123","Names":"web","Image":"nginx","State":"running"}\n',
@@ -116,24 +136,20 @@ test("listContainers still retries with explicit sudo autofill password on mosh 
   const result = await dockerOps.listContainers(null, "s1");
 
   assert.equal(result.success, true);
-  assert.equal(calls.length, 2);
-  assert.deepEqual(calls[1].execOptions, { stdin: "saved-secret\n" });
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].command,
+    "sudo -S -p '' docker ps -a --format '{{json .}}'",
+  );
+  assert.deepEqual(calls[0].execOptions, { stdin: "saved-secret\n" });
 });
 
-test("docker image actions retry with sudo and quote saved passwords safely", async () => {
+test("docker image actions use sudo first and send saved passwords through stdin", async () => {
   const calls = [];
   const dockerOps = createDockerOpsApi({
     getSession: () => ({ systemManagerSudoPassword: "pa'ss" }),
     execOnSession: async (_event, sessionId, command, timeoutMs, execOptions) => {
       calls.push({ sessionId, command, timeoutMs, execOptions });
-      if (calls.length === 1) {
-        return {
-          success: true,
-          stdout: "",
-          stderr: "dial unix /var/run/docker.sock: connect: permission denied",
-          code: 1,
-        };
-      }
       return { success: true, stdout: "deleted\n", stderr: "", code: 0 };
     },
   });
@@ -145,10 +161,10 @@ test("docker image actions retry with sudo and quote saved passwords safely", as
   });
 
   assert.equal(result.success, true);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   assert.equal(
-    calls[1].command,
+    calls[0].command,
     "sudo -S -p '' docker rmi sha256abc123",
   );
-  assert.deepEqual(calls[1].execOptions, { stdin: "pa'ss\n" });
+  assert.deepEqual(calls[0].execOptions, { stdin: "pa'ss\n" });
 });
