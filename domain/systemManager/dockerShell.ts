@@ -5,19 +5,34 @@ export function sanitizeDockerContainerId(id: string): string {
 
 const CLEAR_STARTUP_OUTPUT = "printf '\\033[H\\033[2J\\033[3J';";
 
+function shQuote(value: string): string {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
 function buildDockerCommandWithSudoFallback(containerId: string, dockerArgs: string): string {
   const plainCommand = `docker ${dockerArgs}`;
   const sudoCommand = `sudo ${plainCommand}`;
-  return [
+  const script = [
     CLEAR_STARTUP_OUTPUT,
     `_nc_docker_err=$(docker inspect ${containerId} 2>&1 >/dev/null);`,
     '_nc_docker_status=$?;',
     `if [ "$_nc_docker_status" -eq 0 ]; then exec ${plainCommand}; fi;`,
-    'case "$(printf \'%s\' "$_nc_docker_err" | tr \'[:upper:]\' \'[:lower:]\')" in',
-    `*permission\\ denied*docker*|*docker*permission\\ denied*|*docker.sock*) exec ${sudoCommand} ;;`,
+    '_nc_docker_lc=$(printf \'%s\' "$_nc_docker_err" | tr \'[:upper:]\' \'[:lower:]\');',
+    'case "$_nc_docker_lc" in',
+    [
+      '*permission\\ denied*docker\\ daemon*',
+      '*docker\\ daemon*permission\\ denied*',
+      '*permission\\ denied*docker.sock*',
+      '*docker.sock*permission\\ denied*',
+      '*permission\\ denied*/var/run/docker.sock*',
+      '*/var/run/docker.sock*permission\\ denied*',
+      '*permission\\ denied*connect\\ to\\ the\\ docker\\ daemon*',
+      '*connect\\ to\\ the\\ docker\\ daemon*permission\\ denied*',
+    ].join('|') + `) exec ${sudoCommand} ;;`,
     '*) printf \'%s\\n\' "$_nc_docker_err" >&2; exit "$_nc_docker_status" ;;',
     'esac',
   ].join(' ');
+  return `sh -c ${shQuote(script)}`;
 }
 
 /** Interactive shell into a container — prefer bash, fall back to sh. */
