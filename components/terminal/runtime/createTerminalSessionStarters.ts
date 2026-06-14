@@ -53,12 +53,12 @@ export const createTerminalSessionStarters = (ctx: TerminalSessionStartersContex
   };
 
   const resolveSavedSudoAutofillPassword = (): string | undefined => {
-    if (ctx.sudoAutofillPasswordRef) {
-      return sanitizeCredentialValue(ctx.sudoAutofillPasswordRef.current);
-    }
     const pendingAuth = ctx.pendingAuthRef.current;
     if (pendingAuth?.savedToHost && pendingAuth.password) {
       return sanitizeCredentialValue(pendingAuth.password);
+    }
+    if (ctx.sudoAutofillPasswordRef) {
+      return sanitizeCredentialValue(ctx.sudoAutofillPasswordRef.current);
     }
     return sanitizeCredentialValue(ctx.sudoAutofillPassword);
   };

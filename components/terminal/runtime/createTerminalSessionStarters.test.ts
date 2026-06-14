@@ -296,7 +296,7 @@ test("startSSH does not use unsaved retry passwords for sudo autofill", async ()
   assert.deepEqual(sent, []);
 });
 
-test("startSSH prefers latest sudo autofill password state over pending saved auth", async () => {
+test("startSSH uses pending saved auth for sudo autofill on the first saved connection", async () => {
   let onData: ((data: string) => void) | null = null;
   const sent: string[] = [];
   const terminalBackend = {
@@ -337,14 +337,15 @@ test("startSSH prefers latest sudo autofill password state over pending saved au
       },
     },
     terminalBackend,
-    sudoAutofillPasswordRef: { current: undefined },
+    sudoAutofillPasswordRef: { current: "stale-secret" },
   });
 
   await createTerminalSessionStarters(ctx as never).startSSH(createTermStub() as never);
   ctx.sudoAutofillRef.current?.armForCommand("sudo whoami");
   onData?.("[sudo] password for alice: ");
+  ctx.sudoAutofillRef.current?.confirmFill();
 
-  assert.deepEqual(sent, []);
+  assert.deepEqual(sent, ["pending-secret\n"]);
 });
 
 test("startSSH does not use merged group default passwords for sudo autofill", async () => {
