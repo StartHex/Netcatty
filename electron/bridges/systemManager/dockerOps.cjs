@@ -27,6 +27,15 @@ function dockerCommandError(result, fallback) {
   return (result?.stderr || result?.error || "").trim() || fallback;
 }
 
+function isDockerSocketPermissionError(result) {
+  const text = `${result?.stderr || ""}\n${result?.stdout || ""}\n${result?.error || ""}`.toLowerCase();
+  if (!text.includes("permission denied")) return false;
+  return text.includes("docker daemon")
+    || text.includes("docker.sock")
+    || text.includes("/var/run/docker.sock")
+    || text.includes("connect to the docker daemon");
+}
+
 function getSessionSudoPassword(session) {
   return typeof session?.systemManagerSudoPassword === "string" && session.systemManagerSudoPassword.length > 0
     ? session.systemManagerSudoPassword
@@ -157,9 +166,12 @@ function summarizeContainerInspect(info) {
 function createDockerOpsApi({ execOnSession, getSession }) {
   async function runDocker(event, sessionId, args, timeoutMs = 15000) {
     const cmd = buildDockerCommand(args);
+    const result = await execOnSession(event, sessionId, cmd, timeoutMs);
+    if (isSuccessfulCommandResult(result)) return result;
+
     const sudoPassword = getSessionSudoPassword(getSession?.(sessionId));
 
-    if (sudoPassword) {
+    if (sudoPassword && isDockerSocketPermissionError(result)) {
       const sudoResult = await execOnSession(
         event,
         sessionId,
@@ -168,10 +180,12 @@ function createDockerOpsApi({ execOnSession, getSession }) {
         { stdin: `${sudoPassword}\n` },
       );
       if (isSuccessfulCommandResult(sudoResult)) return sudoResult;
+      return {
+        success: false,
+        error: dockerCommandError(sudoResult, `sudo docker exited with code ${sudoResult?.code}`),
+        stderr: sudoResult?.stderr,
+      };
     }
-
-    const result = await execOnSession(event, sessionId, cmd, timeoutMs);
-    if (isSuccessfulCommandResult(result)) return result;
 
     if (!result.success) return result;
     if (result.code !== 0 && result.code !== null && result.code !== undefined) {
