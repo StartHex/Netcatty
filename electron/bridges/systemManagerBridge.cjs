@@ -111,10 +111,10 @@ function createSystemManagerBridge(deps) {
     ensureMoshStatsConnection,
   });
 
-  const { execOnSession, execOnLocalMachine, isLocalSession } = execApi;
+  const { execOnSession, execOnLocalMachine, isLocalSession, getSession } = execApi;
 
   const tmuxOps = createTmuxOpsApi({ execOnSession });
-  const dockerOps = createDockerOpsApi({ execOnSession });
+  const dockerOps = createDockerOpsApi({ execOnSession, getSession });
 
   async function probeCapabilities(event, payload) {
     const sessionId = payload?.sessionId;
