@@ -159,6 +159,18 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setSlashRange(null);
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Track previous value to detect empty transitions
+  const prevValueRef = useRef(value);
+  useEffect(() => {
+    if (prevValueRef.current.length > 0 && value.length === 0) {
+      // Input was just cleared to empty — ensure the textarea keeps focus
+      // so the blinking cursor remains visible. React's controlled-input
+      // reconciliation may lose the cursor when the value goes to empty
+      // during a batch of parent state updates (draft + panel view).
+      textareaRef.current?.focus();
+    }
+    prevValueRef.current = value;
+  }, [value]);
   const inputShellRef = useRef<HTMLDivElement>(null);
   const modelBtnRef = useRef<HTMLButtonElement>(null);
   const permBtnRef = useRef<HTMLButtonElement>(null);
