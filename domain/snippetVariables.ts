@@ -2,11 +2,15 @@
  * Parse and substitute {{variable}} / {{variable:default}} placeholders in snippet commands.
  */
 
-/** Non-global: safe to reuse; avoids lastIndex side effects across calls. */
-const VARIABLE_TOKEN = /\{\{([^}:]+)(?::([^}]*))?\}\}/;
+/** Non-global: safe to reuse; avoids lastIndex side effects across calls.
+ * Matches {{variable}} / {{variable:default}} placeholders.
+ * Excludes Go-template syntax like {{.Field}} or {{.}} (dot-prefixed names)
+ * so that commands like `docker inspect --format='{{.LogPath}}'` pass through
+ * without being treated as snippet variables. */
+const VARIABLE_TOKEN = /\{\{(?!\.)([^}:]+)(?::([^}]*))?\}\}/;
 
 function variablePattern(): RegExp {
-  return /\{\{([^}:]+)(?::([^}]*))?\}\}/g;
+  return /\{\{(?!\.)([^}:]+)(?::([^}]*))?\}\}/g;
 }
 
 export interface SnippetVariableDef {
