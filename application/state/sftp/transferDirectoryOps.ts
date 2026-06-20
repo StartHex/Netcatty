@@ -304,8 +304,8 @@ export function useSftpDirectoryTransferOps({
 
     // Process subdirectories sequentially to avoid unbounded concurrent SFTP
     // requests from nested Promise.all + worker pools across the tree.
-    // File-level concurrency within each directory is still governed by
-    // getTransferConcurrency().
+    // File-level concurrency within each directory is still governed by the
+    // shared SFTP transfer worker scheduler below.
     for (const dir of dirs) {
       if (cancelledTasksRef.current.has(task.id) || cancelledTasksRef.current.has(rootTaskId)) {
         throw new Error("Transfer cancelled");

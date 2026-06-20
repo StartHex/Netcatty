@@ -765,7 +765,7 @@ function createBridgeRegistrar(context) {
       console.log(`[Main]   Remote path: ${remotePath}`);
       console.log(`[Main]   File name: ${fileName}`);
       
-      const client = require("./bridges/sftpBridge.cjs");
+      const client = require("../bridges/sftpBridge.cjs");
       // Use tempDirBridge for dedicated Netcatty temp directory
       const localPath = await getTempDirBridge().getTempFilePath(fileName);
       
