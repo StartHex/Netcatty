@@ -198,6 +198,18 @@ export const shouldProbeSessionCwd = (opts: {
 }): boolean =>
   !opts.isNetworkDevice && !detectVendorFromSshVersion(opts.remoteSshVersion);
 
+export const shouldAllowRemotePathCompletion = (opts: {
+  protocol?: string;
+  deviceClass: DeviceClass;
+  isNetworkDevice: boolean;
+  remoteSshVersion?: string;
+}): boolean =>
+  opts.protocol === 'ssh' &&
+  opts.deviceClass === 'linux-like' &&
+  Boolean(opts.remoteSshVersion?.trim()) &&
+  !opts.isNetworkDevice &&
+  !detectVendorFromSshVersion(opts.remoteSshVersion);
+
 export const getEffectiveHostDistro = (
   host?: Pick<Host, 'distro' | 'manualDistro' | 'distroMode'> | null,
 ) => {

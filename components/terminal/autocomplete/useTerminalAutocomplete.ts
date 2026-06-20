@@ -114,6 +114,8 @@ interface UseTerminalAutocompleteOptions {
   onAcceptText?: (text: string) => void;
   /** Connection protocol for path completion routing */
   protocol?: string;
+  /** Whether remote path completion may open extra remote exec channels */
+  allowRemotePathCompletion?: boolean;
   /** Get current working directory (from OSC 7 or other source) */
   getCwd?: () => string | undefined;
   /** Custom snippets to surface at the command position */
@@ -140,7 +142,7 @@ export { getCommandToRecordOnEnter } from "./terminalAutocompletePrompt";
 export function useTerminalAutocomplete(
   options: UseTerminalAutocompleteOptions,
 ): TerminalAutocompleteHandle {
-  const { termRef, containerRef, sessionId, hostId, hostOs, settings: userSettings, onAcceptText, protocol, getCwd, snippets, onAcceptSnippet } = options;
+  const { termRef, containerRef, sessionId, hostId, hostOs, settings: userSettings, onAcceptText, protocol, allowRemotePathCompletion, getCwd, snippets, onAcceptSnippet } = options;
   const rawSettings: AutocompleteSettings = {
     ...DEFAULT_AUTOCOMPLETE_SETTINGS,
     ...userSettings,
@@ -174,6 +176,8 @@ export function useTerminalAutocomplete(
   sessionIdRef.current = sessionId;
   const protocolRef = useRef(protocol);
   protocolRef.current = protocol;
+  const allowRemotePathCompletionRef = useRef(allowRemotePathCompletion === true);
+  allowRemotePathCompletionRef.current = allowRemotePathCompletion === true;
   const getCwdRef = useRef(getCwd);
   getCwdRef.current = getCwd;
 
@@ -314,6 +318,9 @@ export function useTerminalAutocomplete(
 
   /** Fetch directory listing via IPC. */
   const fetchDirEntries = useCallback(async (dirPath: string): Promise<SubDirEntry[]> => {
+    if (protocolRef.current !== "local" && !allowRemotePathCompletionRef.current) {
+      return [];
+    }
     return listDirectoryEntries(dirPath, {
       sessionId: sessionIdRef.current,
       protocol: protocolRef.current,
@@ -640,6 +647,7 @@ export function useTerminalAutocomplete(
       sessionId: sessionIdRef.current,
       protocol: protocolRef.current,
       cwd,
+      allowRemotePathCompletion: allowRemotePathCompletionRef.current,
       snippets: snippetsRef.current,
     });
 

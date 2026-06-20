@@ -146,6 +146,38 @@ test("getCompletions does not treat generator-only spec args as path contexts", 
   assert.equal(completions.some((entry) => entry.source === "path"), false);
 });
 
+test("getCompletions skips remote path queries unless remote path completion is allowed", async () => {
+  recordCommand("cat previous.log", "host-1");
+  bridgeState.remoteEntriesByPath.set(".", [{ name: "private.log", type: "file" }]);
+
+  const completions = await getCompletions("cat ", {
+    hostId: "host-1",
+    os: "linux",
+    protocol: "ssh",
+    sessionId: "session-remote-disabled",
+  });
+
+  assert.deepEqual(bridgeState.remoteCalls, []);
+  assert.equal(completions.some((entry) => entry.source === "path"), false);
+  assert.equal(completions.some((entry) => entry.source === "history"), true);
+});
+
+test("getCompletions keeps remote path suggestions when remote path completion is allowed", async () => {
+  bridgeState.remoteEntriesByPath.set(".", [{ name: "private.log", type: "file" }]);
+
+  const completions = await getCompletions("cat pri", {
+    hostId: "host-1",
+    os: "linux",
+    protocol: "ssh",
+    sessionId: "session-remote-allowed",
+    allowRemotePathCompletion: true,
+  });
+
+  assert.deepEqual(bridgeState.remoteCalls, ["."]);
+  assert.equal(completions[0]?.source, "path");
+  assert.equal(completions[0]?.text, "cat private.log");
+});
+
 test("getCompletions uses the remote shell cwd for relative path arguments instead of stale home", async () => {
   bridgeState.remoteEntriesByPath.set("~", [{ name: "home-only.txt", type: "file" }]);
   bridgeState.remoteEntriesByPath.set(".", [{ name: "worktree.txt", type: "file" }]);
@@ -156,6 +188,7 @@ test("getCompletions uses the remote shell cwd for relative path arguments inste
     protocol: "ssh",
     sessionId: "session-1",
     cwd: "~",
+    allowRemotePathCompletion: true,
   });
 
   assert.deepEqual(bridgeState.remoteCalls, ["."]);
@@ -172,6 +205,7 @@ test("getCompletions does not reuse cached remote relative listings after cwd ch
     os: "linux",
     protocol: "ssh",
     sessionId: "session-1",
+    allowRemotePathCompletion: true,
   });
 
   bridgeState.remoteEntriesByPath.set(".", [{ name: "worktree.txt", type: "file" }]);
@@ -181,6 +215,7 @@ test("getCompletions does not reuse cached remote relative listings after cwd ch
     os: "linux",
     protocol: "ssh",
     sessionId: "session-1",
+    allowRemotePathCompletion: true,
   });
 
   assert.equal(bridgeState.remoteCalls.length, 2);

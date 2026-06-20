@@ -172,6 +172,8 @@ export async function getCompletions(
     protocol?: string;
     /** Current working directory (from OSC 7) */
     cwd?: string;
+    /** Whether this session is allowed to open extra remote exec channels for path listings */
+    allowRemotePathCompletion?: boolean;
     /** Custom snippets to surface at the command position */
     snippets?: Snippet[];
   } = {},
@@ -238,7 +240,9 @@ export async function getCompletions(
     }
   }
 
-  const canQueryPaths = options.protocol === "local" || options.sessionId !== undefined;
+  const canQueryPaths =
+    options.protocol === "local" ||
+    (options.sessionId !== undefined && options.allowRemotePathCompletion === true);
 
   const pathEntries = canQueryPaths && pathCheck.shouldComplete
     ? await getPathSuggestions(ctx, {

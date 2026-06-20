@@ -13,6 +13,7 @@ import {
   resolveTelnetPassword,
   resolveTelnetUsername,
   sanitizeHost,
+  shouldAllowRemotePathCompletion,
   shouldProbeSessionCwd,
   upsertHostById,
 } from "./host.ts";
@@ -310,6 +311,73 @@ test("shouldProbeSessionCwd skips the probe when the SSH banner reveals a networ
   );
   assert.equal(
     shouldProbeSessionCwd({ isNetworkDevice: false, remoteSshVersion: "SSH-1.99--" }),
+    false,
+  );
+});
+
+test("shouldAllowRemotePathCompletion allows only positively identified shell hosts", () => {
+  assert.equal(
+    shouldAllowRemotePathCompletion({
+      protocol: "ssh",
+      deviceClass: "linux-like",
+      isNetworkDevice: false,
+      remoteSshVersion: "OpenSSH_9.6",
+    }),
+    true,
+  );
+});
+
+test("shouldAllowRemotePathCompletion skips unknown remote SSH environments", () => {
+  assert.equal(
+    shouldAllowRemotePathCompletion({
+      protocol: "ssh",
+      deviceClass: "other",
+      isNetworkDevice: false,
+      remoteSshVersion: "OpenSSH_9.6",
+    }),
+    false,
+  );
+});
+
+test("shouldAllowRemotePathCompletion waits for a live SSH banner", () => {
+  assert.equal(
+    shouldAllowRemotePathCompletion({
+      protocol: "ssh",
+      deviceClass: "linux-like",
+      isNetworkDevice: false,
+    }),
+    false,
+  );
+});
+
+test("shouldAllowRemotePathCompletion skips a network-device SSH banner", () => {
+  assert.equal(
+    shouldAllowRemotePathCompletion({
+      protocol: "ssh",
+      deviceClass: "linux-like",
+      isNetworkDevice: false,
+      remoteSshVersion: "SSH-2.0-RGOS_SSH",
+    }),
+    false,
+  );
+});
+
+test("shouldAllowRemotePathCompletion skips network devices and non-SSH transports", () => {
+  assert.equal(
+    shouldAllowRemotePathCompletion({
+      protocol: "ssh",
+      deviceClass: "linux-like",
+      isNetworkDevice: true,
+      remoteSshVersion: "OpenSSH_9.6",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldAllowRemotePathCompletion({
+      protocol: "telnet",
+      deviceClass: "linux-like",
+      isNetworkDevice: false,
+    }),
     false,
   );
 });

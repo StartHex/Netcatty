@@ -21,6 +21,7 @@ interface TerminalAutocompleteProps {
   hostOs: "linux" | "windows" | "macos";
   settings?: Partial<AutocompleteSettings>;
   protocol?: string;
+  allowRemotePathCompletion?: boolean;
   getCwd?: () => string | undefined;
   onAcceptText: (text: string) => void;
   snippets?: Snippet[];
@@ -56,6 +57,7 @@ export function TerminalAutocomplete({
   hostOs,
   settings,
   protocol,
+  allowRemotePathCompletion,
   getCwd,
   onAcceptText,
   snippets,
@@ -84,6 +86,7 @@ export function TerminalAutocomplete({
     snippets,
     onAcceptSnippet,
     protocol,
+    allowRemotePathCompletion,
     getCwd,
   });
 
