@@ -67,6 +67,7 @@ import { DEFAULT_UI_FONT_ID } from '../../infrastructure/config/uiFonts';
 import { uiFontStore, useUIFontsLoaded } from './uiFontStore';
 import { localStorageAdapter } from '../../infrastructure/persistence/localStorageAdapter';
 import { netcattyBridge } from '../../infrastructure/services/netcattyBridge';
+import { resolveSftpTransferConcurrency } from './sftp/transferConcurrency';
 import {
   DEFAULT_ACCENT_MODE,
   DEFAULT_CUSTOM_ACCENT,
@@ -251,8 +252,9 @@ export const useSettingsState = () => {
     return stored ?? DEFAULT_DISABLE_TERMINAL_FONT_ZOOM;
   });
   const [sftpTransferConcurrency, setSftpTransferConcurrencyState] = useState<number>(() => {
-    const stored = localStorageAdapter.readNumber(STORAGE_KEY_SFTP_TRANSFER_CONCURRENCY);
-    return stored != null && stored >= 1 && stored <= 16 ? stored : 4;
+    return resolveSftpTransferConcurrency(() =>
+      localStorageAdapter.readNumber(STORAGE_KEY_SFTP_TRANSFER_CONCURRENCY),
+    );
   });
 
   // Editor Settings
