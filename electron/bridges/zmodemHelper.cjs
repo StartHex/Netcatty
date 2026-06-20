@@ -659,9 +659,17 @@ function withTimeout(promise, ms, message = "ZMODEM handshake timeout") {
   return Promise.race([
     Promise.resolve(promise),
     new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(message)), ms);
+      timer = setTimeout(() => {
+        const err = new Error(message);
+        err.code = "NETCATTY_ZMODEM_TIMEOUT";
+        reject(err);
+      }, ms);
     }),
   ]).finally(() => clearTimeout(timer));
+}
+
+function isZmodemTimeoutError(err) {
+  return err && err.code === "NETCATTY_ZMODEM_TIMEOUT";
 }
 
 /**
@@ -694,8 +702,10 @@ async function waitForUploadHandshake(promise, ms, message, opts) {
   try {
     return await withTimeout(promise, ms, message);
   } catch (err) {
-    try { opts.onUploadTimeout?.(); } catch { /* ignore */ }
-    abortRemoteProcess(opts.writeToRemote);
+    if (isZmodemTimeoutError(err)) {
+      try { opts.onUploadTimeout?.(); } catch { /* ignore */ }
+      abortRemoteProcess(opts.writeToRemote);
+    }
     throw err;
   }
 }

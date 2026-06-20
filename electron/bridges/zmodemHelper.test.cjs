@@ -325,6 +325,51 @@ test("handleUpload times out when the remote never confirms after progress reach
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test("handleUpload does not run timeout recovery when the remote rejects the final confirmation", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "netcatty-zmodem-"));
+  const filePath = path.join(tempDir, "upload.txt");
+  fs.writeFileSync(filePath, "payload");
+  const writes = [];
+  let timeoutNotified = false;
+
+  const zsession = {
+    async send_offer() {
+      return {
+        send() {},
+        async end() {
+          throw new Error("remote cancelled upload");
+        },
+      };
+    },
+    async close() {},
+  };
+
+  await assert.rejects(
+    handleUpload(zsession, {
+      sessionId: "session-1",
+      getWebContents: () => null,
+      writeToRemote: (buf) => {
+        writes.push(Buffer.from(buf));
+        return true;
+      },
+      takeDragDropUpload: () => ({
+        filePaths: [filePath],
+        remoteNames: ["upload.txt"],
+      }),
+      uploadFileEndTimeoutMs: 50,
+      uploadSessionCloseTimeoutMs: 50,
+      onUploadTimeout: () => {
+        timeoutNotified = true;
+      },
+    }),
+    /remote cancelled upload/,
+  );
+
+  assert.equal(timeoutNotified, false);
+  assert.equal(writes.length, 0);
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test("handleUpload allows a longer final wait after upload backpressure", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "netcatty-zmodem-"));
   const filePath = path.join(tempDir, "upload.txt");
