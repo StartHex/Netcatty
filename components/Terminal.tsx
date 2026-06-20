@@ -486,6 +486,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
   const allowRemotePathCompletion = shouldAllowRemotePathCompletion({
     protocol: host.protocol ?? "ssh",
     deviceClass: detectedDeviceClass,
+    hostOs: host.os,
     isNetworkDevice,
     remoteSshVersion: remotePathCompletionRemoteInfo?.sessionId === sessionRef.current
       ? remotePathCompletionRemoteInfo.remoteSshVersion
@@ -511,7 +512,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       status !== "connected" ||
       (host.protocol ?? "ssh") !== "ssh" ||
       isNetworkDevice ||
-      detectedDeviceClass !== "linux-like"
+      (detectedDeviceClass !== "linux-like" && host.os !== "linux" && host.os !== "macos")
     ) {
       return;
     }
@@ -534,7 +535,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [detectedDeviceClass, host.protocol, isNetworkDevice, sessionId, status, terminalBackend]);
+  }, [detectedDeviceClass, host.os, host.protocol, isNetworkDevice, sessionId, status, terminalBackend]);
 
   // Server stats (CPU, Memory, Disk) — only for Linux/macOS, never for
   // network devices. See isNetworkDevice above for why the gating uses the

@@ -327,6 +327,19 @@ test("shouldAllowRemotePathCompletion allows only positively identified shell ho
   );
 });
 
+test("shouldAllowRemotePathCompletion allows macOS SSH hosts after a live banner", () => {
+  assert.equal(
+    shouldAllowRemotePathCompletion({
+      protocol: "ssh",
+      deviceClass: "other",
+      hostOs: "macos",
+      isNetworkDevice: false,
+      remoteSshVersion: "OpenSSH_9.6",
+    }),
+    true,
+  );
+});
+
 test("shouldAllowRemotePathCompletion skips unknown remote SSH environments", () => {
   assert.equal(
     shouldAllowRemotePathCompletion({

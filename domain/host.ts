@@ -201,11 +201,12 @@ export const shouldProbeSessionCwd = (opts: {
 export const shouldAllowRemotePathCompletion = (opts: {
   protocol?: string;
   deviceClass: DeviceClass;
+  hostOs?: 'linux' | 'macos' | 'windows';
   isNetworkDevice: boolean;
   remoteSshVersion?: string;
 }): boolean =>
   opts.protocol === 'ssh' &&
-  opts.deviceClass === 'linux-like' &&
+  (opts.deviceClass === 'linux-like' || opts.hostOs === 'linux' || opts.hostOs === 'macos') &&
   Boolean(opts.remoteSshVersion?.trim()) &&
   !opts.isNetworkDevice &&
   !detectVendorFromSshVersion(opts.remoteSshVersion);
