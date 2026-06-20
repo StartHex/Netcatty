@@ -50,6 +50,21 @@ test("host-matched terminal session remains resumable when no terminal is displa
   );
 });
 
+test("host-mismatched terminal session is not resumable for the current terminal", () => {
+  const session = createSession("session-1", "terminal-closed", ["host-b"]);
+
+  assert.equal(
+    getSessionScopeMatchRank(
+      session,
+      "terminal",
+      "terminal-current",
+      ["host-a"],
+      new Set(),
+    ),
+    0,
+  );
+});
+
 test("ownership is tracked by session id, not scope.targetId", () => {
   // Session was created in terminal-A but a different terminal (B) is now
   // displaying it after the user resumed it from history. Opening a third

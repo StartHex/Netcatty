@@ -21,7 +21,7 @@ export function getSessionScopeMatchRank(
   }
 
   if (scopeType === "terminal" && scopeHostIds?.length && session.scope.hostIds?.length) {
-    return session.scope.hostIds.some((hostId) => scopeHostIds.includes(hostId)) ? 2 : 1;
+    return session.scope.hostIds.some((hostId) => scopeHostIds.includes(hostId)) ? 2 : 0;
   }
 
   return 1;
