@@ -32,6 +32,8 @@ import {
   STORAGE_KEY_SFTP_DEFAULT_VIEW_MODE,
   STORAGE_KEY_EDITOR_WORD_WRAP,
   STORAGE_KEY_SESSION_LOGS_ENABLED,
+  STORAGE_KEY_RESTORE_PREVIOUS_SESSION,
+  STORAGE_KEY_RESTORE_TERMINAL_CWD,
   STORAGE_KEY_SESSION_LOGS_DIR,
   STORAGE_KEY_SESSION_LOGS_FORMAT,
   STORAGE_KEY_SESSION_LOGS_TIMESTAMPS_ENABLED,
@@ -67,6 +69,7 @@ import { DEFAULT_UI_FONT_ID } from '../../infrastructure/config/uiFonts';
 import { uiFontStore, useUIFontsLoaded } from './uiFontStore';
 import { localStorageAdapter } from '../../infrastructure/persistence/localStorageAdapter';
 import { netcattyBridge } from '../../infrastructure/services/netcattyBridge';
+import { resolveSftpTransferConcurrency } from './sftp/transferConcurrency';
 import {
   DEFAULT_ACCENT_MODE,
   DEFAULT_CUSTOM_ACCENT,
@@ -108,13 +111,17 @@ import {
   readStoredString,
   serializeTerminalSettings,
 } from './settingsStateDefaults';
+import { resolveRestorePreviousSessionSetting, resolveRestoreTerminalCwdSetting } from './sessionRestoreSettings';
+import { sessionRestoreStorage } from './sessionRestoreStorage';
 import { useSettingsStorageSync } from './settingsStorageSync';
 import { useSettingsIpcSync } from './settingsIpcSync';
 import { resolveCurrentTerminalTheme } from './settingsTerminalTheme';
 import { useSystemSettingsEffects } from './systemSettingsEffects';
 import { applyCustomCssToDocument } from '../../lib/customCss';
 
-export const useSettingsState = () => {
+export const useSettingsState = (options: { enableSettingsSync?: boolean; enableSystemEffects?: boolean } = {}) => {
+  const enableSettingsSync = options.enableSettingsSync !== false;
+  const enableSystemEffects = options.enableSystemEffects !== false;
   const initialCustomKeyBindingsRecord =
     parseCustomKeyBindingsStorageRecord(localStorageAdapter.readString(STORAGE_KEY_CUSTOM_KEY_BINDINGS));
   const uiFontsLoaded = useUIFontsLoaded();
@@ -250,9 +257,18 @@ export const useSettingsState = () => {
     const stored = localStorageAdapter.readBoolean(STORAGE_KEY_DISABLE_TERMINAL_FONT_ZOOM);
     return stored ?? DEFAULT_DISABLE_TERMINAL_FONT_ZOOM;
   });
+  const [restorePreviousSession, setRestorePreviousSessionState] = useState<boolean>(() => {
+    const stored = localStorageAdapter.readBoolean(STORAGE_KEY_RESTORE_PREVIOUS_SESSION);
+    return resolveRestorePreviousSessionSetting(stored);
+  });
+  const [restoreTerminalCwd, setRestoreTerminalCwdState] = useState<boolean>(() => {
+    const stored = localStorageAdapter.readBoolean(STORAGE_KEY_RESTORE_TERMINAL_CWD);
+    return resolveRestoreTerminalCwdSetting(stored);
+  });
   const [sftpTransferConcurrency, setSftpTransferConcurrencyState] = useState<number>(() => {
-    const stored = localStorageAdapter.readNumber(STORAGE_KEY_SFTP_TRANSFER_CONCURRENCY);
-    return stored != null && stored >= 1 && stored <= 16 ? stored : 4;
+    return resolveSftpTransferConcurrency(() =>
+      localStorageAdapter.readNumber(STORAGE_KEY_SFTP_TRANSFER_CONCURRENCY),
+    );
   });
 
   // Editor Settings
@@ -413,12 +429,13 @@ export const useSettingsState = () => {
 
   // Helper to notify other windows about settings changes via IPC
   const notifySettingsChanged = useCallback((key: string, value: unknown) => {
+    if (!enableSettingsSync) return;
     try {
       netcattyBridge.get()?.notifySettingsChanged?.({ key, value });
     } catch {
       // ignore - bridge may not be available
     }
-  }, []);
+  }, [enableSettingsSync]);
 
 
   const setSftpTransferConcurrency = useCallback((value: number) => {
@@ -559,6 +576,10 @@ export const useSettingsState = () => {
     setShellOnlyTabNumberShortcutsState(storedShellOnlyTabNumberShortcuts ?? DEFAULT_SHELL_ONLY_TAB_NUMBER_SHORTCUTS);
     const storedDisableTerminalFontZoom = localStorageAdapter.readBoolean(STORAGE_KEY_DISABLE_TERMINAL_FONT_ZOOM);
     setDisableTerminalFontZoomState(storedDisableTerminalFontZoom ?? DEFAULT_DISABLE_TERMINAL_FONT_ZOOM);
+    const storedRestorePreviousSession = localStorageAdapter.readBoolean(STORAGE_KEY_RESTORE_PREVIOUS_SESSION);
+    setRestorePreviousSessionState(resolveRestorePreviousSessionSetting(storedRestorePreviousSession));
+    const storedRestoreTerminalCwd = localStorageAdapter.readBoolean(STORAGE_KEY_RESTORE_TERMINAL_CWD);
+    setRestoreTerminalCwdState(resolveRestoreTerminalCwdSetting(storedRestoreTerminalCwd));
 
     // Workspace focus style
     const storedFocusStyle = readStoredString(STORAGE_KEY_WORKSPACE_FOCUS_STYLE);
@@ -622,6 +643,7 @@ export const useSettingsState = () => {
   }, [uiFontFamilyId, uiFontsLoaded, notifySettingsChanged]);
 
   useSettingsIpcSync({
+    enabled: enableSettingsSync,
     syncAppearanceFromStorage,
     syncCustomCssFromStorage,
     setUiLanguage,
@@ -651,10 +673,13 @@ export const useSettingsState = () => {
     setWorkspaceFocusStyleState,
     setShowHostTreeSidebarState,
     setDisableTerminalFontZoomState,
+    setRestorePreviousSessionState,
+    setRestoreTerminalCwdState,
     setSftpTransferConcurrencyState,
   });
 
   useEffect(() => {
+    if (!enableSettingsSync) return;
     const bridge = netcattyBridge.get();
     if (!bridge?.onLanguageChanged) return;
     const unsubscribe = bridge.onLanguageChanged((language) => {
@@ -669,15 +694,16 @@ export const useSettingsState = () => {
         // ignore
       }
     };
-  }, []);
+  }, [enableSettingsSync]);
 
   useSettingsStorageSync({
+    enabled: enableSettingsSync,
     theme, lightUiThemeId, darkUiThemeId, accentMode, customAccent,
     customCSS, uiFontFamilyId, hotkeyScheme, uiLanguage,
     terminalThemeId, followAppTerminalTheme, terminalFontFamilyId, terminalFontSize,
     sftpDoubleClickBehavior, sftpAutoSync, sftpShowHiddenFiles,
     sftpUseCompressedUpload, sftpAutoOpenSidebar, sftpFollowTerminalCwd, sftpDefaultViewMode,
-    showRecentHosts, showOnlyUngroupedHostsInRoot, showSftpTab, showHostTreeSidebar, shellOnlyTabNumberShortcuts, disableTerminalFontZoom,
+    showRecentHosts, showOnlyUngroupedHostsInRoot, showSftpTab, showHostTreeSidebar, shellOnlyTabNumberShortcuts, disableTerminalFontZoom, restorePreviousSession, restoreTerminalCwd,
     editorWordWrap, sessionLogsEnabled, sessionLogsDir, sessionLogsFormat, sessionLogsTimestampsEnabled, sshDebugLogsEnabled,
     globalHotkeyEnabled, autoUpdateEnabled, windowOpacity,
     setTheme, setLightUiThemeId, setDarkUiThemeId, setAccentMode, setCustomAccent,
@@ -686,7 +712,7 @@ export const useSettingsState = () => {
     setFollowAppTerminalThemeState, setTerminalFontFamilyId, setTerminalFontSize,
     setSftpDoubleClickBehavior, setSftpAutoSync, setSftpShowHiddenFiles,
     setSftpUseCompressedUpload, setSftpAutoOpenSidebar, setSftpFollowTerminalCwd, setSftpDefaultViewMode,
-    setShowRecentHostsState, setShowOnlyUngroupedHostsInRootState, setShowSftpTabState, setShowHostTreeSidebarState, setShellOnlyTabNumberShortcutsState, setDisableTerminalFontZoomState,
+    setShowRecentHostsState, setShowOnlyUngroupedHostsInRootState, setShowSftpTabState, setShowHostTreeSidebarState, setShellOnlyTabNumberShortcutsState, setDisableTerminalFontZoomState, setRestorePreviousSessionState, setRestoreTerminalCwdState,
     setEditorWordWrapState, setSessionLogsEnabled, setSessionLogsDir, setSessionLogsFormat, setSessionLogsTimestampsEnabled, setSshDebugLogsEnabled,
     setGlobalHotkeyEnabled, setWindowOpacity, setAutoUpdateEnabled, setWorkspaceFocusStyleState,
     setSftpTransferConcurrencyState, applyIncomingCustomKeyBindings, mergeIncomingTerminalSettings,
@@ -814,6 +840,23 @@ export const useSettingsState = () => {
     notifySettingsChanged(STORAGE_KEY_DISABLE_TERMINAL_FONT_ZOOM, enabled);
   }, [notifySettingsChanged]);
 
+  const setRestorePreviousSession = useCallback((enabled: boolean) => {
+    setRestorePreviousSessionState(enabled);
+    localStorageAdapter.writeBoolean(STORAGE_KEY_RESTORE_PREVIOUS_SESSION, enabled);
+    if (!enabled) {
+      sessionRestoreStorage.clear();
+    }
+    if (!persistMountedRef.current) return;
+    notifySettingsChanged(STORAGE_KEY_RESTORE_PREVIOUS_SESSION, enabled);
+  }, [notifySettingsChanged]);
+
+  const setRestoreTerminalCwd = useCallback((enabled: boolean) => {
+    setRestoreTerminalCwdState(enabled);
+    localStorageAdapter.writeBoolean(STORAGE_KEY_RESTORE_TERMINAL_CWD, enabled);
+    if (!persistMountedRef.current) return;
+    notifySettingsChanged(STORAGE_KEY_RESTORE_TERMINAL_CWD, enabled);
+  }, [notifySettingsChanged]);
+
   // Apply and persist custom CSS
   useEffect(() => {
     applyCustomCssToDocument(customCSS);
@@ -904,6 +947,7 @@ export const useSettingsState = () => {
   }, [sshDebugLogsEnabled, notifySettingsChanged]);
 
   useSystemSettingsEffects({
+    enabled: enableSystemEffects,
     toggleWindowHotkey,
     globalHotkeyEnabled,
     closeToTray,
@@ -1056,6 +1100,10 @@ export const useSettingsState = () => {
     setShellOnlyTabNumberShortcuts,
     disableTerminalFontZoom,
     setDisableTerminalFontZoom,
+    restorePreviousSession,
+    setRestorePreviousSession,
+    restoreTerminalCwd,
+    setRestoreTerminalCwd,
     sftpTransferConcurrency,
     setSftpTransferConcurrency,
     // Editor Settings
