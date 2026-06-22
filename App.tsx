@@ -38,7 +38,7 @@ import { resolveCloseIntent } from './application/state/resolveCloseIntent';
 import { resolveSnippetsShortcutIntent } from './application/state/resolveSnippetsShortcutIntent';
 import { resolveWindowCommandCloseIntent } from './application/state/windowCommandClose';
 import { TERMINAL_THEMES } from './infrastructure/config/terminalThemes';
-import { useCustomThemes } from './application/state/customThemeStore';
+import { customThemeStore, useCustomThemes } from './application/state/customThemeStore';
 import type { SyncPayload } from './domain/sync';
 import { applySyncPayload, buildLocalVaultPayload, hasMeaningfulSyncData } from './application/syncPayload';
 import {
@@ -997,7 +997,7 @@ function App({ settings }: { settings: SettingsState }) {
   const handleToggleTheme = useCallback(() => { return handleToggleThemeImpl(() => ({ openSettingsWindow, resolvedTheme, setTheme, t, theme, toast })); }, [openSettingsWindow, resolvedTheme, setTheme, t, theme]);
 
   const handleFollowAppTerminalThemeChange = useCallback((themeId: string) => {
-    const selectedTheme = themeById.get(themeId);
+    const selectedTheme = customThemeStore.getThemeById(themeId);
     if (!selectedTheme) return;
     const update = getFollowAppTerminalThemeSelectionUpdate(selectedTheme);
     if (update.terminalThemeDarkId) {
@@ -1007,7 +1007,7 @@ function App({ settings }: { settings: SettingsState }) {
       setTerminalThemeLightId(update.terminalThemeLightId);
     }
     setTheme(update.appTheme);
-  }, [setTerminalThemeDarkId, setTerminalThemeLightId, setTheme, themeById]);
+  }, [setTerminalThemeDarkId, setTerminalThemeLightId, setTheme]);
 
   const handleOpenQuickSwitcher = useCallback(() => {
     setIsQuickSwitcherOpen(true);
