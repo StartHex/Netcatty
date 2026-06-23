@@ -50,6 +50,7 @@ const OUTPUT_SIGNATURES: readonly OutputSignature[] = [
 ] as const;
 
 const OUTPUT_SCAN_BUFFER_LIMIT = 8192;
+const OUTPUT_SCAN_BYTE_LIMIT = 16384;
 
 export function inferCodingCliProviderFromOutput(text: string): CodingCliProviderId | undefined {
   const normalized = stripTerminalControlSequences(text);
@@ -67,22 +68,37 @@ export function inferCodingCliProviderFromOutput(text: string): CodingCliProvide
 export type CodingCliOutputScanner = {
   feed: (chunk: string) => CodingCliProviderId | undefined;
   reset: () => void;
+  isExhausted: () => boolean;
 };
 
 /** Rolling buffer scanner for live terminal output chunks. */
 export function createCodingCliOutputScanner(): CodingCliOutputScanner {
   let buffer = '';
+  let bytesFed = 0;
+  let exhausted = false;
 
   const feed = (chunk: string): CodingCliProviderId | undefined => {
-    if (!chunk) return undefined;
+    if (!chunk || exhausted) return undefined;
 
+    bytesFed += chunk.length;
     buffer = `${buffer}${stripTerminalControlSequences(chunk)}`.slice(-OUTPUT_SCAN_BUFFER_LIMIT);
-    return inferCodingCliProviderFromOutput(buffer);
+    const providerId = inferCodingCliProviderFromOutput(buffer);
+    if (providerId) return providerId;
+
+    if (bytesFed >= OUTPUT_SCAN_BYTE_LIMIT) {
+      exhausted = true;
+    }
+
+    return undefined;
   };
 
   const reset = () => {
     buffer = '';
+    bytesFed = 0;
+    exhausted = false;
   };
 
-  return { feed, reset };
+  const isExhausted = () => exhausted;
+
+  return { feed, reset, isExhausted };
 }

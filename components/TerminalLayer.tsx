@@ -223,6 +223,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   }, [onUpdateSessionRestoreCwd]);
 
   const codingCliOutputScannersRef = useRef<Map<string, CodingCliOutputScanner>>(new Map());
+  const codingCliOutputScanDisabledRef = useRef<Set<string>>(new Set());
 
   const applySessionCodingCliProvider = useCallback((
     sessionId: string,
@@ -240,6 +241,8 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     const provider = matchCodingCliProviderFromCommand(commandLine);
     if (provider) {
       codingCliOutputScannersRef.current.delete(sessionId);
+      codingCliOutputScanDisabledRef.current.delete(sessionId);
+      codingCliOutputScanDisabledRef.current.delete(sessionId);
       applySessionCodingCliProvider(sessionId, provider.id);
     }
   }, [applySessionCodingCliProvider]);
@@ -256,10 +259,6 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
 
     const trimmedTitle = title?.trim();
     if (!trimmedTitle) {
-      if (session.codingCliProviderId) {
-        codingCliOutputScannersRef.current.delete(sessionId);
-        onUpdateSessionCodingCliProvider?.(sessionId, null);
-      }
       return;
     }
 
@@ -267,6 +266,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     if (providerId) {
       if (!session.codingCliProviderId || session.codingCliProviderId !== providerId) {
         codingCliOutputScannersRef.current.delete(sessionId);
+      codingCliOutputScanDisabledRef.current.delete(sessionId);
         applySessionCodingCliProvider(sessionId, providerId);
       }
       return;
@@ -277,12 +277,13 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
       && shouldClearCodingCliProviderForTitle(trimmedTitle, session.codingCliProviderId)
     ) {
       codingCliOutputScannersRef.current.delete(sessionId);
+      codingCliOutputScanDisabledRef.current.delete(sessionId);
       onUpdateSessionCodingCliProvider?.(sessionId, null);
     }
   }, [applySessionCodingCliProvider, onUpdateSessionCodingCliProvider, onUpdateSessionDynamicTitle]);
 
   const handleTerminalOutput = useCallback((sessionId: string, chunk: string) => {
-    if (!chunk) return;
+    if (!chunk || codingCliOutputScanDisabledRef.current.has(sessionId)) return;
 
     const session = sessionsRef.current.find((candidate) => candidate.id === sessionId);
     if (session?.codingCliProviderId) return;
@@ -296,6 +297,13 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     const providerId = scanner.feed(chunk);
     if (providerId) {
       applySessionCodingCliProvider(sessionId, providerId);
+      return;
+    }
+
+    if (scanner.isExhausted()) {
+      codingCliOutputScannersRef.current.delete(sessionId);
+      codingCliOutputScanDisabledRef.current.delete(sessionId);
+      codingCliOutputScanDisabledRef.current.add(sessionId);
     }
   }, [applySessionCodingCliProvider]);
 
@@ -309,6 +317,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   // Stable callback references for Terminal components
   const handleCloseSession = useCallback((sessionId: string) => {
     codingCliOutputScannersRef.current.delete(sessionId);
+    codingCliOutputScanDisabledRef.current.delete(sessionId);
     sessionCapabilitiesStore.delete(sessionId);
     onCloseSession(sessionId);
   }, [onCloseSession]);
