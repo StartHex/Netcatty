@@ -51,7 +51,13 @@ import { canSendWithAgent, findEnabledExternalAgent } from './ai/agentSendEligib
 import { clearAllPendingApprovals } from '../infrastructure/ai/shared/approvalGate';
 import { useConversationExport } from './ai/hooks/useConversationExport';
 import type { AIChatSidePanelProps } from './AIChatSidePanel.types';
-import { generateId, modelPresetsContainId, shouldLoadSdkRuntimeModels } from './AIChatSidePanelHelpers';
+import {
+  generateId,
+  normalizeSdkRuntimeModelPresets,
+  shouldAdoptSdkCurrentModel,
+  shouldLoadSdkRuntimeModels,
+  shouldUseStoredAgentModel,
+} from './AIChatSidePanelHelpers';
 import { AIChatPanelContent } from './AIChatPanelContent';
 import {
   getAIPanelProfilerProps,
@@ -664,21 +670,24 @@ const AIChatSidePanelActive: React.FC<AIChatSidePanelProps> = ({
       getManualAgentCommand(currentAgentConfig),
     ).then((result) => {
       if (cancelled || !result?.ok || !Array.isArray(result.models)) return;
-      if (result.models.length === 0) {
+      const runtimePresets = normalizeSdkRuntimeModelPresets(result.models, result.currentModelId);
+      const storedModelId = agentModelMapRef.current[currentAgentId];
+      if (runtimePresets.length === 0) {
         setRuntimeAgentModelPresets((prev) => {
           if (!(currentAgentId in prev)) return prev;
           const { [currentAgentId]: _removed, ...rest } = prev;
           return rest;
         });
+        if (shouldAdoptSdkCurrentModel(result.currentModelId, storedModelId, runtimePresets)) {
+          setAgentModel(currentAgentId, result.currentModelId!);
+        }
         return;
       }
-      const runtimePresets = result.models ?? [];
       setRuntimeAgentModelPresets((prev) => ({
         ...prev,
         [currentAgentId]: runtimePresets,
       }));
-      const storedModelId = agentModelMapRef.current[currentAgentId];
-      if (result.currentModelId && (!storedModelId || !modelPresetsContainId(runtimePresets, storedModelId))) {
+      if (shouldAdoptSdkCurrentModel(result.currentModelId, storedModelId, runtimePresets)) {
         setAgentModel(currentAgentId, result.currentModelId);
       }
     }).catch((err) => {
@@ -710,7 +719,9 @@ const AIChatSidePanelActive: React.FC<AIChatSidePanelProps> = ({
 
   const selectedAgentModel = useMemo(() => {
     const stored = agentModelMap[currentAgentId];
-    if (stored && modelPresetsContainId(agentModelPresets, stored)) {
+    if (shouldUseStoredAgentModel(stored, agentModelPresets, currentAgentConfig, {
+      runtimeModelsLoaded: currentAgentId in runtimeAgentModelPresets,
+    })) {
       return stored;
     }
     if (agentModelPresets.length > 0) {
@@ -721,7 +732,7 @@ const AIChatSidePanelActive: React.FC<AIChatSidePanelProps> = ({
       return first.id;
     }
     return undefined;
-  }, [currentAgentId, agentModelMap, agentModelPresets]);
+  }, [currentAgentConfig, currentAgentId, agentModelMap, agentModelPresets, runtimeAgentModelPresets]);
 
   const inputAgentId = activeSession?.agentId ?? currentDraft?.agentId ?? currentAgentId;
   const canSendCurrentAgent = useMemo(
