@@ -265,7 +265,8 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
 
     const providerId = inferCodingCliProviderFromTitleSignals(trimmedTitle);
     if (providerId) {
-      if (!session.codingCliProviderId) {
+      if (!session.codingCliProviderId || session.codingCliProviderId !== providerId) {
+        codingCliOutputScannersRef.current.delete(sessionId);
         applySessionCodingCliProvider(sessionId, providerId);
       }
       return;
