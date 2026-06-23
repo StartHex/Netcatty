@@ -154,6 +154,7 @@ const TerminalComponent: React.FC<TerminalProps> = ({
   onTerminalCwdChange,
   onTerminalTitleChange,
   onTerminalBell,
+  onTerminalOutput,
   onOpenScripts,
   onOpenHistory,
   onOpenTheme,
@@ -820,9 +821,13 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       onSessionExit?.(closedSessionId, evt);
     },
     onTerminalDataCapture: handleTerminalDataCaptureOnce,
+    onTerminalOutput: onTerminalOutput
+      ? (chunk: string) => onTerminalOutput(sessionId, chunk)
+      : undefined,
     onTerminalLogData: captureTerminalLogData,
     onOsDetected,
     onCommandExecuted,
+    onCommandSubmitted,
     sessionLog,
     sshDebugLogEnabled,
     sudoAutofillPassword,

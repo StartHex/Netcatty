@@ -54,6 +54,16 @@ test('resolveSessionTabTitle honors disableDynamicTabTitle host setting', () => 
   );
 });
 
+test('resolveSessionTabTitle strips agent spinner prefixes from dynamic titles', () => {
+  assert.equal(
+    resolveSessionTabTitle(
+      { hostLabel: 'web-01', dynamicTitle: '⠋ Droid' },
+      undefined,
+    ),
+    'Droid',
+  );
+});
+
 test('isDynamicTabTitleDisabled is false unless explicitly enabled', () => {
   assert.equal(isDynamicTabTitleDisabled(undefined), false);
   assert.equal(isDynamicTabTitleDisabled({}), false);

@@ -1,4 +1,5 @@
 import type { Host, TerminalSession } from '../types';
+import { normalizeCodingCliTitle } from './codingCliTitleParse';
 
 /** Static connection label: user rename or host label. */
 export const getSessionConnectionLabel = (session: Pick<TerminalSession, 'customName' | 'hostLabel'>): string => {
@@ -26,5 +27,8 @@ export const resolveSessionTabTitle = (
     return session.customName;
   }
   const dynamicTitle = session.dynamicTitle?.trim();
-  return dynamicTitle || connectionLabel;
+  if (!dynamicTitle) {
+    return connectionLabel;
+  }
+  return normalizeCodingCliTitle(dynamicTitle) || dynamicTitle;
 };

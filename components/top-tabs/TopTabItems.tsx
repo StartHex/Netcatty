@@ -7,9 +7,10 @@ import { useWindowControls } from '../../application/state/useWindowControls';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { getEffectiveHostDistro } from '../../domain/host';
 import { resolveHostIconAppearance, resolveHostIconColorAppearance } from '../../domain/hostIcon';
-import { getAgentIconVisual } from '../../domain/agentIcon';
-import { resolveSessionAgentIconKey } from '../../domain/sessionAgentIcon';
+import { resolveSessionCodingCliProvider } from '../../domain/codingCliProviderMatch';
+import { resolveCodingCliActivityPhase } from '../../domain/codingCliTitleParse';
 import { resolveSessionTabTitle } from '../../domain/sessionTabTitle';
+import { CodingCliProviderIcon } from '../icons/CodingCliProviderIcon';
 import { cn } from '../../lib/utils';
 import { Host, TerminalSession, Workspace } from '../../types';
 import { DISTRO_LOGOS, DISTRO_COLORS } from '../DistroAvatar';
@@ -38,7 +39,7 @@ const localOsId = (() => {
 // Lightweight OS/distro icon for session tabs — matches DistroAvatar "sm" style
 const SessionTabIcon: React.FC<{
   host: Host | undefined;
-  session: Pick<TerminalSession, 'dynamicTitle' | 'startupCommand' | 'customName' | 'hostLabel' | 'localShell' | 'localShellName'>;
+  session: Pick<TerminalSession, 'dynamicTitle' | 'startupCommand' | 'customName' | 'hostLabel' | 'localShell' | 'localShellName' | 'codingCliProviderId'>;
   isActive: boolean;
   protocol?: string;
   shellIcon?: string;
@@ -47,15 +48,14 @@ const SessionTabIcon: React.FC<{
   const iconSize = "h-2.5 w-2.5";
   const fallbackStyle = { color: isActive ? 'var(--top-tabs-accent, hsl(var(--accent)))' : 'var(--top-tabs-muted, hsl(var(--muted-foreground)))' };
 
-  const agentIconKey = resolveSessionAgentIconKey(session, host);
-  if (agentIconKey) {
-    const visual = getAgentIconVisual(agentIconKey);
+  const codingCliProvider = resolveSessionCodingCliProvider(session, host);
+  if (codingCliProvider) {
+    const activityPhase = resolveCodingCliActivityPhase(session.dynamicTitle, codingCliProvider.id);
     return (
-      <img
-        src={visual.src}
-        alt=""
-        aria-hidden="true"
-        className={cn("shrink-0 h-4 w-4 rounded-sm object-contain", visual.imageClassName)}
+      <CodingCliProviderIcon
+        providerId={codingCliProvider.id}
+        iconKey={codingCliProvider.iconKey}
+        activityPhase={activityPhase}
       />
     );
   }

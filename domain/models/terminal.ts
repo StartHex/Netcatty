@@ -1,4 +1,5 @@
 import type { SerialConfig } from './connection';
+import type { CodingCliProviderId } from '../codingCliProviders';
 
 // Terminal appearance settings
 export type CursorShape = 'block' | 'bar' | 'underline';
@@ -398,6 +399,8 @@ export interface TerminalSession {
   customName?: string;
   /** Runtime shell-reported window title (OSC 0/2), shown on tabs when enabled */
   dynamicTitle?: string;
+  /** Sticky coding CLI provider detected from launch command or window title */
+  codingCliProviderId?: CodingCliProviderId;
   /** Runtime marker for sessions reconstructed from startup restore. */
   restoreState?: 'restored-disconnected';
   /** Latest known working directory captured from terminal cwd tracking. */

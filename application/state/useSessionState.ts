@@ -42,6 +42,7 @@ import {
   updateRestoredSessionStatusState,
 } from './sessionRestoreState';
 import { resolveRestorePreviousSessionSetting } from './sessionRestoreSettings';
+import type { CodingCliProviderId } from '../../domain/codingCliProviders';
 
 
 export const useSessionState = ({
@@ -231,6 +232,25 @@ export const useSessionState = ({
           return rest;
         }
         return { ...candidate, dynamicTitle: nextTitle };
+      });
+    });
+  }, []);
+
+  const updateSessionCodingCliProvider = useCallback((
+    sessionId: string,
+    providerId: CodingCliProviderId | null,
+  ) => {
+    setSessions((prev) => {
+      const session = prev.find((candidate) => candidate.id === sessionId);
+      if (!session) return prev;
+      if ((session.codingCliProviderId ?? null) === providerId) return prev;
+      return prev.map((candidate) => {
+        if (candidate.id !== sessionId) return candidate;
+        if (!providerId) {
+          const { codingCliProviderId: _removed, ...rest } = candidate;
+          return rest;
+        }
+        return { ...candidate, codingCliProviderId: providerId };
       });
     });
   }, []);
@@ -1201,5 +1221,6 @@ export const useSessionState = ({
     createSessionFromCloneSource,
     updateSessionRestoreCwd,
     updateSessionDynamicTitle,
+    updateSessionCodingCliProvider,
   };
 };

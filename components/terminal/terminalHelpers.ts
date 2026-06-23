@@ -180,6 +180,7 @@ export interface TerminalProps {
   onTerminalCwdChange?: (sessionId: string, cwd: string | null) => void;
   onTerminalTitleChange?: (sessionId: string, title: string | null) => void;
   onTerminalBell?: (sessionId: string) => void;
+  onTerminalOutput?: (sessionId: string, chunk: string) => void;
   onOpenScripts?: () => void;
   onOpenHistory?: () => void;
   onOpenTheme?: () => void;

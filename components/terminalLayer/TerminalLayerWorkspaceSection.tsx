@@ -54,6 +54,7 @@ function TerminalLayerWorkspaceSectionInner({ ctx }: { ctx: WorkspaceContext }) 
     handleTerminalCwdChange,
     handleTerminalTitleChange,
     handleTerminalBell,
+    handleTerminalOutput,
     handleOpenScripts,
     handleOpenHistory,
     handleOpenSystem,
@@ -173,6 +174,7 @@ function TerminalLayerWorkspaceSectionInner({ ctx }: { ctx: WorkspaceContext }) 
           onTerminalCwdChange={handleTerminalCwdChange}
           onTerminalTitleChange={handleTerminalTitleChange}
           onTerminalBell={handleTerminalBell}
+          onTerminalOutput={handleTerminalOutput}
           onOpenScripts={handleOpenScripts}
           onOpenHistory={handleOpenHistory}
           onOpenSystem={handleOpenSystem}

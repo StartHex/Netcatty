@@ -561,6 +561,7 @@ export interface TerminalLayerProps {
   onUpdateSessionFontSize?: (sessionId: string, fontSize: number) => void;
   onUpdateSessionRestoreCwd?: (sessionId: string, cwd: string | null) => void;
   onUpdateSessionDynamicTitle?: (sessionId: string, title: string | null) => void;
+  onUpdateSessionCodingCliProvider?: (sessionId: string, providerId: import('../../domain/codingCliProviders').CodingCliProviderId | null) => void;
   onClearSessionFontSizeOverride?: (sessionId: string) => void;
   onCloseSession: (sessionId: string, e?: React.MouseEvent) => void;
   onUpdateSessionStatus: (sessionId: string, status: TerminalSession['status']) => void;
@@ -665,6 +666,7 @@ interface TerminalPaneProps {
   onTerminalCwdChange: (sessionId: string, cwd: string | null) => void;
   onTerminalTitleChange?: (sessionId: string, title: string | null) => void;
   onTerminalBell?: (sessionId: string) => void;
+  onTerminalOutput?: (sessionId: string, chunk: string) => void;
   onOpenScripts: () => void;
   onOpenHistory?: () => void;
   onOpenTheme: () => void;
@@ -773,6 +775,7 @@ const terminalPanePropsAreEqual = (
   prev.onTerminalCwdChange === next.onTerminalCwdChange &&
   prev.onTerminalTitleChange === next.onTerminalTitleChange &&
   prev.onTerminalBell === next.onTerminalBell &&
+  prev.onTerminalOutput === next.onTerminalOutput &&
   prev.onOpenScripts === next.onOpenScripts &&
   prev.onOpenHistory === next.onOpenHistory &&
   prev.onOpenTheme === next.onOpenTheme &&
@@ -840,6 +843,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
   onTerminalCwdChange,
   onTerminalTitleChange,
   onTerminalBell,
+  onTerminalOutput,
   onOpenScripts,
   onOpenHistory,
   onOpenTheme,
@@ -1222,6 +1226,7 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         onTerminalCwdChange={onTerminalCwdChange}
         onTerminalTitleChange={onTerminalTitleChange}
         onTerminalBell={onTerminalBell}
+        onTerminalOutput={onTerminalOutput}
         onOpenScripts={onOpenScripts}
         onOpenHistory={onOpenHistory}
         onOpenTheme={onOpenTheme}
@@ -1302,6 +1307,7 @@ interface TerminalPanesHostProps {
   onTerminalCwdChange: TerminalPaneProps['onTerminalCwdChange'];
   onTerminalTitleChange?: TerminalPaneProps['onTerminalTitleChange'];
   onTerminalBell?: TerminalPaneProps['onTerminalBell'];
+  onTerminalOutput?: TerminalPaneProps['onTerminalOutput'];
   onOpenScripts: () => void;
   onOpenHistory?: () => void;
   onOpenTheme: () => void;
@@ -1378,6 +1384,7 @@ const terminalPanesHostPropsAreEqual = (
   if (prev.onTerminalCwdChange !== next.onTerminalCwdChange) return false;
   if (prev.onTerminalTitleChange !== next.onTerminalTitleChange) return false;
   if (prev.onTerminalBell !== next.onTerminalBell) return false;
+  if (prev.onTerminalOutput !== next.onTerminalOutput) return false;
   if (prev.onOpenScripts !== next.onOpenScripts) return false;
   if (prev.onOpenHistory !== next.onOpenHistory) return false;
   if (prev.onOpenTheme !== next.onOpenTheme) return false;

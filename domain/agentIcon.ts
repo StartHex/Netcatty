@@ -1,8 +1,14 @@
+import {
+  matchCodingCliProviderFromCommand,
+  matchCodingCliProviderFromTitle,
+} from './codingCliProviderMatch';
+
 export type AgentIconKey =
   | 'catty'
   | 'copilot'
   | 'cursor'
   | 'openai'
+  | 'codex'
   | 'claude'
   | 'anthropic'
   | 'gemini'
@@ -44,6 +50,11 @@ export const AGENT_ICON_VISUALS: Record<AgentIconKey, AgentIconVisual> = {
     src: '/ai/providers/openai.svg',
     badgeClassName: 'border-emerald-500/22 bg-emerald-500/12',
     imageClassName: 'object-contain dark:brightness-0 dark:invert',
+  },
+  codex: {
+    src: '/ai/agents/codex.svg',
+    badgeClassName: 'border-emerald-500/22 bg-emerald-500/12',
+    imageClassName: 'object-contain dark:brightness-0 dark:invert opacity-95',
   },
   claude: {
     src: '/ai/agents/claude.svg',
@@ -87,8 +98,8 @@ export const AGENT_ICON_VISUALS: Record<AgentIconKey, AgentIconVisual> = {
   },
   droid: {
     src: '/ai/agents/droid.svg',
-    badgeClassName: 'border-amber-500/18 bg-amber-500/10',
-    imageClassName: 'object-contain dark:brightness-0 dark:invert opacity-90',
+    badgeClassName: 'border-orange-500/22 bg-orange-500/12',
+    imageClassName: 'object-contain dark:brightness-0 dark:invert opacity-95',
   },
   opencode: {
     src: '/ai/agents/opencode.svg',
@@ -140,6 +151,22 @@ export function resolveAgentIconKey(source: AgentIconSource | 'add-more'): Agent
     return 'catty';
   }
 
+  const commandCandidates = [source.command, source.name, source.id].filter(
+    (value): value is string => Boolean(value?.trim()),
+  );
+  for (const commandLine of commandCandidates) {
+    const provider = matchCodingCliProviderFromCommand(commandLine);
+    if (provider) return provider.iconKey;
+  }
+
+  const titleCandidates = [source.name, source.id, source.icon].filter(
+    (value): value is string => Boolean(value?.trim()),
+  );
+  for (const title of titleCandidates) {
+    const provider = matchCodingCliProviderFromTitle(title);
+    if (provider) return provider.iconKey;
+  }
+
   const tokens = [
     normalizeAgentToken(source.icon),
     normalizeAgentToken(source.command),
@@ -147,34 +174,12 @@ export function resolveAgentIconKey(source: AgentIconSource | 'add-more'): Agent
     normalizeAgentToken(source.id),
   ].filter(Boolean);
 
-  if (tokens.some((token) => token.includes('claude'))) {
-    return 'claude';
-  }
-  if (tokens.some((token) => token.includes('copilot'))) {
-    return 'copilot';
-  }
-  if (tokens.some((token) => token.includes('cursor'))) {
-    return 'cursor';
-  }
   if (tokens.some((token) => token.includes('anthropic'))) {
     return 'anthropic';
   }
-  if (tokens.some((token) => token.includes('opencode'))) {
-    return 'opencode';
-  }
   if (
     tokens.some(
       (token) =>
-        token.includes('droid') ||
-        token.includes('factory'),
-    )
-  ) {
-    return 'droid';
-  }
-  if (
-    tokens.some(
-      (token) =>
-        token.includes('codex') ||
         token.includes('openai') ||
         token.includes('chatgpt'),
     )
@@ -184,15 +189,11 @@ export function resolveAgentIconKey(source: AgentIconSource | 'add-more'): Agent
   if (
     tokens.some(
       (token) =>
-        token.includes('gemini') ||
         token.includes('google') ||
         token.includes('googlegemini'),
     )
   ) {
-    return 'gemini';
-  }
-  if (tokens.some((token) => token.includes('kimi') || token.includes('moonshot'))) {
-    return 'kimi';
+    return 'google';
   }
   if (tokens.some((token) => token.includes('ollama'))) {
     return 'ollama';
@@ -203,8 +204,8 @@ export function resolveAgentIconKey(source: AgentIconSource | 'add-more'): Agent
   if (tokens.some((token) => token.includes('zed'))) {
     return 'zed';
   }
-  if (tokens.some((token) => token.includes('codebuddy'))) {
-    return 'codebuddy';
+  if (tokens.some((token) => token.includes('factory'))) {
+    return 'atom';
   }
 
   return 'terminal';
