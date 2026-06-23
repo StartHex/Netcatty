@@ -34,6 +34,16 @@ test('resolveSessionTabTitle falls back to connection label when dynamic title i
   );
 });
 
+test('resolveSessionTabTitle prefers user customName over dynamic title', () => {
+  assert.equal(
+    resolveSessionTabTitle(
+      { customName: 'Prod deploy', hostLabel: 'web-01', dynamicTitle: 'claude: refactor auth' },
+      undefined,
+    ),
+    'Prod deploy',
+  );
+});
+
 test('resolveSessionTabTitle honors disableDynamicTabTitle host setting', () => {
   assert.equal(
     resolveSessionTabTitle(

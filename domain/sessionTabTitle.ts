@@ -22,6 +22,9 @@ export const resolveSessionTabTitle = (
   if (isDynamicTabTitleDisabled(host)) {
     return connectionLabel;
   }
+  if (session.customName) {
+    return session.customName;
+  }
   const dynamicTitle = session.dynamicTitle?.trim();
   return dynamicTitle || connectionLabel;
 };
