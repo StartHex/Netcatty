@@ -1,11 +1,17 @@
 import type { CodingCliProviderId } from './codingCliProviders';
 
+const ESC = String.fromCharCode(0x1b);
+const BEL = String.fromCharCode(0x07);
+const ANSI_CSI_RE = new RegExp(`${ESC}\\[[0-9:;?]*[ -/]*[@-~]`, 'g');
+const OSC_SEQUENCE_RE = new RegExp(`${ESC}\\][^${BEL}]*(?:${BEL}|${ESC}\\\\)`, 'g');
+const LONE_ESC_RE = new RegExp(`${ESC}[@-_]`, 'g');
+
 /** Strip ANSI/OSC sequences so startup banners remain readable. */
 export function stripTerminalControlSequences(text: string): string {
   return text
-    .replace(/\x1b\[[0-9:;?]*[ -/]*[@-~]/g, '')
-    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b[@-_]/g, '');
+    .replace(ANSI_CSI_RE, '')
+    .replace(OSC_SEQUENCE_RE, '')
+    .replace(LONE_ESC_RE, '');
 }
 
 type OutputSignature = {

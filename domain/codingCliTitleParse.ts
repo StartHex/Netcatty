@@ -7,7 +7,7 @@ export const CODING_CLI_BRAILLE_SPINNER_FRAMES = [
 
 const BRAILLE_SPINNER_RE = /^[\s⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✳✴✶✻✽❋◆◇]+/u;
 const ACTION_REQUIRED_PREFIX_RE = /^\[\s*[!.]\s*\]\s*(?:Action Required\s*)?/iu;
-const LEADING_SEPARATOR_RE = /^[\s·•…\.]+/u;
+const LEADING_SEPARATOR_RE = /^[\s·•….]+/u;
 
 const CLAUDE_MARKERS = ['claude code', 'claude', 'anthropic'] as const;
 const CODEX_STATUS_WORDS = ['working', 'thinking', 'ready', 'waiting'] as const;
