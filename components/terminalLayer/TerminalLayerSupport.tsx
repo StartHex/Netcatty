@@ -17,7 +17,6 @@ import type { GroupConfig, Host, Identity, KnownHost, ProxyProfile, SSHKey, Snip
 import type { ExecutorContext } from '../../infrastructure/ai/cattyAgent/executor';
 import Terminal from '../Terminal';
 import { removePaneVisible, setPaneVisible } from '../terminal/paneVisibilityStore';
-import type { TerminalBroadcastInputOptions } from '../terminal/terminalHelpers';
 import {
   getTerminalPaneRenderSnapshot,
   parseTerminalPaneRenderSnapshot,
@@ -65,7 +64,7 @@ export type PendingSftpUpload = {
 export type SnippetExecutor = (
   command: string,
   noAutoRun?: boolean,
-  options?: { broadcast?: boolean; protectTerminalMode?: boolean },
+  options?: { broadcast?: boolean },
 ) => void;
 
 export type PendingTerminalSelectionForAI = {
@@ -678,11 +677,7 @@ interface TerminalPaneProps {
   onSetWorkspaceFocusedSession?: (workspaceId: string, sessionId: string) => void;
   onSplitSession?: (sessionId: string, direction: SplitDirection) => void;
   isBroadcastEnabled?: (workspaceId: string) => boolean;
-  onBroadcastInput: (
-    data: string,
-    sourceSessionId: string,
-    options?: TerminalBroadcastInputOptions,
-  ) => void;
+  onBroadcastInput: (data: string, sourceSessionId: string) => void;
   onToggleWorkspaceComposeBar: () => void;
   onSnippetExecutorChange: (
     sessionId: string,
@@ -1202,7 +1197,6 @@ const TerminalPane: React.FC<TerminalPaneProps> = memo(({
         restoreTerminalCwd={restoreTerminalCwd && sessionHostResolved}
         startupCommand={session.startupCommand}
         noAutoRun={session.noAutoRun}
-        protectStartupCommandTerminalMode={session.protectStartupCommandTerminalMode}
         reuseConnectionFromSessionId={session.reuseConnectionFromSessionId}
         serialConfig={session.serialConfig}
         hotkeyScheme={hotkeyScheme}
@@ -1307,11 +1301,7 @@ interface TerminalPanesHostProps {
   onSetWorkspaceFocusedSession?: (workspaceId: string, sessionId: string) => void;
   onSplitSession?: (sessionId: string, direction: SplitDirection) => void;
   isBroadcastEnabled?: (workspaceId: string) => boolean;
-  onBroadcastInput: (
-    data: string,
-    sourceSessionId: string,
-    options?: TerminalBroadcastInputOptions,
-  ) => void;
+  onBroadcastInput: (data: string, sourceSessionId: string) => void;
   onToggleWorkspaceComposeBar: () => void;
   onSnippetExecutorChange: (
     sessionId: string,

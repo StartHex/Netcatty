@@ -43,11 +43,6 @@ import type { Snippet } from '../types';
 import { ThemeSidePanel } from './terminal/ThemeSidePanel';
 import { focusTerminalSessionInput } from './terminal/focusTerminalSession';
 import { TerminalComposeBar } from './terminal/TerminalComposeBar';
-import {
-  prepareAutoRunSnippetCommand,
-  prepareProtectedBroadcastSnippetData,
-  type TerminalBroadcastInputOptions,
-} from './terminal/terminalHelpers';
 import { Button } from './ui/button';
 import { setupMcpApprovalBridge } from '../infrastructure/ai/shared/approvalGate';
 import { resolveScriptsSidePanelShortcutIntent } from '../application/state/resolveSnippetsShortcutIntent';
@@ -546,7 +541,6 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   const handleBroadcastInput = useCallback((
     data: string,
     sourceSessionId: string,
-    options?: TerminalBroadcastInputOptions,
   ) => {
     const sourceSession = sessionsRef.current.find((session) => session.id === sourceSessionId);
     const workspaceId = sourceSession?.workspaceId;
@@ -555,22 +549,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     for (const session of sessionsRef.current) {
       if (session.workspaceId !== workspaceId || session.id === sourceSessionId) continue;
       if (!canUseDirectSessionWriteFallback(session)) continue;
-
-      let targetData = data;
-      if (options?.protectTerminalMode && options.rawCommand !== undefined) {
-        const host = sessionHostsMapRef.current.get(session.id);
-        if (host) {
-          targetData = prepareProtectedBroadcastSnippetData({
-            rawCommand: options.rawCommand,
-            fallbackData: options.fallbackData ?? data,
-            host,
-            noAutoRun: options.noAutoRun,
-            shellType: session.shellType,
-          });
-        }
-      }
-
-      terminalBackend.writeToSession(session.id, targetData);
+      terminalBackend.writeToSession(session.id, data);
     }
   }, [terminalBackend]);
 
@@ -1040,24 +1019,19 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   const handleSnippetClickForFocusedSession = useCallback((
     command: string,
     noAutoRun?: boolean,
-    options?: { protectTerminalMode?: boolean },
   ) => {
     const sessionId = activeWorkspaceRef.current?.focusedSessionId ?? activeSessionRef.current?.id;
     if (!sessionId) return;
     const executor = snippetExecutorsRef.current.get(sessionId);
     if (executor) {
-      executor(command, noAutoRun, { protectTerminalMode: options?.protectTerminalMode });
+      executor(command, noAutoRun);
       return;
     }
 
     const session = sessionsRef.current.find((candidate) => candidate.id === sessionId);
     if (!session || !canUseDirectSessionWriteFallback(session)) return;
 
-    const host = sessionHostsMapRef.current.get(sessionId);
-    const commandToSend = options?.protectTerminalMode && host
-      ? prepareAutoRunSnippetCommand(command, { host, noAutoRun, shellType: session.shellType })
-      : command;
-    let data = normalizeLineEndings(commandToSend);
+    let data = normalizeLineEndings(command);
     if (!noAutoRun) data = `${data}\r`;
     terminalBackend.writeToSession(sessionId, data);
     // Re-focus the terminal so the user can interact immediately
@@ -1079,7 +1053,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   const handleSnippetFromPanel = useCallback(async (snippet: Snippet) => {
     const command = await resolveSnippetCommand(snippet);
     if (command === null) return;
-    handleSnippetClickForFocusedSession(command, snippet.noAutoRun, { protectTerminalMode: true });
+    handleSnippetClickForFocusedSession(command, snippet.noAutoRun);
   }, [handleSnippetClickForFocusedSession]);
 
   const handleComposeSend = useCallback((text: string) => {

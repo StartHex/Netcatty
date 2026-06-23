@@ -1,10 +1,8 @@
 import type { DragEvent, PointerEvent } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 
-import { classifyDistroId, normalizeDistroId } from "../../domain/host";
 import { logger } from "../../lib/logger";
 import { getPathForFile, type DropEntry } from "../../lib/sftpFileUtils";
-import { normalizeLineEndings } from "../../lib/utils";
 import type {
   Host,
   Identity,
@@ -19,13 +17,6 @@ import type {
 } from "../../types";
 
 export const MAX_CONNECTION_LOG_DATA_CHARS = 1_000_000;
-
-export interface TerminalBroadcastInputOptions {
-  protectTerminalMode?: boolean;
-  rawCommand?: string;
-  fallbackData?: string;
-  noAutoRun?: boolean;
-}
 
 /**
  * Get the display name for a terminal session.
@@ -135,7 +126,6 @@ export interface TerminalProps {
   restoreTerminalCwd?: boolean;
   startupCommand?: string;
   noAutoRun?: boolean;
-  protectStartupCommandTerminalMode?: boolean;
   // When this tab was created from a connected SSH session, the id of the
   // source session whose authenticated connection should be reused for a new
   // shell channel — skipping a second MFA prompt (issue #1204).
@@ -183,18 +173,10 @@ export interface TerminalProps {
   onToggleBroadcast?: () => void;
   onToggleComposeBar?: () => void;
   isWorkspaceComposeBarOpen?: boolean;
-  onBroadcastInput?: (
-    data: string,
-    sourceSessionId: string,
-    options?: TerminalBroadcastInputOptions,
-  ) => void;
+  onBroadcastInput?: (data: string, sourceSessionId: string) => void;
   onSnippetExecutorChange?: (
     sessionId: string,
-    executor: ((
-      command: string,
-      noAutoRun?: boolean,
-      options?: { broadcast?: boolean; protectTerminalMode?: boolean },
-    ) => void) | null,
+    executor: ((command: string, noAutoRun?: boolean) => void) | null,
   ) => void;
   sessionLog?: { enabled: boolean; directory: string; format: string; timestampsEnabled?: boolean };
   sshDebugLogEnabled?: boolean;
@@ -243,120 +225,6 @@ export function shouldShowTerminalConnectionDialog({
     && !(!!hideConnectingDialogForConnectionReuse && status === "connecting")
     && !((isLocalConnection || isSerialConnection) && status === "connecting")
     && !(status === "disconnected" && isDisconnectedDialogDismissed);
-}
-
-type SnippetRestoreHost = Pick<Host, "protocol" | "deviceType" | "distro" | "os">;
-
-/** Distros where interactive install scripts can leave SSH TTYs in a broken mode after Ctrl+C (#1498). */
-const SNIPPET_TERMINAL_RESTORE_DISTROS = new Set([
-  "centos",
-  "redhat",
-  "almalinux",
-  "oracle",
-]);
-
-function shouldUseSnippetRestoreShell(shellType?: TerminalSession["shellType"]): boolean {
-  return shellType === undefined || shellType === "posix";
-}
-
-function hostNeedsSnippetTerminalModeRestore(host: SnippetRestoreHost): boolean {
-  return SNIPPET_TERMINAL_RESTORE_DISTROS.has(normalizeDistroId(host.distro));
-}
-
-function shouldRestoreTerminalModeAfterSnippet({
-  host,
-  noAutoRun,
-  shellType,
-}: {
-  host: SnippetRestoreHost;
-  noAutoRun?: boolean;
-  shellType?: TerminalSession["shellType"];
-}): boolean {
-  if (noAutoRun) return false;
-  if (!shouldUseSnippetRestoreShell(shellType)) return false;
-  const protocol = host.protocol ?? "ssh";
-  if (protocol !== "ssh") return false;
-
-  const detectedDeviceClass = classifyDistroId(host.distro);
-  if (host.deviceType === "network" || detectedDeviceClass === "network-device") return false;
-
-  return hostNeedsSnippetTerminalModeRestore(host);
-}
-
-function encodeUtf8Base64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
-function hasMultipleCommandLines(command: string): boolean {
-  return command.includes("\n") || command.includes("\r");
-}
-
-function buildPosixSnippetRestoreCommand(encodedCommand: string): string {
-  return [
-    "__netcatty_stty_state=\"$(stty -g 2>/dev/null || true)\"",
-    "__netcatty_restore(){ if [ -n \"$__netcatty_stty_state\" ]; then stty \"$__netcatty_stty_state\" 2>/dev/null || stty sane 2>/dev/null || true; else stty sane 2>/dev/null || true; fi; }",
-    "trap __netcatty_restore INT TERM EXIT",
-    "stty -echo 2>/dev/null",
-    `__netcatty_cmd_b64='${encodedCommand}'`,
-    "__netcatty_cmd=\"$(printf %s \"$__netcatty_cmd_b64\" | base64 -d 2>/dev/null || printf %s \"$__netcatty_cmd_b64\" | base64 -D 2>/dev/null)\"",
-    "__netcatty_decode_status=$?",
-    "if [ \"$__netcatty_decode_status\" -eq 0 ]; then eval \"$__netcatty_cmd\"; __netcatty_status=$?; else printf '%s\\n' 'Netcatty: failed to decode protected snippet command' >&2; __netcatty_status=127; fi",
-    "__netcatty_restore",
-    "trap - INT TERM EXIT",
-    "stty echo 2>/dev/null",
-    "unset __netcatty_stty_state __netcatty_cmd_b64 __netcatty_cmd __netcatty_decode_status",
-    "unset -f __netcatty_restore 2>/dev/null || true",
-    "( exit $__netcatty_status )",
-  ].join("; ");
-}
-
-export function prepareAutoRunSnippetCommand(
-  command: string,
-  opts: {
-    host: SnippetRestoreHost;
-    noAutoRun?: boolean;
-    shellType?: TerminalSession["shellType"];
-  },
-): string {
-  const rawCommand = String(command ?? "");
-  if (!shouldRestoreTerminalModeAfterSnippet(opts)) {
-    return rawCommand;
-  }
-  if (hasMultipleCommandLines(rawCommand)) {
-    return rawCommand;
-  }
-
-  const encodedCommand = encodeUtf8Base64(rawCommand);
-  return buildPosixSnippetRestoreCommand(encodedCommand);
-}
-
-export function prepareProtectedBroadcastSnippetData({
-  rawCommand,
-  fallbackData,
-  host,
-  noAutoRun,
-  shellType,
-}: {
-  rawCommand: string;
-  fallbackData: string;
-  host: SnippetRestoreHost;
-  noAutoRun?: boolean;
-  shellType?: TerminalSession["shellType"];
-}): string {
-  const prepared = prepareAutoRunSnippetCommand(rawCommand, { host, noAutoRun, shellType });
-  if (prepared === String(rawCommand ?? "")) {
-    return fallbackData;
-  }
-  let data = normalizeLineEndings(prepared);
-  if (!noAutoRun) data = `${data}\r`;
-  return data;
 }
 
 export function shouldHideConnectingDialogForConnectionReuse({

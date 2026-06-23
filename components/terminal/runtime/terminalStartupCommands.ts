@@ -1,5 +1,4 @@
 import type { Terminal as XTerm } from "@xterm/xterm";
-import { prepareAutoRunSnippetCommand } from "../terminalHelpers";
 import { markPromptLineBreakCommandPending } from "./promptLineBreak";
 import type { TerminalSessionStartersContext } from "./createTerminalSessionStarters.types";
 
@@ -74,18 +73,10 @@ export const scheduleStartupCommand = (
     };
   }
 
-  const preparedCommandToRun = ctx.protectStartupCommandTerminalMode
-    ? prepareAutoRunSnippetCommand(commandToRun, {
-        host: ctx.host,
-        noAutoRun: ctx.noAutoRun,
-        shellType: ctx.shellType,
-      })
-    : commandToRun;
-
   // Auto-run: send each non-empty line in sequence, waiting delayMs before the
   // first and between each, so a line runs inside any sub-shell opened by a
   // previous line (e.g. `sudo -i` then `alias ...`).
-  const lines = splitStartupCommandLines(preparedCommandToRun);
+  const lines = splitStartupCommandLines(commandToRun);
   if (lines.length === 0) {
     onSettled?.();
     return undefined;
