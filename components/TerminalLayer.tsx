@@ -239,6 +239,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   ) => {
     const provider = matchCodingCliProviderFromCommand(commandLine);
     if (provider) {
+      codingCliOutputScannersRef.current.delete(sessionId);
       applySessionCodingCliProvider(sessionId, provider.id);
     }
   }, [applySessionCodingCliProvider]);
@@ -256,6 +257,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     const trimmedTitle = title?.trim();
     if (!trimmedTitle) {
       if (session.codingCliProviderId) {
+        codingCliOutputScannersRef.current.delete(sessionId);
         onUpdateSessionCodingCliProvider?.(sessionId, null);
       }
       return;
@@ -273,6 +275,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
       session.codingCliProviderId
       && shouldClearCodingCliProviderForTitle(trimmedTitle, session.codingCliProviderId)
     ) {
+      codingCliOutputScannersRef.current.delete(sessionId);
       onUpdateSessionCodingCliProvider?.(sessionId, null);
     }
   }, [applySessionCodingCliProvider, onUpdateSessionCodingCliProvider, onUpdateSessionDynamicTitle]);
