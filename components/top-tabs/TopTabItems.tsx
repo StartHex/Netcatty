@@ -7,6 +7,8 @@ import { useWindowControls } from '../../application/state/useWindowControls';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { getEffectiveHostDistro } from '../../domain/host';
 import { resolveHostIconAppearance, resolveHostIconColorAppearance } from '../../domain/hostIcon';
+import { getAgentIconVisual } from '../../domain/agentIcon';
+import { resolveSessionAgentIconKey } from '../../domain/sessionAgentIcon';
 import { resolveSessionTabTitle } from '../../domain/sessionTabTitle';
 import { cn } from '../../lib/utils';
 import { Host, TerminalSession, Workspace } from '../../types';
@@ -34,10 +36,29 @@ const localOsId = (() => {
 })();
 
 // Lightweight OS/distro icon for session tabs — matches DistroAvatar "sm" style
-const SessionTabIcon: React.FC<{ host: Host | undefined; isActive: boolean; protocol?: string; shellIcon?: string }> = memo(({ host, isActive, protocol, shellIcon }) => {
+const SessionTabIcon: React.FC<{
+  host: Host | undefined;
+  session: Pick<TerminalSession, 'dynamicTitle' | 'startupCommand' | 'customName' | 'hostLabel' | 'localShell' | 'localShellName'>;
+  isActive: boolean;
+  protocol?: string;
+  shellIcon?: string;
+}> = memo(({ host, session, isActive, protocol, shellIcon }) => {
   const boxBase = "shrink-0 h-4 w-4 rounded flex items-center justify-center";
   const iconSize = "h-2.5 w-2.5";
   const fallbackStyle = { color: isActive ? 'var(--top-tabs-accent, hsl(var(--accent)))' : 'var(--top-tabs-muted, hsl(var(--muted-foreground)))' };
+
+  const agentIconKey = resolveSessionAgentIconKey(session, host);
+  if (agentIconKey) {
+    const visual = getAgentIconVisual(agentIconKey);
+    return (
+      <img
+        src={visual.src}
+        alt=""
+        aria-hidden="true"
+        className={cn("shrink-0 h-4 w-4 rounded-sm object-contain", visual.imageClassName)}
+      />
+    );
+  }
 
   // Serial protocol → USB icon
   if (protocol === 'serial' || host?.protocol === 'serial') {
@@ -570,7 +591,7 @@ export const SessionTopTab: React.FC<SessionTopTabProps> = memo(({
             />
           )}
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <SessionTabIcon host={host} isActive={isActive} protocol={session.protocol} shellIcon={session.localShellIcon} />
+            <SessionTabIcon host={host} session={session} isActive={isActive} protocol={session.protocol} shellIcon={session.localShellIcon} />
             <span className="truncate">{resolveSessionTabTitle(session, host)}</span>
             <div className="flex-shrink-0">{sessionStatusDot(session.status, hasActivity)}</div>
           </div>
