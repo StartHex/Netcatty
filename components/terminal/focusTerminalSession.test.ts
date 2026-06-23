@@ -44,6 +44,49 @@ test("focusTerminalSessionInput focuses the xterm helper textarea immediately an
   assert.deepEqual(focusCalls, ["focus", "focus"]);
 });
 
+test("focusTerminalSessionInput dispatches a terminal restore focus event", () => {
+  const events: string[] = [];
+  const handler = (event: Event) => {
+    events.push((event as CustomEvent<{ sessionId: string }>).detail.sessionId);
+  };
+  const originalWindow = globalThis.window;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      dispatchEvent: (event: Event) => {
+        handler(event);
+        return true;
+      },
+    },
+  });
+
+  try {
+    focusTerminalSessionInput("session-1", {
+      document: {
+        querySelector: () => ({
+          querySelector: () => ({ focus: () => undefined }),
+        }),
+      },
+      requestAnimationFrame: (callback) => {
+        callback();
+        return 1;
+      },
+      setTimeout: (callback) => {
+        callback();
+        return 0;
+      },
+    });
+
+    assert.deepEqual(events, ["session-1", "session-1"]);
+  } finally {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: originalWindow,
+    });
+  }
+});
+
 test("focusTerminalSessionInput ignores empty or unavailable targets", () => {
   assert.doesNotThrow(() => {
     focusTerminalSessionInput(null, {

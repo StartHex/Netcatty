@@ -16,6 +16,20 @@ interface FocusTerminalSessionInputOptions {
 const escapeAttributeValue = (value: string): string =>
   value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
+export const TERMINAL_SESSION_RESTORE_FOCUS_EVENT = "netcatty:terminal-session-restore-focus";
+
+export type TerminalSessionRestoreFocusDetail = {
+  sessionId: string;
+};
+
+const dispatchTerminalSessionRestoreFocus = (sessionId: string): void => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<TerminalSessionRestoreFocusDetail>(
+    TERMINAL_SESSION_RESTORE_FOCUS_EVENT,
+    { detail: { sessionId } },
+  ));
+};
+
 export const focusTerminalSessionInput = (
   sessionId: string | null | undefined,
   options: FocusTerminalSessionInputOptions = {},
@@ -46,6 +60,7 @@ export const focusTerminalSessionInput = (
     const pane = doc.querySelector(paneSelector) as QueryTarget | null;
     const textarea = pane?.querySelector("textarea.xterm-helper-textarea") as FocusableTarget | null;
     textarea?.focus?.();
+    dispatchTerminalSessionRestoreFocus(sessionId);
   };
 
   raf(() => {
