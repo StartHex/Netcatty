@@ -106,13 +106,13 @@ export function resolveSessionCodingCliProvider(
   source: SessionCodingCliSource,
   host?: Pick<Host, 'disableDynamicTabTitle' | 'startupCommand'>,
 ): CodingCliProvider | undefined {
-  const commandProvider = resolveCodingCliProviderFromCommandCandidates(source, host);
-  if (commandProvider) return commandProvider;
-
   if (source.codingCliProviderId) {
     const sticky = getCodingCliProvider(source.codingCliProviderId);
     if (sticky) return sticky;
   }
+
+  const commandProvider = resolveCodingCliProviderFromCommandCandidates(source, host);
+  if (commandProvider) return commandProvider;
 
   if (!isDynamicTabTitleDisabled(host) && !source.customName) {
     const dynamicTitle = source.dynamicTitle?.trim();

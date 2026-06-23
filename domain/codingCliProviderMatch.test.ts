@@ -64,11 +64,11 @@ test('resolveSessionCodingCliProvider falls back to host startup command', () =>
   );
 });
 
-test('resolveSessionCodingCliProvider prefers launch command over sticky provider', () => {
+test('resolveSessionCodingCliProvider prefers sticky provider over launch command', () => {
   assert.equal(
     resolveSessionCodingCliProvider({
-      codingCliProviderId: 'droid',
-      startupCommand: 'codex',
+      codingCliProviderId: 'codex',
+      startupCommand: 'droid',
     })?.id,
     'codex',
   );
