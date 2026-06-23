@@ -4,6 +4,7 @@ import { resolveFontWeightBold } from '../../lib/fontWeightAvailability';
 import { resolveXTermScrollback } from '../../infrastructure/config/xtermPerformance';
 import { shouldInterceptMouseTrackingContextMenu } from './runtime/middleClickBehavior';
 import {
+  hasOpenAppDialog,
   TERMINAL_SESSION_RESTORE_FOCUS_EVENT,
   type TerminalSessionRestoreFocusDetail,
 } from './focusTerminalSession';
@@ -604,6 +605,7 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
       if (!term) return;
 
       applyUserCursorBlinkPreference(term, terminalSettingsRef.current);
+      if (hasOpenAppDialog()) return;
       term.focus();
       scheduleLayoutRecoveryRefit([0, 100]);
     };
