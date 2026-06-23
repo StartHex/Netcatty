@@ -64,6 +64,8 @@ test("workspace section passes resolved session host ids to terminal panes", () 
     handleTerminalFontSizeChange: noop,
     handleOpenSftp: noop,
     handleTerminalCwdChange: noop,
+    handleTerminalTitleChange: noop,
+    handleTerminalBell: noop,
     handleOpenScripts: noop,
     handleOpenHistory: noop,
     handleOpenSystem: noop,

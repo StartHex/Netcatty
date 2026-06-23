@@ -67,6 +67,8 @@ export const terminalPropsAreEqual = (
   && prev.onSplitVertical === next.onSplitVertical
   && prev.onOpenSftp === next.onOpenSftp
   && prev.onTerminalCwdChange === next.onTerminalCwdChange
+  && prev.onTerminalTitleChange === next.onTerminalTitleChange
+  && prev.onTerminalBell === next.onTerminalBell
   && prev.onOpenScripts === next.onOpenScripts
   && prev.onOpenHistory === next.onOpenHistory
   && prev.onOpenTheme === next.onOpenTheme

@@ -262,6 +262,8 @@ const WORKSPACE_CTX_KEYS = [
   'handleTerminalFontSizeChange',
   'handleOpenSftp',
   'handleTerminalCwdChange',
+  'handleTerminalTitleChange',
+  'handleTerminalBell',
   'handleOpenScripts',
   'handleOpenHistory',
   'handleOpenSystem',

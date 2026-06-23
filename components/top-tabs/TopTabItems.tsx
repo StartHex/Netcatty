@@ -7,7 +7,7 @@ import { useWindowControls } from '../../application/state/useWindowControls';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { getEffectiveHostDistro } from '../../domain/host';
 import { resolveHostIconAppearance, resolveHostIconColorAppearance } from '../../domain/hostIcon';
-import { cn } from '../../lib/utils';
+import { resolveSessionTabTitle } from '../../domain/sessionTabTitle';
 import { Host, TerminalSession, Workspace } from '../../types';
 import { DISTRO_LOGOS, DISTRO_COLORS } from '../DistroAvatar';
 import { getShellIconPath, isMonochromeShellIcon } from '../../lib/useDiscoveredShells';
@@ -570,7 +570,7 @@ export const SessionTopTab: React.FC<SessionTopTabProps> = memo(({
           )}
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <SessionTabIcon host={host} isActive={isActive} protocol={session.protocol} shellIcon={session.localShellIcon} />
-            <span className="truncate">{session.customName || session.hostLabel}</span>
+            <span className="truncate">{resolveSessionTabTitle(session, host)}</span>
             <div className="flex-shrink-0">{sessionStatusDot(session.status, hasActivity)}</div>
           </div>
           <button

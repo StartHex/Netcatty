@@ -218,6 +218,20 @@ export const useSessionState = ({
     scheduleSessionRestorePersistRef.current();
   }, []);
 
+  const updateSessionDynamicTitle = useCallback((sessionId: string, title: string | null) => {
+    const nextTitle = title && title.trim().length > 0 ? title.trim() : null;
+    setSessions((prev) => prev.map((session) => {
+      if (session.id !== sessionId) return session;
+      if ((session.dynamicTitle ?? null) === nextTitle) return session;
+      if (!nextTitle) {
+        if (session.dynamicTitle === undefined) return session;
+        const { dynamicTitle: _removed, ...rest } = session;
+        return rest;
+      }
+      return { ...session, dynamicTitle: nextTitle };
+    }));
+  }, []);
+
   const createLocalTerminal = useCallback((options?: LocalTerminalOptions) => {
     const sessionId = crypto.randomUUID();
     setSessions(prev => [...prev, createLocalTerminalSession(sessionId, options)]);
@@ -1183,5 +1197,6 @@ export const useSessionState = ({
     copySession,
     createSessionFromCloneSource,
     updateSessionRestoreCwd,
+    updateSessionDynamicTitle,
   };
 };

@@ -126,6 +126,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
   onUpdateTerminalFontWeight,
   onUpdateSessionFontSize,
   onUpdateSessionRestoreCwd,
+  onUpdateSessionDynamicTitle,
   onClearSessionFontSizeOverride,
   onCloseSession,
   onUpdateSessionStatus,
@@ -215,6 +216,21 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     terminalCwdRevisionRef.current += 1;
     setTerminalCwdRevision(terminalCwdRevisionRef.current);
   }, [onUpdateSessionRestoreCwd]);
+
+  const handleTerminalTitleChange = useCallback((sessionId: string, title: string | null) => {
+    const session = sessionsRef.current.find((candidate) => candidate.id === sessionId);
+    if (!session) return;
+    const host = hostsRef.current.find((candidate) => candidate.id === session.hostId);
+    if (host?.disableDynamicTabTitle) return;
+    onUpdateSessionDynamicTitle?.(sessionId, title);
+  }, [onUpdateSessionDynamicTitle]);
+
+  const handleTerminalBell = useCallback((sessionId: string) => {
+    const session = sessionsRef.current.find((candidate) => candidate.id === sessionId);
+    if (!session) return;
+    if (!shouldMarkSessionActivity(activeTabStore.getActiveTabId(), session)) return;
+    sessionActivityStore.setTabActive(sessionId, true);
+  }, []);
 
   // Stable callback references for Terminal components
   const handleCloseSession = useCallback((sessionId: string) => {
@@ -1193,6 +1209,8 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     handleSnippetExecutorChange,
     handleStatusChange,
     handleTerminalCwdChange,
+    handleTerminalTitleChange,
+    handleTerminalBell,
     handleTerminalDataCapture,
     handleTerminalFontSizeChange,
     handleToggleAiFromTopBar,
@@ -1253,6 +1271,7 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     onUpdateTerminalFontWeight,
     onUpdateSessionFontSize,
     onUpdateSessionRestoreCwd,
+    onUpdateSessionDynamicTitle,
     onClearSessionFontSizeOverride,
     onUpdateTerminalThemeId,
     pendingTerminalSelectionForAI,
