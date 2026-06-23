@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
 
 import type { Host } from "../domain/models";
 import {
@@ -131,7 +130,7 @@ test("connection reuse hides connecting dialog only while reuse is still possibl
   );
 });
 
-test("auto-run snippets on Linux-like SSH hosts restore terminal mode afterwards", () => {
+test("auto-run snippets on RHEL-family SSH hosts restore terminal mode afterwards", () => {
   const command = "bash <(curl -sSL https://linuxmirrors.cn/docker.sh)";
 
   const wrapped = prepareAutoRunSnippetCommand(command, {
@@ -142,6 +141,8 @@ test("auto-run snippets on Linux-like SSH hosts restore terminal mode afterwards
 
   assert.match(wrapped, /__netcatty_stty_state=/);
   assert.match(wrapped, /__netcatty_cmd_b64='/);
+  assert.match(wrapped, /stty -echo 2>\/dev\/null/);
+  assert.match(wrapped, /stty echo 2>\/dev\/null/);
   assert.equal(wrapped.includes("\n"), false);
   assert.match(wrapped, /stty "\$__netcatty_stty_state"/);
   assert.match(wrapped, /trap __netcatty_restore INT TERM EXIT/);
@@ -153,7 +154,7 @@ test("auto-run snippets on Linux-like SSH hosts restore terminal mode afterwards
   assert.equal(Buffer.from(encoded ?? "", "base64").toString("utf8"), command);
 });
 
-test("auto-run snippets with unknown remote shell use a portable current-shell wrapper", () => {
+test("auto-run snippets with unknown remote shell on RHEL-family hosts use the POSIX wrapper", () => {
   const command = "bash <(curl -sSL https://linuxmirrors.cn/docker.sh)";
 
   const wrapped = prepareAutoRunSnippetCommand(command, {
@@ -161,28 +162,35 @@ test("auto-run snippets with unknown remote shell use a portable current-shell w
     noAutoRun: false,
   });
 
-  assert.match(wrapped, /^sh -c 'mkdir -m 700 \/tmp\/\.netcatty-/);
-  assert.match(wrapped, /^sh -c 'mkdir -m 700 \/tmp\/\.netcatty-[^']+' && sh -c 'dir=\$1;/);
-  assert.doesNotMatch(wrapped, /^sh -c 'mkdir -m 700 \/tmp\/\.netcatty-[^']+'; sh -c 'dir=\$1;/);
-  assert.match(wrapped, /set __netcatty_cmd \(printf %s '/);
-  assert.match(wrapped, /__netcatty_cmd=.*printf %s '/);
-  assert.match(wrapped, /test -z .*FISH_VERSION/);
-  assert.match(wrapped, /cd -P "\$dir"/);
-  assert.match(wrapped, /stty -g > stty/);
-  assert.match(wrapped, /trap "sh -c 'dir=/);
-  assert.match(wrapped, /xargs stty < stty/);
-  assert.match(wrapped, /failed to create private temp directory/);
-  assert.match(wrapped, /set __netcatty_status/);
-  assert.match(wrapped, /__netcatty_status=.*\?/);
-  assert.match(wrapped, /printf %s .*status/);
-  assert.match(wrapped, /rmdir/);
-  assert.match(wrapped, /trap - INT TERM EXIT/);
-  assert.doesNotMatch(wrapped, /\$[{]SHELL:-sh[}]/);
-  assert.doesNotMatch(wrapped, /\/cmd/);
-  assert.doesNotMatch(wrapped, /rm -f \/tmp\/\.netcatty-[^/]+\/(?:stty|status)/);
-  assert.doesNotMatch(wrapped, /source \/tmp\/\.netcatty-/);
-  assert.doesNotMatch(wrapped, /\. \/tmp\/\.netcatty-/);
-  assert.doesNotMatch(wrapped, /rm -rf \/tmp\/\.netcatty-/);
+  assert.match(wrapped, /__netcatty_stty_state=/);
+  assert.match(wrapped, /__netcatty_cmd_b64='/);
+  assert.match(wrapped, /stty -echo 2>\/dev\/null/);
+  assert.doesNotMatch(wrapped, /\/tmp\/\.netcatty-/);
+});
+
+test("auto-run snippets on non-RHEL Linux distros run the raw command", () => {
+  const command = "bash <(curl -sSL https://linuxmirrors.cn/docker.sh)";
+
+  for (const distro of ["ubuntu", "debian", "rocky", "fedora", "alpine"] as const) {
+    assert.equal(
+      prepareAutoRunSnippetCommand(command, {
+        host: host({ protocol: "ssh", os: "linux", distro }),
+        noAutoRun: false,
+        shellType: "posix",
+      }),
+      command,
+      `expected no wrapper for ${distro}`,
+    );
+  }
+
+  assert.equal(
+    prepareAutoRunSnippetCommand(command, {
+      host: host({ protocol: "ssh", os: "macos", distro: undefined }),
+      noAutoRun: false,
+      shellType: "posix",
+    }),
+    command,
+  );
 });
 
 test("auto-run snippets with unknown remote shell preserve failure status", () => {
@@ -193,43 +201,6 @@ test("auto-run snippets with unknown remote shell preserve failure status", () =
 
   const result = spawnSync("bash", ["-lc", wrapped], { encoding: "utf8" });
   assert.equal(result.status, 42);
-});
-
-test("auto-run snippets with unknown remote shell execute through fish", (t) => {
-  const fishVersion = spawnSync("fish", ["--version"], { encoding: "utf8" });
-  if (fishVersion.error || fishVersion.status !== 0) {
-    t.skip("fish is not installed");
-    return;
-  }
-
-  const wrapped = prepareAutoRunSnippetCommand("set -l fish_marker fish-ok; printf $fish_marker; sh -c 'exit 42'", {
-    host: host({ protocol: "ssh", os: "linux", distro: "centos" }),
-    noAutoRun: false,
-  });
-
-  const result = spawnSync("fish", ["-c", wrapped], { encoding: "utf8" });
-  assert.equal(result.status, 42);
-  assert.equal(result.stdout.includes("fish-ok"), true);
-});
-
-test("auto-run snippets with unknown remote shell stop if the private temp dir already exists", () => {
-  const wrapped = prepareAutoRunSnippetCommand("printf should-not-run", {
-    host: host({ protocol: "ssh", os: "linux", distro: "centos" }),
-    noAutoRun: false,
-  });
-  const tempDir = wrapped.match(/mkdir -m 700 (\/tmp\/\.netcatty-[^ ]+)/)?.[1];
-  assert.ok(tempDir);
-
-  mkdirSync(tempDir, { mode: 0o777 });
-  try {
-    const result = spawnSync("bash", ["-lc", wrapped], { encoding: "utf8" });
-    assert.equal(result.status, 1);
-    assert.equal(result.stdout.includes("should-not-run"), false);
-    assert.equal(existsSync(`${tempDir}/status`), false);
-    assert.equal(existsSync(`${tempDir}/stty`), false);
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
 });
 
 test("auto-run snippets keep multi-line commands as terminal input", () => {
@@ -305,16 +276,26 @@ test("protected snippet broadcast is prepared per target host", () => {
   const command = "bash <(curl -sSL https://linuxmirrors.cn/docker.sh)";
   const fallbackData = `${command}\r`;
 
-  const linuxData = prepareProtectedBroadcastSnippetData({
+  const centosData = prepareProtectedBroadcastSnippetData({
+    rawCommand: command,
+    fallbackData,
+    host: host({ protocol: "ssh", os: "linux", distro: "centos" }),
+    noAutoRun: false,
+    shellType: "posix",
+  });
+  assert.match(centosData, /__netcatty_stty_state=/);
+  assert.match(centosData, /stty -echo 2>\/dev\/null/);
+  assert.match(centosData, /stty "\$__netcatty_stty_state"/);
+  assert.equal(centosData.endsWith("\r"), true);
+
+  const rockyData = prepareProtectedBroadcastSnippetData({
     rawCommand: command,
     fallbackData,
     host: host({ protocol: "ssh", os: "linux", distro: "rocky" }),
     noAutoRun: false,
     shellType: "posix",
   });
-  assert.match(linuxData, /__netcatty_stty_state=/);
-  assert.match(linuxData, /stty "\$__netcatty_stty_state"/);
-  assert.equal(linuxData.endsWith("\r"), true);
+  assert.equal(rockyData, fallbackData);
 
   const fishData = prepareProtectedBroadcastSnippetData({
     rawCommand: command,

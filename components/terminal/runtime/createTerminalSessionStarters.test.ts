@@ -779,8 +779,8 @@ test("ssh snippet startup command restores terminal mode after attaching", async
   assert.equal(sessionWrites.length, 1);
   assert.equal(sessionWrites[0].id, "ssh-session");
   assert.equal(sessionWrites[0].automated, true);
-  assert.match(sessionWrites[0].data, /mkdir -m 700 \/tmp\/\.netcatty-/);
-  assert.match(sessionWrites[0].data, /stty -g > stty/);
+  assert.match(sessionWrites[0].data, /__netcatty_stty_state=/);
+  assert.match(sessionWrites[0].data, /stty -echo 2>\/dev\/null/);
   assert.equal(sessionWrites[0].data.endsWith("\r"), true);
 });
 

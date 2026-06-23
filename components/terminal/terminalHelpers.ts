@@ -1,7 +1,7 @@
 import type { DragEvent, PointerEvent } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 
-import { classifyDistroId } from "../../domain/host";
+import { classifyDistroId, normalizeDistroId } from "../../domain/host";
 import { logger } from "../../lib/logger";
 import { getPathForFile, type DropEntry } from "../../lib/sftpFileUtils";
 import { normalizeLineEndings } from "../../lib/utils";
@@ -247,8 +247,20 @@ export function shouldShowTerminalConnectionDialog({
 
 type SnippetRestoreHost = Pick<Host, "protocol" | "deviceType" | "distro" | "os">;
 
+/** Distros where interactive install scripts can leave SSH TTYs in a broken mode after Ctrl+C (#1498). */
+const SNIPPET_TERMINAL_RESTORE_DISTROS = new Set([
+  "centos",
+  "redhat",
+  "almalinux",
+  "oracle",
+]);
+
 function shouldUseSnippetRestoreShell(shellType?: TerminalSession["shellType"]): boolean {
   return shellType === undefined || shellType === "posix";
+}
+
+function hostNeedsSnippetTerminalModeRestore(host: SnippetRestoreHost): boolean {
+  return SNIPPET_TERMINAL_RESTORE_DISTROS.has(normalizeDistroId(host.distro));
 }
 
 function shouldRestoreTerminalModeAfterSnippet({
@@ -268,7 +280,7 @@ function shouldRestoreTerminalModeAfterSnippet({
   const detectedDeviceClass = classifyDistroId(host.distro);
   if (host.deviceType === "network" || detectedDeviceClass === "network-device") return false;
 
-  return host.os === "macos" || detectedDeviceClass === "linux-like";
+  return hostNeedsSnippetTerminalModeRestore(host);
 }
 
 function encodeUtf8Base64(text: string): string {
@@ -286,85 +298,23 @@ function hasMultipleCommandLines(command: string): boolean {
   return command.includes("\n") || command.includes("\r");
 }
 
-function doubleQuoteFishAndPosix(value: string): string {
-  return `"${value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("\"", "\\\"")
-    .replaceAll("$", "\\$")
-    .replaceAll("`", "\\`")}"`;
-}
-
 function buildPosixSnippetRestoreCommand(encodedCommand: string): string {
   return [
     "__netcatty_stty_state=\"$(stty -g 2>/dev/null || true)\"",
     "__netcatty_restore(){ if [ -n \"$__netcatty_stty_state\" ]; then stty \"$__netcatty_stty_state\" 2>/dev/null || stty sane 2>/dev/null || true; else stty sane 2>/dev/null || true; fi; }",
     "trap __netcatty_restore INT TERM EXIT",
+    "stty -echo 2>/dev/null",
     `__netcatty_cmd_b64='${encodedCommand}'`,
     "__netcatty_cmd=\"$(printf %s \"$__netcatty_cmd_b64\" | base64 -d 2>/dev/null || printf %s \"$__netcatty_cmd_b64\" | base64 -D 2>/dev/null)\"",
     "__netcatty_decode_status=$?",
     "if [ \"$__netcatty_decode_status\" -eq 0 ]; then eval \"$__netcatty_cmd\"; __netcatty_status=$?; else printf '%s\\n' 'Netcatty: failed to decode protected snippet command' >&2; __netcatty_status=127; fi",
     "__netcatty_restore",
     "trap - INT TERM EXIT",
+    "stty echo 2>/dev/null",
     "unset __netcatty_stty_state __netcatty_cmd_b64 __netcatty_cmd __netcatty_decode_status",
     "unset -f __netcatty_restore 2>/dev/null || true",
     "( exit $__netcatty_status )",
   ].join("; ");
-}
-
-function buildPortableCurrentShellSnippetRestoreCommand(command: string): string | null {
-  const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  const tempDir = `/tmp/.netcatty-${suffix}`;
-  const encodedCommand = encodeUtf8Base64(command);
-  const createTempDir = `sh -c 'mkdir -m 700 ${tempDir} 2>/dev/null || exit 1'`;
-  const safeTempDirCheck = "dir=$1; parent=${dir%/*}; base=${dir##*/}; parent_real=$(cd -P \"$parent\" 2>/dev/null && pwd -P) && expected=$parent_real/$base && cd -P \"$dir\" 2>/dev/null && actual=$(pwd -P) && test \"$actual\" = \"$expected\"";
-  const saveState = `sh -c '${safeTempDirCheck} || exit 1; stty -g > stty 2>/dev/null || true' sh ${tempDir}`;
-  const restoreState = `sh -c '${safeTempDirCheck} || { stty sane 2>/dev/null || true; exit 0; }; xargs stty < stty 2>/dev/null || stty sane 2>/dev/null || true; rm -f stty' sh ${tempDir}`;
-  const trapCleanup = `sh -c '${safeTempDirCheck} || { stty sane 2>/dev/null || true; exit 0; }; xargs stty < stty 2>/dev/null || stty sane 2>/dev/null || true; rm -f stty status; cd /; rmdir "$1" 2>/dev/null || true' sh ${tempDir}`;
-  const writeStatus = `sh -c '${safeTempDirCheck} || exit 1; printf %s "$2" > status' sh ${tempDir}`;
-  const statusGuard = `sh -c '${safeTempDirCheck} || exit 1; test -f status' sh ${tempDir}`;
-  const exitWithStatus = `sh -c '${safeTempDirCheck} || exit 1; code=$(cat status 2>/dev/null || printf 1); rm -f status; cd /; rmdir "$1" 2>/dev/null || true; exit "$code"' sh ${tempDir}`;
-  const fishRunner = [
-    `set __netcatty_cmd (printf %s '${encodedCommand}' | base64 -d 2>/dev/null; or printf %s '${encodedCommand}' | base64 -D 2>/dev/null)`,
-    "set __netcatty_decode_status $status",
-    "if test $__netcatty_decode_status -eq 0",
-    "eval $__netcatty_cmd",
-    "set __netcatty_status $status",
-    "else",
-    "printf '%s\\n' 'Netcatty: failed to decode protected snippet command' >&2",
-    "set __netcatty_status 127",
-    "end",
-    `${writeStatus} "$__netcatty_status"`,
-    "set -e __netcatty_cmd __netcatty_decode_status __netcatty_status",
-    "true",
-  ].join("; ");
-  const posixRunner = [
-    `__netcatty_cmd="$(printf %s '${encodedCommand}' | base64 -d 2>/dev/null || printf %s '${encodedCommand}' | base64 -D 2>/dev/null)"`,
-    "__netcatty_decode_status=$?",
-    "if [ \"$__netcatty_decode_status\" -eq 0 ]; then eval \"$__netcatty_cmd\"; __netcatty_status=$?; else printf '%s\\n' 'Netcatty: failed to decode protected snippet command' >&2; __netcatty_status=127; fi",
-    `${writeStatus} "$__netcatty_status"`,
-    "unset __netcatty_cmd __netcatty_decode_status __netcatty_status",
-    "true",
-  ].join("; ");
-  const tempDirGuard = `sh -c '${safeTempDirCheck}' sh ${tempDir}`;
-  const runFailure = [
-    "printf '%s\\n' 'Netcatty: failed to create private temp directory' >&2",
-    "false",
-  ].join("; ");
-  const runInCurrentShell = [
-    `${tempDirGuard} && sh -c 'test -n "$1"' sh "$FISH_VERSION" && eval ${doubleQuoteFishAndPosix(fishRunner)}`,
-    `${tempDirGuard} && sh -c 'test -z "$1"' sh "$FISH_VERSION" && eval ${doubleQuoteFishAndPosix(posixRunner)}`,
-    `${statusGuard} || eval ${doubleQuoteFishAndPosix(runFailure)}`,
-  ].join(" || ");
-
-  return [
-    createTempDir,
-    saveState,
-    `trap ${doubleQuoteFishAndPosix(trapCleanup)} INT TERM EXIT`,
-    `eval ${doubleQuoteFishAndPosix(runInCurrentShell)}`,
-    restoreState,
-    "trap - INT TERM EXIT",
-    exitWithStatus,
-  ].join(" && ");
 }
 
 export function prepareAutoRunSnippetCommand(
@@ -384,9 +334,7 @@ export function prepareAutoRunSnippetCommand(
   }
 
   const encodedCommand = encodeUtf8Base64(rawCommand);
-  return opts.shellType === undefined
-    ? (buildPortableCurrentShellSnippetRestoreCommand(rawCommand) ?? rawCommand)
-    : buildPosixSnippetRestoreCommand(encodedCommand);
+  return buildPosixSnippetRestoreCommand(encodedCommand);
 }
 
 export function prepareProtectedBroadcastSnippetData({
