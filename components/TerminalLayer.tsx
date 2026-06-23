@@ -221,7 +221,10 @@ const TerminalLayerInner: React.FC<TerminalLayerProps> = ({
     const session = sessionsRef.current.find((candidate) => candidate.id === sessionId);
     if (!session) return;
     const host = hostsRef.current.find((candidate) => candidate.id === session.hostId);
-    if (host?.disableDynamicTabTitle) return;
+    if (host?.disableDynamicTabTitle) {
+      onUpdateSessionDynamicTitle?.(sessionId, null);
+      return;
+    }
     onUpdateSessionDynamicTitle?.(sessionId, title);
   }, [onUpdateSessionDynamicTitle]);
 

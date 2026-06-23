@@ -276,7 +276,7 @@ export function useTerminalEffects(ctx: TerminalEffectsContext) {
             knownCwdRef.current = cwd;
             onTerminalCwdChange?.(sessionId, cwd);
           },
-          onTitleChange: (title: string) => {
+          onTitleChange: (title: string | null) => {
             onTerminalTitleChange?.(sessionId, title);
           },
           onBell: () => {

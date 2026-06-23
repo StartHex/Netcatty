@@ -184,7 +184,7 @@ export type CreateXTermRuntimeContext = {
   onCwdChange?: (cwd: string) => void;
 
   // Callback when shell reports window/icon title via OSC 0/2
-  onTitleChange?: (title: string) => void;
+  onTitleChange?: (title: string | null) => void;
 
   // Callback when the shell rings the terminal bell
   onBell?: () => void;
@@ -1198,8 +1198,7 @@ export const createXTermRuntime = (ctx: CreateXTermRuntimeContext): XTermRuntime
 
   const titleChangeDisposable = term.onTitleChange((title) => {
     const trimmed = title.trim();
-    if (!trimmed) return;
-    ctx.onTitleChange?.(trimmed);
+    ctx.onTitleChange?.(trimmed.length > 0 ? trimmed : null);
   });
 
   const bellDisposable = term.onBell(() => {
