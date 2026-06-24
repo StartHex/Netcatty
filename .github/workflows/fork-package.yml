@@ -1,0 +1,97 @@
+name: Package fork builds
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: package-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            pack_script: pack:win-x64
+            artifact_name: netcatty-windows-x64
+          - name: macos
+            os: macos-latest
+            pack_script: pack:mac
+            artifact_name: netcatty-macos
+          - name: linux-x64
+            os: ubuntu-22.04
+            pack_script: pack:linux-x64
+            artifact_name: netcatty-linux-x64
+
+    env:
+      ELECTRON_BUILDER_PUBLISH: never
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      MOSH_BIN_OWNER: binaricat
+      ET_BIN_OWNER: binaricat
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Linux packaging dependencies
+        if: matrix.name == 'linux-x64'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
+      - name: Set package version
+        shell: bash
+        run: |
+          VERSION="0.0.0-fork-${GITHUB_SHA:0:7}"
+          echo "Setting version to ${VERSION}"
+          npm pkg set version="${VERSION}"
+
+      - name: Prepare node-pty Linux runtime
+        if: matrix.name == 'linux-x64'
+        run: bash scripts/ensure-node-pty-linux.sh prepare x64
+
+      - name: Fetch bundled mosh-client
+        run: npm run fetch:mosh:dev
+
+      - name: Fetch bundled et-client
+        run: npm run fetch:et:dev
+
+      - name: Build package
+        run: npm run ${{ matrix.pack_script }}
+
+      - name: Verify node-pty Linux runtime
+        if: matrix.name == 'linux-x64'
+        run: bash scripts/ensure-node-pty-linux.sh verify x64
+
+      - name: Verify Linux deb artifact
+        if: matrix.name == 'linux-x64'
+        run: bash scripts/verify-linux-deb-artifact.sh amd64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.msi
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.pacman
+            release/*.tar.gz
+            release/*.yml
+            release/*.blockmap
+          if-no-files-found: error
