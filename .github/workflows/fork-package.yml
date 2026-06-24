@@ -79,20 +79,29 @@ jobs:
         if: matrix.name == 'linux-x64'
         run: bash scripts/verify-linux-deb-artifact.sh amd64
 
+      - name: Collect upload files
+        shell: bash
+        run: |
+          rm -rf release-upload
+          mkdir -p release-upload
+          case "${{ matrix.name }}" in
+            windows-x64)
+              find release -maxdepth 1 -type f -name '*-win-x64.exe' ! -name '*portable*' -exec cp -v '{}' release-upload/ ';'
+              ;;
+            macos)
+              find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' \) -exec cp -v '{}' release-upload/ ';'
+              ;;
+            linux-x64)
+              find release -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.pacman' \) -exec cp -v '{}' release-upload/ ';'
+              ;;
+          esac
+          find release-upload -maxdepth 1 -type f -print
+          test "$(find release-upload -maxdepth 1 -type f | wc -l)" -gt 0
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/*.exe
-            release/*.msi
-            release/*.AppImage
-            release/*.deb
-            release/*.rpm
-            release/*.pacman
-            release/*.tar.gz
-            release/*.yml
-            release/*.blockmap
+          path: release-upload/*
           if-no-files-found: error
+          retention-days: 7
