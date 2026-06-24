@@ -28,6 +28,7 @@ jobs:
             artifact_name: netcatty-linux-x64
 
     env:
+      GITHUB_TOKEN: ${{ github.token }}
       ELECTRON_BUILDER_PUBLISH: never
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       MOSH_BIN_OWNER: binaricat
