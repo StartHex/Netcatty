@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package:
@@ -105,3 +105,19 @@ jobs:
           path: release-upload/*
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish Windows x64 release asset
+        if: matrix.name == 'windows-x64'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="fork-windows-x64-latest"
+          title="Fork Windows x64 latest"
+          notes="Latest Windows x64 installer produced by the fork packaging workflow."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$title" --notes "$notes" --prerelease
+          else
+            gh release create "$tag" --title "$title" --notes "$notes" --prerelease
+          fi
+          gh release upload "$tag" release-upload/* --clobber
