@@ -22,6 +22,16 @@ test("shouldFollowTerminalCwdNavigate returns true when follow is on and paths d
   assert.equal(shouldFollowTerminalCwdNavigate(base), true);
 });
 
+test("shouldFollowTerminalCwdNavigate allows dot-prefixed hidden directories", () => {
+  assert.equal(
+    shouldFollowTerminalCwdNavigate({
+      ...base,
+      terminalCwd: "/home/user/.ssh",
+    }),
+    true,
+  );
+});
+
 test("shouldFollowTerminalCwdNavigate returns false when paths already match", () => {
   assert.equal(
     shouldFollowTerminalCwdNavigate({ ...base, currentPath: "/home/user/project" }),

@@ -361,15 +361,20 @@ const closeFileAsync = (sftp, handle) =>
     sftp.close(handle, (err) => (err ? reject(err) : resolve()));
   });
 
+const appendRemoteRelativePath = (basePath, relativePath) => {
+  if (!relativePath) return basePath;
+  return `${basePath.replace(/[\\/]+$/, "")}/${relativePath.replace(/^[\\/]+/, "")}`;
+};
+
 const normalizeRemotePathString = async (client, inputPath) => {
   if (typeof inputPath !== "string") return inputPath;
-  if (inputPath.startsWith("..")) {
+  if (inputPath === ".." || inputPath.startsWith("../")) {
     const root = await client.realPath("..");
-    return `${root}/${inputPath.slice(3)}`;
+    return appendRemoteRelativePath(root, inputPath === ".." ? "" : inputPath.slice(3));
   }
   if (inputPath.startsWith(".")) {
     const root = await client.realPath(".");
-    return `${root}/${inputPath.slice(2)}`;
+    return appendRemoteRelativePath(root, inputPath === "." ? "" : inputPath.replace(/^\.\//, ""));
   }
   return inputPath;
 };
@@ -970,6 +975,7 @@ module.exports = {
   requireSftpChannel,
   encodePathForSession,
   ensureRemoteDirForSession,
+  _normalizeRemotePathStringForTests: normalizeRemotePathString,
   clearSftpEncodingState,
   clearSftpEncodingStateByPrefix,
   openSftpForSession,

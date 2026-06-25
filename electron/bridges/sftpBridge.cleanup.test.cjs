@@ -67,6 +67,35 @@ function createSender() {
   };
 }
 
+test("normalizeRemotePathString preserves dot-prefixed hidden relative paths", async () => {
+  const bridge = loadSftpBridgeWithProxySocket(null);
+  const calls = [];
+  const client = {
+    async realPath(path) {
+      calls.push(path);
+      return path === ".." ? "/home" : "/home/alice";
+    },
+  };
+
+  assert.equal(
+    await bridge._normalizeRemotePathStringForTests(client, ".ssh"),
+    "/home/alice/.ssh",
+  );
+  assert.equal(
+    await bridge._normalizeRemotePathStringForTests(client, "./.config"),
+    "/home/alice/.config",
+  );
+  assert.equal(
+    await bridge._normalizeRemotePathStringForTests(client, "..hidden"),
+    "/home/alice/..hidden",
+  );
+  assert.equal(
+    await bridge._normalizeRemotePathStringForTests(client, "../logs"),
+    "/home/logs",
+  );
+  assert.deepEqual(calls, [".", ".", ".", ".."]);
+});
+
 test("openSftp cleans an opened proxy socket when target key passphrase is cancelled", async (t) => {
   const originalRequestPassphrase = passphraseHandler.requestPassphrase;
   t.after(() => {
