@@ -1,4 +1,4 @@
-name: Package latency test Windows
+name: Package fork builds
 
 on:
   workflow_dispatch:
