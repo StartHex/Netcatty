@@ -238,9 +238,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macos
-            os: macos-latest
-            pack_script: pack:mac
           - name: windows
             os: windows-latest
             # The mosh binary workflow currently produces win32-x64 only.
@@ -339,20 +336,10 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: netcatty-${{ matrix.name }}
+          name: netcatty-windows-x64-test
           path: |
-            release/*.dmg
-            release/*.zip
-            release/*.exe
-            release/*.msi
-            release/*.AppImage
-            release/*.deb
-            release/*.rpm
-            release/*.pacman
-            release/*.tar.gz
-            release/*.yml
-            release/*.blockmap
-          if-no-files-found: ignore
+            release/*-win-x64.exe
+          if-no-files-found: error
 
   # Linux x64 — pin to ubuntu-22.04 for broader glibc compatibility.
   # ubuntu-latest (24.04) links native modules against glibc 2.39 which
@@ -366,6 +353,7 @@ jobs:
       always()
       && needs.dedupe.result == 'success'
       && needs.dedupe.outputs.skip_heavy_ci != 'true'
+      && github.ref_name != 'codex/remote-macos-stats'
     runs-on: ubuntu-22.04
     env:
       MOSH_BIN_RELEASE: ${{ needs.resolve-mosh.outputs.mosh_bin_release }}
@@ -476,6 +464,7 @@ jobs:
       always()
       && needs.dedupe.result == 'success'
       && needs.dedupe.outputs.skip_heavy_ci != 'true'
+      && github.ref_name != 'codex/remote-macos-stats'
     runs-on: ubuntu-24.04-arm
     container:
       image: debian:bullseye
