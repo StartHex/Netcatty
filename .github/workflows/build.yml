@@ -52,7 +52,7 @@ concurrency:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
   pull-requests: read
 
 env:
@@ -340,6 +340,19 @@ jobs:
           path: |
             release/*-win-x64.exe
           if-no-files-found: error
+
+      - name: Publish fork test release
+        if: github.repository == 'StartHex/Netcatty' && github.ref_name == 'codex/remote-macos-stats'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: remote-macos-stats-test-${{ github.sha }}
+          target_commitish: ${{ github.sha }}
+          name: Remote macOS stats test ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          files: |
+            release/*-win-x64.exe
+          fail_on_unmatched_files: true
 
   # Linux x64 — pin to ubuntu-22.04 for broader glibc compatibility.
   # ubuntu-latest (24.04) links native modules against glibc 2.39 which
