@@ -287,7 +287,7 @@ jobs:
           cache: npm
 
       - name: Install deps
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Fetch bundled mosh-client
         if: env.BUNDLE_MOSH == 'true'
@@ -409,7 +409,7 @@ jobs:
           cache: npm
 
       - name: Install deps
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Install pacman packaging dependencies
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
@@ -525,7 +525,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install deps
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Set version
         shell: bash
