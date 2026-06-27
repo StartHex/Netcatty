@@ -1,0 +1,71 @@
+name: windows-installer-only
+
+on:
+  push:
+    branches:
+      - codex/windows-installer-only
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  STRICT_VERSION_REF_RE: '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+  VITE_SYNC_GITHUB_CLIENT_ID: ${{ secrets.VITE_SYNC_GITHUB_CLIENT_ID }}
+  VITE_SYNC_GOOGLE_CLIENT_ID: ${{ secrets.VITE_SYNC_GOOGLE_CLIENT_ID }}
+  VITE_SYNC_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_SYNC_GOOGLE_CLIENT_SECRET }}
+  VITE_SYNC_ONEDRIVE_CLIENT_ID: ${{ secrets.VITE_SYNC_ONEDRIVE_CLIENT_ID }}
+
+jobs:
+  build-windows-installer:
+    name: build-windows-installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Set version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" =~ $STRICT_VERSION_REF_RE ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0-sha-${GITHUB_SHA:0:7}"
+          fi
+          echo "Setting version to ${VERSION}"
+          npm pkg set version="${VERSION}"
+
+      - name: Build renderer
+        run: npm run build
+
+      - name: Build Windows x64 NSIS installer
+        env:
+          ELECTRON_BUILDER_PUBLISH: "never"
+          NODE_OPTIONS: "--disable-warning=DEP0190"
+          npm_config_arch: "x64"
+        run: npx electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish=never
+
+      - name: List release files
+        shell: pwsh
+        run: Get-ChildItem release | Select-Object Name,Length | Format-Table -AutoSize
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: netcatty-windows-x64-installer
+          path: |
+            release/*.exe
+            !release/*portable*.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
