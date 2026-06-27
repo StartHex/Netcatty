@@ -294,6 +294,8 @@ export const enAiMessages: Messages = {
   'ai.chatShortcuts.title': 'Chat Shortcuts',
   'ai.chatShortcuts.selectionAction': 'Show Add to Conversation when selecting terminal text',
   'ai.chatShortcuts.selectionAction.description': 'Show a small AI button next to selected terminal text.',
+  'ai.chatShortcuts.composerDefaultExpanded': 'Composer default expanded',
+  'ai.chatShortcuts.composerDefaultExpanded.description': 'Open the AI chat composer in its expanded height by default.',
 
   // AI Error
   'ai.codex.bridgeError': 'Codex main-process handlers are not loaded yet. Fully restart Netcatty, or restart the Electron dev process, then try again.',

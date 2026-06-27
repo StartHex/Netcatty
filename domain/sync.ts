@@ -278,6 +278,7 @@ export interface SyncPayload {
       webSearchConfig?: Record<string, unknown> | null;
       quickMessages?: Array<Record<string, unknown>>;
       showTerminalSelectionAction?: boolean;
+      composerDefaultExpanded?: boolean;
     };
   };
 

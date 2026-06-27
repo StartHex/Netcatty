@@ -266,6 +266,7 @@ const AIChatSidePanelActive: React.FC<AIChatSidePanelProps> = ({
   maxIterations = 20,
   webSearchConfig,
   quickMessages = [],
+  composerDefaultExpanded = true,
   scopeType,
   scopeTargetId,
   scopeHostIds,
@@ -1272,6 +1273,7 @@ const AIChatSidePanelActive: React.FC<AIChatSidePanelProps> = ({
         selectedUserSkills={selectedUserSkills}
         userSkillOptions={userSkillOptions}
         quickMessages={quickMessages}
+        composerDefaultExpanded={composerDefaultExpanded}
         addSelectedUserSkill={addSelectedUserSkill}
         removeSelectedUserSkill={removeSelectedUserSkill}
         globalPermissionMode={globalPermissionMode}
@@ -1324,6 +1326,7 @@ const AI_CHAT_SIDE_PANEL_AI_STATE_KEYS = [
   'maxIterations',
   'webSearchConfig',
   'quickMessages',
+  'composerDefaultExpanded',
 ] as const satisfies readonly (keyof AIChatSidePanelProps)[];
 
 export function aiChatSidePanelPropsAreEqual(

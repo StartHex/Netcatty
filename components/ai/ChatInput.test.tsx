@@ -30,3 +30,18 @@ test('does not render a standalone slash command toolbar button', () => {
   assert.match(html, /textarea/);
   assert.doesNotMatch(html, /aria-label="ai\.chat\.slashCommands"/);
 });
+
+test('can start with the composer expanded', () => {
+  const html = renderToStaticMarkup(
+    <TooltipProvider>
+      <ChatInput
+        value=""
+        onChange={() => {}}
+        onSend={() => {}}
+        defaultExpanded
+      />
+    </TooltipProvider>,
+  );
+
+  assert.match(html, /max-h-\[220px\]/);
+});

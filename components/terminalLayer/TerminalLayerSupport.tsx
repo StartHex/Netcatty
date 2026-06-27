@@ -562,6 +562,7 @@ const AIChatPanelsHostInner: React.FC<AIChatPanelsHostProps> = ({
                     maxIterations={aiState.maxIterations}
                     webSearchConfig={aiState.webSearchConfig}
                     quickMessages={aiState.quickMessages}
+                    composerDefaultExpanded={aiState.composerDefaultExpanded}
                     scopeType={context.scopeType}
                     scopeTargetId={context.scopeTargetId}
                     scopeHostIds={context.scopeHostIds}

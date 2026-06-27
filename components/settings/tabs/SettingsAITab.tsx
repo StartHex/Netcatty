@@ -153,6 +153,8 @@ interface SettingsAITabProps {
   setQuickMessages: (value: AIQuickMessage[] | ((prev: AIQuickMessage[]) => AIQuickMessage[])) => void;
   showTerminalSelectionAIAction: boolean;
   setShowTerminalSelectionAIAction: (value: boolean | ((prev: boolean) => boolean)) => void;
+  composerDefaultExpanded: boolean;
+  setComposerDefaultExpanded: (value: boolean | ((prev: boolean) => boolean)) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,6 +190,8 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
   setQuickMessages,
   showTerminalSelectionAIAction,
   setShowTerminalSelectionAIAction,
+  composerDefaultExpanded,
+  setComposerDefaultExpanded,
 }) => {
   const {
     permissionGrants,
@@ -1023,6 +1027,16 @@ const SettingsAITab: React.FC<SettingsAITabProps> = ({
                   checked={showTerminalSelectionAIAction}
                   onChange={setShowTerminalSelectionAIAction}
                   ariaLabel={t('ai.chatShortcuts.selectionAction')}
+                />
+              </SettingRow>
+              <SettingRow
+                label={t('ai.chatShortcuts.composerDefaultExpanded')}
+                description={t('ai.chatShortcuts.composerDefaultExpanded.description')}
+              >
+                <Toggle
+                  checked={composerDefaultExpanded}
+                  onChange={setComposerDefaultExpanded}
+                  ariaLabel={t('ai.chatShortcuts.composerDefaultExpanded')}
                 />
               </SettingRow>
             </SettingCard>

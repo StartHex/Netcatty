@@ -207,6 +207,8 @@ const SettingsAITabContainer: React.FC = () => {
                 setQuickMessages={aiState.setQuickMessages}
                 showTerminalSelectionAIAction={aiState.showTerminalSelectionAIAction}
                 setShowTerminalSelectionAIAction={aiState.setShowTerminalSelectionAIAction}
+                composerDefaultExpanded={aiState.composerDefaultExpanded}
+                setComposerDefaultExpanded={aiState.setComposerDefaultExpanded}
             />
         </AITabErrorBoundary>
     );

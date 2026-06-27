@@ -294,6 +294,8 @@ export const zhCNAiMessages: Messages = {
   'ai.chatShortcuts.title': '聊天快捷入口',
   'ai.chatShortcuts.selectionAction': '选中终端内容时显示“添加到对话”',
   'ai.chatShortcuts.selectionAction.description': '在终端里选中文本后显示 AI 快捷按钮。',
+  'ai.chatShortcuts.composerDefaultExpanded': '撰写栏默认展开',
+  'ai.chatShortcuts.composerDefaultExpanded.description': '打开 AI 聊天时默认使用展开高度显示撰写栏。',
 
   // AI Error
   'ai.codex.bridgeError': 'Codex 主进程处理器尚未加载。请完全重启 Netcatty 或重启 Electron 开发进程，然后重试。',

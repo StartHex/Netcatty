@@ -18,6 +18,7 @@ import {
   STORAGE_KEY_AI_AGENT_PROVIDER_MAP,
   STORAGE_KEY_AI_WEB_SEARCH,
   STORAGE_KEY_AI_QUICK_MESSAGES,
+  STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED,
 } from '../../infrastructure/config/storageKeys';
 import type { AIQuickMessage } from '../../infrastructure/ai/quickMessages';
 import { sanitizeQuickMessages } from '../../infrastructure/ai/quickMessages';
@@ -171,6 +172,9 @@ export function useAIState() {
   const [quickMessages, setQuickMessagesRaw] = useState<AIQuickMessage[]>(() =>
     sanitizeQuickMessages(localStorageAdapter.read<unknown>(STORAGE_KEY_AI_QUICK_MESSAGES)),
   );
+  const [composerDefaultExpanded, setComposerDefaultExpandedRaw] = useState<boolean>(() =>
+    localStorageAdapter.readBoolean(STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED) ?? true
+  );
 
   useEffect(() => {
     setLatestAISessionsSnapshot(sessions);
@@ -293,6 +297,15 @@ export function useAIState() {
       const next = sanitizeQuickMessages(nextRaw);
       localStorageAdapter.write(STORAGE_KEY_AI_QUICK_MESSAGES, next);
       emitAIStateChanged(STORAGE_KEY_AI_QUICK_MESSAGES);
+      return next;
+    });
+  }, []);
+
+  const setComposerDefaultExpanded = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setComposerDefaultExpandedRaw((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      localStorageAdapter.writeBoolean(STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED, next);
+      emitAIStateChanged(STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED);
       return next;
     });
   }, []);
@@ -493,12 +506,24 @@ export function useAIState() {
             setQuickMessagesRaw(sanitizeQuickMessages(messages));
             break;
           }
+          case STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED:
+            setComposerDefaultExpandedRaw(
+              localStorageAdapter.readBoolean(STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED) ?? true,
+            );
+            break;
         }
       } catch (err) {
         console.warn('[useAIState] Cross-window sync: failed to process storage event for key', e.key, err);
       }
     };
     window.addEventListener('storage', handleStorage);
+    const handleStoredBooleanChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string; value?: boolean }>).detail;
+      if (detail?.key === STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED) {
+        setComposerDefaultExpandedRaw(detail.value ?? true);
+      }
+    };
+    window.addEventListener('stored-boolean-change', handleStoredBooleanChange);
     const handleLocalStateChanged = (event: Event) => {
       const key = (event as CustomEvent<{ key?: string }>).detail?.key;
       if (!key) return;
@@ -530,6 +555,7 @@ export function useAIState() {
     window.addEventListener(AI_STATE_CHANGED_EVENT, handleLocalStateChanged);
     return () => {
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('stored-boolean-change', handleStoredBooleanChange);
       window.removeEventListener(AI_STATE_CHANGED_EVENT, handleLocalStateChanged);
     };
   }, []);
@@ -1028,6 +1054,8 @@ export function useAIState() {
     setWebSearchConfig,
     quickMessages,
     setQuickMessages,
+    composerDefaultExpanded,
+    setComposerDefaultExpanded,
     sessions,
     activeSessionIdMap,
     draftsByScope,
@@ -1085,6 +1113,8 @@ export function useAIState() {
     setWebSearchConfig,
     quickMessages,
     setQuickMessages,
+    composerDefaultExpanded,
+    setComposerDefaultExpanded,
     sessions,
     activeSessionIdMap,
     draftsByScope,
