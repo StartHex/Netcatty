@@ -278,8 +278,6 @@ export const ruAiMessages: Messages = {
   'ai.chatShortcuts.title': 'Быстрые действия чата',
   'ai.chatShortcuts.selectionAction': 'Показывать «Добавить в чат» при выделении в терминале',
   'ai.chatShortcuts.selectionAction.description': 'Показывать небольшую кнопку AI рядом с выделенным текстом терминала.',
-  'ai.chatShortcuts.composerDefaultExpanded': 'Разворачивать поле ввода по умолчанию',
-  'ai.chatShortcuts.composerDefaultExpanded.description': 'Открывать поле ввода AI-чата с увеличенной высотой по умолчанию.',
 
   // AI Error
   'ai.codex.bridgeError': 'Обработчики главного процесса Codex ещё не загружены. Полностью перезапустите Netcatty или dev-процесс Electron и попробуйте снова.',

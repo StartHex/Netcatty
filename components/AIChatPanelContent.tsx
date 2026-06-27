@@ -69,7 +69,6 @@ interface AIChatPanelContentProps {
   selectedUserSkills: UserSkillOption[];
   userSkillOptions: UserSkillOption[];
   quickMessages: AIQuickMessage[];
-  composerDefaultExpanded: boolean;
   addSelectedUserSkill: (slug: string) => void;
   removeSelectedUserSkill: (slug: string) => void;
   globalPermissionMode: AIPermissionMode;
@@ -124,7 +123,6 @@ export const AIChatPanelContent: React.FC<AIChatPanelContentProps> = ({
   selectedUserSkills,
   userSkillOptions,
   quickMessages,
-  composerDefaultExpanded,
   addSelectedUserSkill,
   removeSelectedUserSkill,
   globalPermissionMode,
@@ -288,7 +286,6 @@ export const AIChatPanelContent: React.FC<AIChatPanelContentProps> = ({
                 selectedUserSkills={selectedUserSkills}
                 userSkills={userSkillOptions}
                 quickMessages={quickMessages}
-                defaultExpanded={composerDefaultExpanded}
                 onAddUserSkill={addSelectedUserSkill}
                 onRemoveUserSkill={removeSelectedUserSkill}
                 permissionMode={globalPermissionMode}

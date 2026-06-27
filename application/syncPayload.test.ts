@@ -153,7 +153,6 @@ test("buildSyncPayload includes AI configuration settings", () => {
   localStorage.setItem(storageKeys.STORAGE_KEY_AI_AGENT_PROVIDER_MAP, JSON.stringify({ catty: "openai-main" }));
   localStorage.setItem(storageKeys.STORAGE_KEY_AI_WEB_SEARCH, JSON.stringify(webSearch));
   localStorage.setItem(storageKeys.STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION, "false");
-  localStorage.setItem(storageKeys.STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED, "false");
 
   const payload = buildSyncPayload(vault([]));
 
@@ -171,19 +170,13 @@ test("buildSyncPayload includes AI configuration settings", () => {
     agentProviderMap: { catty: "openai-main" },
     webSearchConfig: webSearch,
     showTerminalSelectionAction: false,
-    composerDefaultExpanded: false,
   });
 });
 
-test("AI chat shortcut preferences are syncable for auto-sync detection", () => {
+test("terminal selection AI preference is syncable for auto-sync detection", () => {
   assert.ok(
     (SYNCABLE_SETTING_STORAGE_KEYS as readonly string[]).includes(
       storageKeys.STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION,
-    ),
-  );
-  assert.ok(
-    (SYNCABLE_SETTING_STORAGE_KEYS as readonly string[]).includes(
-      storageKeys.STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED,
     ),
   );
 });
@@ -318,7 +311,6 @@ test("applySyncPayload restores AI configuration settings", async () => {
         agentProviderMap: { catty: "anthropic-main" },
         webSearchConfig: webSearch,
         showTerminalSelectionAction: false,
-        composerDefaultExpanded: false,
       },
     },
     syncedAt: 1,
@@ -339,7 +331,6 @@ test("applySyncPayload restores AI configuration settings", async () => {
   assert.deepEqual(JSON.parse(localStorage.getItem(storageKeys.STORAGE_KEY_AI_AGENT_PROVIDER_MAP)!), { catty: "anthropic-main" });
   assert.deepEqual(JSON.parse(localStorage.getItem(storageKeys.STORAGE_KEY_AI_WEB_SEARCH)!), webSearch);
   assert.equal(localStorage.getItem(storageKeys.STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION), "false");
-  assert.equal(localStorage.getItem(storageKeys.STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED), "false");
 });
 
 test("applySyncPayload encrypts synced plaintext AI API keys before saving locally", async () => {

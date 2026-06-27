@@ -86,7 +86,6 @@ import {
   STORAGE_KEY_AI_WEB_SEARCH,
   STORAGE_KEY_AI_QUICK_MESSAGES,
   STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION,
-  STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED,
   STORAGE_KEY_PORT_FORWARDING,
 } from '../infrastructure/config/storageKeys';
 
@@ -259,7 +258,6 @@ export const SYNCABLE_SETTING_STORAGE_KEYS = [
   STORAGE_KEY_AI_WEB_SEARCH,
   STORAGE_KEY_AI_QUICK_MESSAGES,
   STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION,
-  STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED,
 ] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -498,10 +496,6 @@ export function collectSyncableSettings(): SyncPayload['settings'] {
   if (showTerminalSelectionAction != null) {
     ai.showTerminalSelectionAction = showTerminalSelectionAction;
   }
-  const composerDefaultExpanded = localStorageAdapter.readBoolean(STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED);
-  if (composerDefaultExpanded != null) {
-    ai.composerDefaultExpanded = composerDefaultExpanded;
-  }
   if (Object.keys(ai).length > 0) settings.ai = ai;
 
   return Object.keys(settings).length > 0 ? settings : undefined;
@@ -712,12 +706,6 @@ async function applySyncableSettings(settings: NonNullable<SyncPayload['settings
         ai.showTerminalSelectionAction,
       );
     }
-    if (ai.composerDefaultExpanded != null) {
-      localStorageAdapter.writeBoolean(
-        STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED,
-        ai.composerDefaultExpanded,
-      );
-    }
     // After all AI writes, reconcile per-agent bindings against the final
     // provider list. Sync payloads can land with a new `providers` set but
     // no `agentProviderMap`, or with a stale `agentProviderMap` that
@@ -761,9 +749,6 @@ function notifyAIStateAfterSync(ai: NonNullable<SyncPayload['settings']>['ai']):
   if (ai.quickMessages != null) touched.push(STORAGE_KEY_AI_QUICK_MESSAGES);
   if (ai.showTerminalSelectionAction != null) {
     touched.push(STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION);
-  }
-  if (ai.composerDefaultExpanded != null) {
-    touched.push(STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED);
   }
   for (const key of touched) {
     emitAIStateChanged(key);

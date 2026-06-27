@@ -100,8 +100,6 @@ interface ChatInputProps {
    * `modelPresets` dropdown because their provider is wired inside the CLI.
    */
   providerSwitcher?: ProviderSwitcherConfig;
-  /** Whether the composer should start in expanded height. */
-  defaultExpanded?: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -130,14 +128,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
   permissionMode,
   onPermissionModeChange,
   providerSwitcher,
-  defaultExpanded = false,
 }) => {
   const { t } = useI18n();
   const hasTerminalSelectionAttachment = files.some((file) => file.terminalSelection);
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  useEffect(() => {
-    setExpanded(defaultExpanded);
-  }, [defaultExpanded]);
+  const [expanded, setExpanded] = useState(false);
   // Consolidate menu state into a single discriminated union to prevent multiple menus open simultaneously
   type ActiveMenu = 'model' | 'attach' | 'atMention' | 'slashCommand' | 'perm' | null;
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);

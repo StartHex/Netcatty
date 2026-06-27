@@ -76,7 +76,6 @@ export interface AIChatSidePanelProps {
 
   // Quick messages (slash prompts)
   quickMessages?: AIQuickMessage[];
-  composerDefaultExpanded?: boolean;
 
   // Context
   scopeType: 'terminal' | 'workspace';

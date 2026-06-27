@@ -16,7 +16,6 @@ import {
   STORAGE_KEY_AI_WEB_SEARCH,
   STORAGE_KEY_AI_QUICK_MESSAGES,
   STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION,
-  STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED,
 } from '../../infrastructure/config/storageKeys';
 import type { AIQuickMessage } from '../../infrastructure/ai/quickMessages';
 import { sanitizeQuickMessages } from '../../infrastructure/ai/quickMessages';
@@ -80,10 +79,6 @@ export function useAISettingsState() {
   );
   const [showTerminalSelectionAIAction, setShowTerminalSelectionAIAction] = useStoredBoolean(
     STORAGE_KEY_AI_SHOW_TERMINAL_SELECTION_ACTION,
-    true,
-  );
-  const [composerDefaultExpanded, setComposerDefaultExpanded] = useStoredBoolean(
-    STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED,
     true,
   );
 
@@ -259,11 +254,6 @@ export function useAISettingsState() {
           case STORAGE_KEY_AI_QUICK_MESSAGES:
             setQuickMessagesRaw(sanitizeQuickMessages(localStorageAdapter.read<unknown>(STORAGE_KEY_AI_QUICK_MESSAGES)));
             break;
-          case STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED:
-            setComposerDefaultExpanded(
-              localStorageAdapter.readBoolean(STORAGE_KEY_AI_COMPOSER_DEFAULT_EXPANDED) ?? true,
-            );
-            break;
         }
       } catch (err) {
         console.warn('[useAISettingsState] Failed to process AI settings storage change', key, err);
@@ -325,8 +315,6 @@ export function useAISettingsState() {
     setQuickMessages,
     showTerminalSelectionAIAction,
     setShowTerminalSelectionAIAction,
-    composerDefaultExpanded,
-    setComposerDefaultExpanded,
   }), [
     providers,
     setProviders,
@@ -358,7 +346,5 @@ export function useAISettingsState() {
     setQuickMessages,
     showTerminalSelectionAIAction,
     setShowTerminalSelectionAIAction,
-    composerDefaultExpanded,
-    setComposerDefaultExpanded,
   ]);
 }
