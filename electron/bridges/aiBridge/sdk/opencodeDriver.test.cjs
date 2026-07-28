@@ -922,6 +922,76 @@ test("runOpenCodeTurn uses CLI run JSON output for custom OpenCode-compatible co
   ]);
 });
 
+test("runOpenCodeTurn injects Netcatty MCP into temporary CLI config for custom commands", async () => {
+  const { emitter } = collector();
+  const baseRoot = fs.mkdtempSync(path.join(os.tmpdir(), "netcatty-opencode-base-config-"));
+  let configRoot = null;
+  const output = `${JSON.stringify({
+    type: "text",
+    sessionID: "sess-mcp",
+    part: { id: "part-1", type: "text", text: "ok" },
+  })}\n`;
+
+  try {
+    const jscodeBaseDir = path.join(baseRoot, "jscode");
+    fs.mkdirSync(jscodeBaseDir, { recursive: true });
+    fs.writeFileSync(path.join(jscodeBaseDir, "config.json"), JSON.stringify({
+      username: "shixu",
+      mcp: {
+        existing: {
+          type: "local",
+          command: ["existing"],
+          enabled: true,
+        },
+      },
+    }));
+
+    await runOpenCodeTurn({
+      prompt: "hello",
+      systemPrompt: "system context",
+      cwd: "/repo",
+      model: "Si-tech AI/glm-5.2-stq",
+      binPath: "/usr/local/bin/jscode",
+      env: { XDG_CONFIG_HOME: baseRoot },
+      injectedMcpServers: [{
+        name: "netcatty-remote-hosts",
+        command: "/abs/electron",
+        args: ["/abs/netcatty-mcp-server.cjs"],
+        env: [{ name: "NETCATTY_MCP_PORT", value: "11824" }],
+      }],
+      toolIntegrationMode: "mcp",
+      emitter,
+      abortController: new AbortController(),
+      cliRunSpawn: createStdoutSpawn(output, (command, args, options) => {
+        assert.equal(command, "/usr/local/bin/jscode");
+        configRoot = options.env.XDG_CONFIG_HOME;
+        assert.ok(configRoot);
+        assert.notEqual(configRoot, baseRoot);
+        assert.equal(args.includes("--model"), false);
+        assert.equal(args.at(-1), "system context\n\nhello");
+
+        const config = JSON.parse(fs.readFileSync(path.join(configRoot, "jscode", "config.json"), "utf8"));
+        assert.equal(config.username, "shixu");
+        assert.equal(config.model, "Si-tech AI/glm-5.2-stq");
+        assert.deepEqual(config.mcp.existing.command, ["existing"]);
+        assert.deepEqual(config.mcp["netcatty-remote-hosts"], {
+          type: "local",
+          command: ["/abs/electron", "/abs/netcatty-mcp-server.cjs"],
+          environment: { NETCATTY_MCP_PORT: "11824" },
+          enabled: true,
+        });
+        assert.equal(config.permission.edit, "deny");
+        assert.equal(config.permission.bash, "deny");
+        assert.equal(fs.existsSync(path.join(configRoot, "opencode", "config.json")), true);
+      }),
+    });
+
+    assert.equal(configRoot && fs.existsSync(configRoot), false);
+  } finally {
+    fs.rmSync(baseRoot, { recursive: true, force: true });
+  }
+});
+
 test("runOpenCodeTurn passes whitespace-free models to CLI run", async () => {
   const { emitter } = collector();
   await runOpenCodeTurn({

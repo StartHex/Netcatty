@@ -198,7 +198,19 @@ function buildExternalAgentSystemContext({ mode, chatSessionId, defaultTargetSes
     `Use the "netcatty-remote-hosts" MCP tools to operate only on the terminal sessions exposed by Netcatty. ` +
     `For local files explicitly attached by the user, use the list_attachments and read_attachment tools. Do not use local shell or local filesystem tools for unrelated local-machine work. ` +
     `Those sessions may be remote hosts, a local terminal, or Mosh-backed shells. ` +
-    `Call get_environment first to discover available sessions and their IDs. ` +
+    (defaultTargetSession
+      ? (
+        `The host has already identified the default target session for this AI panel: ` +
+        `sessionId="${defaultTargetSession.sessionId}", ` +
+        `label="${defaultTargetSession.label || ""}", ` +
+        `hostname="${defaultTargetSession.hostname || ""}", ` +
+        `protocol="${defaultTargetSession.protocol || ""}", ` +
+        `connected=${defaultTargetSession.connected !== false}. ` +
+        (defaultTargetSession.connected !== false
+          ? `For routine requests that do not mention another session or host, use this default target sessionId directly with terminal_execute or terminal_start instead of asking what to do or starting with get_environment. Only call get_environment when the user explicitly points to another session, when the target is ambiguous, or when the direct default-session call fails. `
+          : `This default target is currently not connected, so do not execute against it directly. Call get_environment to find another available session if appropriate. `)
+      )
+      : `Call get_environment first to discover available sessions and their IDs. `) +
     `Use terminal_execute only for commands likely to finish within about 60 seconds. ` +
     `For long-running commands such as builds, scans, follow/log streaming, watch commands, or anything likely to exceed 60 seconds on PTY-backed shell sessions, use terminal_start, then terminal_poll until completed is true. Reuse the returned nextOffset for the next poll. If terminal_poll reports outputTruncated=true, only the retained tail starting at outputBaseOffset is still available. Do not poll aggressively: wait at least about 30 seconds between polls, and increase the interval further when there is no new output, to avoid wasting tokens. As soon as completed is true, stop polling and analyze the result immediately. ` +
     `Use terminal_stop if you need to interrupt a started long-running command. Note: terminal_start requires a PTY-backed session; for sessions that only support exec-channel execution (no writable PTY), use terminal_execute instead. ` +

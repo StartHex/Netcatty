@@ -3,6 +3,7 @@
 const { spawn } = require("node:child_process");
 const net = require("node:net");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { mcpEnvPairsToObject } = require("./injectMcp.cjs");
@@ -564,6 +565,100 @@ function buildOpenCodeCliSpawnSpec(cliPath, args, env, platform = process.platfo
   return { command: cliPath, args };
 }
 
+function getHomeDirFromEnv(env = {}) {
+  const home = env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE;
+  return home ? String(home) : os.homedir();
+}
+
+function getXdgConfigHome(env = {}) {
+  return String(
+    env.XDG_CONFIG_HOME
+    || process.env.XDG_CONFIG_HOME
+    || path.join(getHomeDirFromEnv(env), ".config"),
+  );
+}
+
+function readJsonFile(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    if (!raw.trim()) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function readExistingCliConfig(baseRoot, dirName) {
+  const root = path.join(baseRoot, dirName);
+  const config = readJsonFile(path.join(root, "config.json"));
+  if (Object.keys(config).length > 0) return config;
+  return readJsonFile(path.join(root, `${dirName}.json`));
+}
+
+function mergeOpenCodeCliConfig(baseConfig, injectedConfig) {
+  return {
+    ...(baseConfig || {}),
+    ...(injectedConfig || {}),
+    mcp: {
+      ...((baseConfig && typeof baseConfig.mcp === "object" && !Array.isArray(baseConfig.mcp)) ? baseConfig.mcp : {}),
+      ...((injectedConfig && typeof injectedConfig.mcp === "object" && !Array.isArray(injectedConfig.mcp)) ? injectedConfig.mcp : {}),
+    },
+  };
+}
+
+function getOpenCodeCliConfigDirNames(cliPath) {
+  return Array.from(new Set([
+    getCliBasename(cliPath),
+    "jscode",
+    "opencode",
+  ].filter(Boolean)));
+}
+
+function shouldCreateOpenCodeCliConfig({ injectedMcpServers, toolIntegrationMode, skillsPathAllowlist } = {}) {
+  return (Array.isArray(injectedMcpServers) && injectedMcpServers.length > 0)
+    || (toolIntegrationMode === "skills" && Array.isArray(skillsPathAllowlist) && skillsPathAllowlist.length > 0);
+}
+
+function createOpenCodeCliConfigEnv({
+  env,
+  cliPath,
+  model,
+  injectedMcpServers,
+  toolIntegrationMode,
+  skillsPathAllowlist,
+} = {}) {
+  const nextEnv = { ...(env || {}) };
+  if (!shouldCreateOpenCodeCliConfig({ injectedMcpServers, toolIntegrationMode, skillsPathAllowlist })) {
+    return { env: nextEnv, cleanup() {} };
+  }
+
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "netcatty-opencode-cli-config-"));
+  const existingRoot = getXdgConfigHome(nextEnv);
+  const injectedConfig = buildOpenCodeConfig({
+    model,
+    injectedMcpServers,
+    toolIntegrationMode,
+    skillsPathAllowlist,
+  });
+
+  for (const dirName of getOpenCodeCliConfigDirNames(cliPath)) {
+    const merged = mergeOpenCodeCliConfig(readExistingCliConfig(existingRoot, dirName), injectedConfig);
+    const dir = path.join(tempRoot, dirName);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "config.json"), `${JSON.stringify(merged, null, 2)}\n`);
+  }
+
+  nextEnv.XDG_CONFIG_HOME = tempRoot;
+  return {
+    env: nextEnv,
+    configRoot: tempRoot,
+    cleanup() {
+      try { fs.rmSync(tempRoot, { recursive: true, force: true }); } catch {}
+    },
+  };
+}
+
 function getOpenCodeCliEventSessionId(event) {
   return event?.sessionID
     || event?.sessionId
@@ -614,6 +709,7 @@ function translateOpenCodeCliJsonEvent(event, emitter, state = {}) {
 
 async function runOpenCodeCliTurn({
   prompt, systemPrompt, attachments, cwd, model, resumeSessionId, env, binPath,
+  injectedMcpServers, toolIntegrationMode, skillsPathAllowlist,
   emitter, abortController, spawnImpl, platform = process.platform,
 }) {
   const cliPath = String(resolveUsableOpenCodeBinPath(binPath, env) || binPath || env?.OPENCODE_BIN || "").trim();
@@ -623,8 +719,17 @@ async function runOpenCodeCliTurn({
   }
 
   const childEnv = { ...process.env, ...(env || {}) };
+  const cliConfig = createOpenCodeCliConfigEnv({
+    env: childEnv,
+    cliPath,
+    model,
+    injectedMcpServers,
+    toolIntegrationMode,
+    skillsPathAllowlist,
+  });
+  const effectiveChildEnv = cliConfig.env;
   const args = buildOpenCodeCliRunArgs({ prompt, systemPrompt, attachments, cwd, model, resumeSessionId });
-  const spawnSpec = buildOpenCodeCliSpawnSpec(cliPath, args, childEnv, platform);
+  const spawnSpec = buildOpenCodeCliSpawnSpec(cliPath, args, effectiveChildEnv, platform);
   const spawnFn = spawnImpl || spawn;
   let child;
   let sessionId = resumeSessionId || null;
@@ -657,12 +762,13 @@ async function runOpenCodeCliTurn({
 
   try {
     child = spawnFn(spawnSpec.command, spawnSpec.args, {
-      env: childEnv,
+      env: effectiveChildEnv,
       cwd: cwd || undefined,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
   } catch (error) {
+    cliConfig.cleanup();
     const classified = classifyOpenCodeSpawnError(error);
     emitter.emitError(classified.isSpawnEnoent
       ? "OpenCode CLI not found or not runnable. Install OpenCode and ensure it is on PATH, or set a custom path in Settings."
@@ -676,6 +782,7 @@ async function runOpenCodeCliTurn({
       if (settled) return;
       settled = true;
       abortController?.signal?.removeEventListener?.("abort", abortHandler);
+      cliConfig.cleanup();
       if (stdoutBuffer.trim()) handleLine(stdoutBuffer);
       if (!failed && !abortController?.signal?.aborted && exitCode !== 0) {
         failed = true;
@@ -731,6 +838,9 @@ async function runOpenCodeTurn({
       model,
       env,
       binPath,
+      injectedMcpServers,
+      toolIntegrationMode,
+      skillsPathAllowlist,
       emitter,
       abortController,
       resumeSessionId,
