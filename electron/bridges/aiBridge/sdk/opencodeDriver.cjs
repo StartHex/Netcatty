@@ -1,5 +1,6 @@
 "use strict";
 
+const { spawn } = require("node:child_process");
 const net = require("node:net");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -530,10 +531,213 @@ function createStopWait() {
   };
 }
 
+function shouldPassModelToOpenCodeCli(model) {
+  const raw = String(model || "").trim();
+  return Boolean(raw) && !/\s/.test(raw);
+}
+
+function buildOpenCodeCliPrompt(prompt, systemPrompt) {
+  const rawPrompt = String(prompt || "");
+  const rawSystem = String(systemPrompt || "").trim();
+  return rawSystem ? `${rawSystem}\n\n${rawPrompt}` : rawPrompt;
+}
+
+function buildOpenCodeCliRunArgs({ prompt, systemPrompt, attachments, cwd, model, resumeSessionId }) {
+  const args = ["run", "--format", "json"];
+  if (cwd) args.push("--dir", String(cwd));
+  if (resumeSessionId) args.push("--session", String(resumeSessionId));
+  if (shouldPassModelToOpenCodeCli(model)) args.push("--model", String(model).trim());
+  for (const attachment of Array.isArray(attachments) ? attachments : []) {
+    if (attachment?.filePath) args.push("--file", String(attachment.filePath));
+  }
+  args.push(buildOpenCodeCliPrompt(prompt, systemPrompt));
+  return args;
+}
+
+function buildOpenCodeCliSpawnSpec(cliPath, args, env, platform = process.platform) {
+  if (shouldUseWindowsShellForCli(cliPath, platform)) {
+    return {
+      command: env?.ComSpec || env?.COMSPEC || process.env.ComSpec || process.env.COMSPEC || "cmd.exe",
+      args: ["/d", "/c", cliPath, ...args],
+    };
+  }
+  return { command: cliPath, args };
+}
+
+function getOpenCodeCliEventSessionId(event) {
+  return event?.sessionID
+    || event?.sessionId
+    || event?.part?.sessionID
+    || event?.part?.sessionId
+    || null;
+}
+
+function getOpenCodeCliEventText(event) {
+  if (typeof event?.part?.text === "string") return event.part.text;
+  if (typeof event?.text === "string") return event.text;
+  if (typeof event?.delta === "string") return event.delta;
+  return "";
+}
+
+function translateOpenCodeCliJsonEvent(event, emitter, state = {}) {
+  if (!event || typeof event !== "object") return { content: false, error: false, sessionId: null };
+  const sessionId = getOpenCodeCliEventSessionId(event);
+  if (event.type === "error" || event.error) {
+    const message = extractOpenCodeErrorMessage(event.error) || event.error?.data?.message || "OpenCode CLI run failed";
+    emitter.emitError(message);
+    return { content: false, error: true, sessionId };
+  }
+
+  const partType = String(event.part?.type || event.type || "").toLowerCase();
+  if (partType === "tool") {
+    const result = translateOpenCodeEvent({ type: "message.part.updated", properties: { part: event.part } }, emitter, state);
+    return { content: Boolean(result.content), error: Boolean(result.error), sessionId };
+  }
+
+  const text = getOpenCodeCliEventText(event);
+  if (text) {
+    const kind = partType === "reasoning" ? "reasoning" : "text";
+    const partId = event.part?.id || event.partID || event.partId || null;
+    const emitted = emitOpenCodePartChunk({
+      emitter,
+      state,
+      partId,
+      kind,
+      text,
+      isDelta: typeof event.delta === "string",
+    });
+    return { content: emitted, error: false, sessionId };
+  }
+
+  return { content: false, error: false, sessionId };
+}
+
+async function runOpenCodeCliTurn({
+  prompt, systemPrompt, attachments, cwd, model, resumeSessionId, env, binPath,
+  emitter, abortController, spawnImpl, platform = process.platform,
+}) {
+  const cliPath = String(resolveUsableOpenCodeBinPath(binPath, env) || binPath || env?.OPENCODE_BIN || "").trim();
+  if (!cliPath) {
+    emitter.emitError("OpenCode CLI not found or not runnable. Install OpenCode and ensure it is on PATH, or set a custom path in Settings.");
+    return { sessionId: resumeSessionId || null };
+  }
+
+  const childEnv = { ...process.env, ...(env || {}) };
+  const args = buildOpenCodeCliRunArgs({ prompt, systemPrompt, attachments, cwd, model, resumeSessionId });
+  const spawnSpec = buildOpenCodeCliSpawnSpec(cliPath, args, childEnv, platform);
+  const spawnFn = spawnImpl || spawn;
+  let child;
+  let sessionId = resumeSessionId || null;
+  let hasContent = false;
+  let failed = false;
+  let stdoutBuffer = "";
+  let stderr = "";
+  let sessionEmitted = Boolean(sessionId);
+  const state = { reasoningOpen: false };
+
+  const handleLine = (line) => {
+    const raw = stripAnsiCodes(line).trim();
+    if (!raw) return;
+    let event;
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const eventSessionId = getOpenCodeCliEventSessionId(event);
+    if (eventSessionId && !sessionId) sessionId = eventSessionId;
+    if (sessionId && !sessionEmitted) {
+      sessionEmitted = true;
+      emitter.sessionId(sessionId);
+    }
+    const result = translateOpenCodeCliJsonEvent(event, emitter, state);
+    if (result.content) hasContent = true;
+    if (result.error) failed = true;
+  };
+
+  try {
+    child = spawnFn(spawnSpec.command, spawnSpec.args, {
+      env: childEnv,
+      cwd: cwd || undefined,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+  } catch (error) {
+    const classified = classifyOpenCodeSpawnError(error);
+    emitter.emitError(classified.isSpawnEnoent
+      ? "OpenCode CLI not found or not runnable. Install OpenCode and ensure it is on PATH, or set a custom path in Settings."
+      : (classified.message || "OpenCode CLI run failed"));
+    return { sessionId };
+  }
+
+  return await new Promise((resolve) => {
+    let settled = false;
+    const finish = (exitCode) => {
+      if (settled) return;
+      settled = true;
+      abortController?.signal?.removeEventListener?.("abort", abortHandler);
+      if (stdoutBuffer.trim()) handleLine(stdoutBuffer);
+      if (!failed && !abortController?.signal?.aborted && exitCode !== 0) {
+        failed = true;
+        emitter.emitError(stripAnsiCodes(stderr).trim() || `OpenCode CLI exited with code ${exitCode}`);
+      }
+      if (!hasContent && !failed && !abortController?.signal?.aborted) {
+        emitter.emitError("OpenCode returned an empty response. Run the configured OpenCode-compatible CLI in a terminal to configure authentication and models.");
+      } else if (!failed && !abortController?.signal?.aborted) {
+        emitter.emitDone();
+      }
+      resolve({ sessionId });
+    };
+    const abortHandler = () => {
+      try { child?.kill?.("SIGTERM"); } catch {}
+      setTimeout(() => {
+        try { child?.kill?.("SIGKILL"); } catch {}
+      }, 750).unref?.();
+      finish(null);
+    };
+
+    if (abortController?.signal?.aborted) {
+      abortHandler();
+      return;
+    }
+    abortController?.signal?.addEventListener?.("abort", abortHandler, { once: true });
+    child.stdout?.on("data", (chunk) => {
+      stdoutBuffer += String(chunk);
+      const lines = stdoutBuffer.split(/\r?\n/);
+      stdoutBuffer = lines.pop() || "";
+      for (const line of lines) handleLine(line);
+    });
+    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+    child.on("error", (error) => {
+      failed = true;
+      emitter.emitError(error?.message || String(error));
+      finish(null);
+    });
+    child.on("close", (exitCode) => finish(exitCode));
+  });
+}
+
 async function runOpenCodeTurn({
   prompt, systemPrompt, attachments, cwd, model, injectedMcpServers, toolIntegrationMode,
   skillsPathAllowlist, resumeSessionId, env, binPath, emitter, abortController, openCodeFactory,
+  cliRunSpawn,
 }) {
+  if (!openCodeFactory && shouldPreferCliModelList(binPath, env)) {
+    return await runOpenCodeCliTurn({
+      prompt,
+      systemPrompt,
+      attachments,
+      cwd,
+      model,
+      env,
+      binPath,
+      emitter,
+      abortController,
+      resumeSessionId,
+      spawnImpl: cliRunSpawn,
+    });
+  }
+
   const config = buildOpenCodeConfig({ model, injectedMcpServers, toolIntegrationMode, skillsPathAllowlist });
   let opencode = null;
   let sessionId = resumeSessionId || null;
@@ -692,6 +896,43 @@ function mapOpenCodeModels(response) {
   return models;
 }
 
+function stripAnsiCodes(value) {
+  return String(value || "").replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
+}
+
+function parseOpenCodeCliModelsOutput(stdout) {
+  const models = [];
+  const seen = new Set();
+  let currentModelId = null;
+
+  for (const rawLine of stripAnsiCodes(stdout).split(/\r?\n/)) {
+    let line = rawLine.trim();
+    if (!line) continue;
+
+    const markerMatch = line.match(/\s+\((?:current|default)(?:\s*,\s*(?:current|default))*\)\s*$/i);
+    if (markerMatch) {
+      line = line.slice(0, markerMatch.index).trim();
+    }
+    line = line.replace(/^[*•-]\s+/, "").trim();
+
+    if (!line || line.includes("://")) continue;
+    const slash = line.indexOf("/");
+    if (slash <= 0 || slash === line.length - 1) continue;
+
+    const providerId = line.slice(0, slash).trim();
+    const modelId = line.slice(slash + 1).trim();
+    if (!providerId || !modelId || /\s/.test(modelId)) continue;
+
+    const id = `${providerId}/${modelId}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (markerMatch && !currentModelId) currentModelId = id;
+    models.push({ id, name: id });
+  }
+
+  return { currentModelId, models };
+}
+
 function getOpenCodeDefaultModelId(response) {
   const value = response?.default;
   if (!value) return null;
@@ -731,6 +972,80 @@ function whenAborted(signal) {
   if (signal.aborted) return Promise.reject(abortError(signal));
   return new Promise((_, reject) => {
     signal.addEventListener("abort", () => reject(abortError(signal)), { once: true });
+  });
+}
+
+function shouldUseWindowsShellForCli(command, platform = process.platform) {
+  if (platform !== "win32") return false;
+  const normalized = String(command || "").trim().toLowerCase();
+  return normalized.endsWith(".cmd") || normalized.endsWith(".bat");
+}
+
+function getCliBasename(command) {
+  return String(command || "")
+    .trim()
+    .split(/[\\/]/)
+    .pop()
+    .toLowerCase()
+    .replace(/\.(?:exe|cmd|bat|com|ps1)$/i, "");
+}
+
+function shouldPreferCliModelList(binPath, env) {
+  const cliPath = String(resolveUsableOpenCodeBinPath(binPath, env) || binPath || env?.OPENCODE_BIN || "").trim();
+  if (!cliPath) return false;
+  return getCliBasename(cliPath) !== "opencode";
+}
+
+async function listOpenCodeCliModels({ env, binPath, signal, spawnImpl, platform = process.platform } = {}) {
+  const cliPath = String(resolveUsableOpenCodeBinPath(binPath, env) || binPath || env?.OPENCODE_BIN || "").trim();
+  if (!cliPath || signal?.aborted) return emptyOpenCodeModelCatalog();
+
+  const childEnv = { ...process.env, ...(env || {}) };
+  const spawnFn = spawnImpl || spawn;
+
+  return await new Promise((resolve) => {
+    let stdout = "";
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener?.("abort", abortHandler);
+      resolve(value);
+    };
+    const abortHandler = () => {
+      try { child?.kill?.(); } catch {}
+      finish(emptyOpenCodeModelCatalog());
+    };
+
+    let child;
+    try {
+      if (shouldUseWindowsShellForCli(cliPath, platform)) {
+        const shell = childEnv.ComSpec || childEnv.COMSPEC || "cmd.exe";
+        child = spawnFn(shell, ["/d", "/c", cliPath, "models"], {
+          env: childEnv,
+          stdio: ["ignore", "pipe", "pipe"],
+          windowsHide: true,
+        });
+      } else {
+        child = spawnFn(cliPath, ["models"], {
+          env: childEnv,
+          stdio: ["ignore", "pipe", "pipe"],
+          windowsHide: true,
+        });
+      }
+    } catch {
+      finish(emptyOpenCodeModelCatalog());
+      return;
+    }
+
+    if (signal?.aborted) {
+      abortHandler();
+      return;
+    }
+    signal?.addEventListener?.("abort", abortHandler, { once: true });
+    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+    child.on("error", () => finish(emptyOpenCodeModelCatalog()));
+    child.on("close", () => finish(parseOpenCodeCliModelsOutput(stdout)));
   });
 }
 
@@ -875,11 +1190,22 @@ function resetOpenCodeListServerPool() {
   openCodeListServers.clear();
 }
 
-async function listOpenCodeModels({ env, binPath, openCodeFactory, abortController, signal } = {}) {
+async function listOpenCodeModels({ env, binPath, openCodeFactory, abortController, signal, cliModelListSpawn } = {}) {
   const effectiveSignal = signal || abortController?.signal;
   let acquired = null;
   try {
     if (effectiveSignal?.aborted) return emptyOpenCodeModelCatalog();
+    if (shouldPreferCliModelList(binPath, env)) {
+      const cliCatalog = await listOpenCodeCliModels({
+        env,
+        binPath,
+        signal: effectiveSignal,
+        spawnImpl: cliModelListSpawn,
+      });
+      if (cliCatalog.models.length > 0 || effectiveSignal?.aborted) {
+        return cliCatalog;
+      }
+    }
     acquired = await acquireOpenCodeListServer({
       env,
       binPath,
@@ -895,12 +1221,29 @@ async function listOpenCodeModels({ env, binPath, openCodeFactory, abortControll
       throw new Error(extractOpenCodeErrorMessage(response.error) || "OpenCode providers unavailable");
     }
     const data = response?.data || response;
-    return {
+    const catalog = {
       currentModelId: getOpenCodeDefaultModelId(data),
       models: mapOpenCodeModels(data),
     };
+    if (catalog.models.length > 0 || effectiveSignal?.aborted) return catalog;
+    const cliCatalog = await listOpenCodeCliModels({
+      env,
+      binPath,
+      signal: effectiveSignal,
+      spawnImpl: cliModelListSpawn,
+    });
+    return {
+      currentModelId: cliCatalog.currentModelId || catalog.currentModelId,
+      models: cliCatalog.models,
+    };
   } catch {
-    return emptyOpenCodeModelCatalog();
+    if (effectiveSignal?.aborted) return emptyOpenCodeModelCatalog();
+    return await listOpenCodeCliModels({
+      env,
+      binPath,
+      signal: effectiveSignal,
+      spawnImpl: cliModelListSpawn,
+    });
   } finally {
     if (acquired) releaseOpenCodeListServer(acquired.key);
   }
@@ -914,11 +1257,15 @@ module.exports = {
   createOpenCodeProcessEnv,
   withOpenCodeProcessEnv,
   listOpenCodeModels,
+  listOpenCodeCliModels,
   mapOpenCodeModels,
+  parseOpenCodeCliModelsOutput,
   parseOpenCodeModel,
   resolveUsableOpenCodeBinPath,
   resetOpenCodeListServerPool,
+  runOpenCodeCliTurn,
   runOpenCodeTurn,
+  shouldPreferCliModelList,
   toOpenCodeMcpConfig,
   translateOpenCodeEvent,
   OPENCODE_LIST_SERVER_IDLE_MS,

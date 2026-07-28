@@ -1,5 +1,17 @@
+const nodeProcess = require('node:process');
 const { moshExtraResources } = require('./scripts/mosh-extra-resources.cjs');
 const { etExtraResources } = require('./scripts/et-extra-resources.cjs');
+
+function hasEnvValue(name) {
+    return typeof nodeProcess.env[name] === 'string' && nodeProcess.env[name].trim().length > 0;
+}
+
+const hasMacSigningCredentials = hasEnvValue('CSC_LINK') || hasEnvValue('CSC_NAME');
+const hasMacNotarizationCredentials =
+    hasMacSigningCredentials &&
+    hasEnvValue('APPLE_ID') &&
+    hasEnvValue('APPLE_APP_SPECIFIC_PASSWORD') &&
+    hasEnvValue('APPLE_TEAM_ID');
 
 /**
  * @type {import('electron-builder').Configuration}
@@ -181,7 +193,8 @@ module.exports = {
         ],
         category: 'public.app-category.developer-tools',
         hardenedRuntime: true,
-        notarize: true,
+        identity: hasMacSigningCredentials ? undefined : null,
+        notarize: hasMacNotarizationCredentials,
         entitlements: 'electron/entitlements.mac.plist',
         entitlementsInherit: 'electron/entitlements.mac.plist',
         extendInfo: {

@@ -7,6 +7,7 @@ const {
   normalizeSdkListModelsResult,
   resolveSdkResumeSessionId,
   expireSiblingCursorCliModeSessions,
+  getSdkModelListTimeoutMs,
   resolveBackendKey,
   resolveSdkBackendBinPath,
   shouldCacheSdkRuntimeModels,
@@ -83,6 +84,11 @@ test("shouldCacheSdkRuntimeModels caches all SDK backends including OpenCode", (
   assert.equal(shouldCacheSdkRuntimeModels("claude"), true);
   assert.equal(shouldCacheSdkRuntimeModels("codebuddy"), true);
   assert.equal(shouldCacheSdkRuntimeModels("copilot"), true);
+});
+
+test("OpenCode model discovery gets a longer timeout for CLI-backed catalogs", () => {
+  assert.equal(getSdkModelListTimeoutMs("opencode") > getSdkModelListTimeoutMs("claude"), true);
+  assert.equal(getSdkModelListTimeoutMs("claude"), 10000);
 });
 
 test("SDK resume only uses the current backend/path session key", () => {
@@ -400,6 +406,46 @@ test("resolveSdkBackendBinPath prefers the renderer-configured command path", ()
     realpath: () => "/opt/homebrew/bin/codex",
   });
   assert.equal(out, "/opt/homebrew/bin/codex");
+});
+
+test("resolveSdkBackendBinPath resolves renderer-configured command names from PATH", () => {
+  const out = resolveSdkBackendBinPath({
+    backendKey: "opencode",
+    configuredCommand: "custom-opencode",
+    shellEnv: { PATH: "/usr/local/bin:/usr/bin" },
+    env: {},
+    resolveCliFromPath: (command) => (command === "custom-opencode" ? "/usr/local/bin/custom-opencode" : null),
+    normalizeCliPathForPlatform: (value) => value,
+    realpath: () => "/opt/custom/custom-opencode",
+  });
+  assert.equal(out, "/opt/custom/custom-opencode");
+});
+
+test("resolveSdkBackendBinPath rejects missing renderer-configured command names", () => {
+  assert.throws(
+    () => resolveSdkBackendBinPath({
+      backendKey: "opencode",
+      configuredCommand: "custom-opencode",
+      shellEnv: { PATH: "/usr/bin" },
+      env: {},
+      resolveCliFromPath: () => null,
+      normalizeCliPathForPlatform: (value) => value,
+    }),
+    /Agent CLI path not found: custom-opencode/,
+  );
+});
+
+test("resolveSdkBackendBinPath falls back to env when configured command is the backend name", () => {
+  const out = resolveSdkBackendBinPath({
+    backendKey: "opencode",
+    configuredCommand: "opencode",
+    shellEnv: { PATH: "/usr/bin" },
+    env: { OPENCODE_BIN: "/opt/custom/opencode" },
+    resolveCliFromPath: () => null,
+    normalizeCliPathForPlatform: (value) => value,
+    realpath: () => "/real/custom/opencode",
+  });
+  assert.equal(out, "/real/custom/opencode");
 });
 
 test("resolveSdkBackendBinPath rejects invalid renderer-configured command paths", () => {

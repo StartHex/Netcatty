@@ -20,11 +20,11 @@ const VALID_BACKENDS = new Set(listBackends());
 // is far cheaper than spawning a new opencode process on every panel render
 // (issue #2184).
 const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
-const MODEL_LIST_TIMEOUT_MS = 10000;
+const DEFAULT_MODEL_LIST_TIMEOUT_MS = 10000;
+const OPENCODE_MODEL_LIST_TIMEOUT_MS = 45000;
 const sdkModelCache = new Map();
 const sdkModelInFlight = new Map();
 const { parseSdkSessionIdentity: parseSdkSessionIdentityPayload, SDK_SESSION_ID_PREFIX } = require("../../../shared/sdkSessionIdentity.cjs");
-const { isPathLikeCommand } = require("../../../shared/pathLikeCommand.cjs");
 
 function parseSdkSessionIdentity(value) {
   const parsed = parseSdkSessionIdentityPayload(value);
@@ -89,6 +89,10 @@ function normalizeSdkListModelsResult(raw) {
   const currentModelId = Array.isArray(raw) ? null : raw?.currentModelId || null;
   const models = Array.isArray(rawModels) ? rawModels.filter((m) => m && m.id) : [];
   return { currentModelId, models };
+}
+
+function getSdkModelListTimeoutMs(backendKey) {
+  return backendKey === "opencode" ? OPENCODE_MODEL_LIST_TIMEOUT_MS : DEFAULT_MODEL_LIST_TIMEOUT_MS;
 }
 
 function deleteSdkSessionKeysForChat(sdkSessionIds, chatSessionId) {
@@ -226,11 +230,31 @@ function resolveRealCliPath(cliPath, realpath = realpathSync) {
   try { return realpath(cliPath); } catch { return cliPath; }
 }
 
-function normalizeConfiguredCommandPath(command, normalizeCliPathForPlatform) {
+function normalizeConfiguredCommandPath(command, normalizeCliPathForPlatform, {
+  backendKey,
+  resolveCliFromPath,
+  shellEnv,
+} = {}) {
   const raw = String(command || "").trim();
   const pathLike = raw.includes("/") || raw.includes("\\") || /^[a-z]:/i.test(raw);
-  if (!raw || !pathLike) {
+  if (!raw) {
     return null;
+  }
+  if (!pathLike) {
+    if (!/^[a-zA-Z0-9._-]+$/.test(raw)) {
+      throw new Error(`Agent CLI path not found: ${raw}`);
+    }
+    const resolved = typeof resolveCliFromPath === "function"
+      ? resolveCliFromPath(raw, shellEnv)
+      : null;
+    if (resolved) return resolved;
+    // If the stored command is just the managed backend name, keep the existing
+    // env/default fallback path. Custom command names must resolve explicitly so
+    // they are not silently replaced with the backend's default binary.
+    if (raw === backendKey) {
+      return null;
+    }
+    throw new Error(`Agent CLI path not found: ${raw}`);
   }
   const normalized = typeof normalizeCliPathForPlatform === "function"
     ? normalizeCliPathForPlatform(raw)
@@ -265,7 +289,11 @@ function resolveSdkBackendBinPath({
   resolveSdkBinPath, resolveClaudeCodeExecutableForSdk, resolveCodexExecutableForSdk,
   resolveCodebuddyExecutableForSdk, realpath = realpathSync,
 }) {
-  const configuredPath = normalizeConfiguredCommandPath(configuredCommand, normalizeCliPathForPlatform);
+  const configuredPath = normalizeConfiguredCommandPath(configuredCommand, normalizeCliPathForPlatform, {
+    backendKey,
+    resolveCliFromPath,
+    shellEnv,
+  });
   if (configuredPath) {
     return resolveConfiguredSdkPath({
       backendKey,
@@ -492,7 +520,7 @@ function registerSdkStreamHandlers(ctx) {
             : "sdk";
           sdkRequestRuntimes.set(requestId, { backendKey, codexRuntime });
 
-          const hasConfiguredCommand = isPathLikeCommand(agentCommand);
+          const hasConfiguredCommand = Boolean(String(agentCommand || "").trim());
           const sessionBinPath = backendKey === "cursor" && cursorAuthMode === "cli-login"
             ? (cursorCliBinPath || binPath)
             : binPath;
@@ -729,7 +757,7 @@ function registerSdkStreamHandlers(ctx) {
                   cursorAuthMode: backendKey === "cursor" ? cursorAuthMode : undefined,
                   cursorCliBinPath: backendKey === "cursor" ? cursorCliBinPath : undefined,
                 }),
-              MODEL_LIST_TIMEOUT_MS,
+              getSdkModelListTimeoutMs(backendKey),
               abortController,
             );
             const { currentModelId, models } = normalizeSdkListModelsResult(raw);
@@ -891,6 +919,7 @@ module.exports = {
   normalizeSdkListModelsResult,
   resolveSdkResumeSessionId,
   expireSiblingCursorCliModeSessions,
+  getSdkModelListTimeoutMs,
   shouldCacheSdkRuntimeModels,
   normalizeHistoryMessages,
   buildSdkTurnPrompt,

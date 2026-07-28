@@ -61,6 +61,13 @@ async function probeCursorSdkAvailability(shellEnv, options = {}) {
   };
 }
 
+function isBareCliCommandName(command) {
+  const raw = String(command || "").trim();
+  if (!raw) return false;
+  if (raw.includes("/") || raw.includes("\\") || /^[a-z]:/i.test(raw)) return false;
+  return /^[a-zA-Z0-9._-]+$/.test(raw);
+}
+
 function registerAgentDiscoveryHandlers(ctx) {
   with (ctx) {
   ipcMain.handle("netcatty:ai:agents:discover", async (event, options = {}) => {
@@ -182,10 +189,12 @@ function registerAgentDiscoveryHandlers(ctx) {
 
     let resolvedPath;
     if (hasCustomPath) {
-      // Normalize Windows shim paths like `codex` -> `codex.cmd` when present.
-      // A user-supplied path must be validated as-is; falling back to PATH would
-      // make Settings appear to accept one binary while actually using another.
-      resolvedPath = normalizeCliPathForPlatform(customPath);
+      // Accept either a concrete file path or a PATH command name. Bare names
+      // are resolved explicitly so Settings stores the actual binary/shim path.
+      const requested = String(customPath || "").trim();
+      resolvedPath = isBareCliCommandName(requested)
+        ? await resolveCliFromPathAsync(requested, shellEnv)
+        : normalizeCliPathForPlatform(requested);
     } else {
       resolvedPath = await resolveCliFromPathAsync(command, shellEnv);
     }

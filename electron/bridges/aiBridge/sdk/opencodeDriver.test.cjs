@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -8,13 +9,16 @@ const {
   buildOpenCodePromptParts,
   classifyOpenCodeSpawnError,
   createOpenCodeProcessEnv,
+  listOpenCodeCliModels,
   listOpenCodeModels,
   mapOpenCodeModels,
   OPENCODE_LIST_SERVER_IDLE_MS,
+  parseOpenCodeCliModelsOutput,
   parseOpenCodeModel,
   resetOpenCodeListServerPool,
   resolveUsableOpenCodeBinPath,
   runOpenCodeTurn,
+  shouldPreferCliModelList,
   translateOpenCodeEvent,
   withOpenCodeProcessEnv,
 } = require("./opencodeDriver.cjs");
@@ -32,6 +36,21 @@ function collector() {
     emitError: (m) => events.push({ k: "error", m }),
   };
   return { events, emitter };
+}
+
+function createStdoutSpawn(output, onSpawn) {
+  return (command, args, options) => {
+    onSpawn?.(command, args, options);
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = () => {};
+    process.nextTick(() => {
+      child.stdout.emit("data", output);
+      child.emit("close", 0);
+    });
+    return child;
+  };
 }
 
 test("parseOpenCodeModel splits provider/model ids", () => {
@@ -415,6 +434,26 @@ test("mapOpenCodeModels flattens providers", () => {
   assert.deepEqual(mapOpenCodeModels(null), []);
 });
 
+test("parseOpenCodeCliModelsOutput parses provider/model lines", () => {
+  assert.deepEqual(parseOpenCodeCliModelsOutput([
+    "(node:123) warning",
+    "Available models",
+    "builtin-provider/model-base",
+    "Custom Provider/model-alpha",
+    "- vendor/model-beta (current)",
+    "https://example.com/not-a-model",
+    "Custom Provider/model-alpha",
+    "",
+  ].join("\n")), {
+    currentModelId: "vendor/model-beta",
+    models: [
+      { id: "builtin-provider/model-base", name: "builtin-provider/model-base" },
+      { id: "Custom Provider/model-alpha", name: "Custom Provider/model-alpha" },
+      { id: "vendor/model-beta", name: "vendor/model-beta" },
+    ],
+  });
+});
+
 test("runOpenCodeTurn ignores events from other OpenCode sessions", async () => {
   const { events, emitter } = collector();
   const abortController = new AbortController();
@@ -762,6 +801,182 @@ test("listOpenCodeModels passes an explicit non-default port to the OpenCode SDK
   assert.equal(typeof capturedPort, "number");
   assert.notEqual(capturedPort, 4096);
   resetOpenCodeListServerPool();
+});
+
+test("listOpenCodeModels falls back to CLI models when SDK providers are empty", async () => {
+  resetOpenCodeListServerPool();
+  let sawCliModelsCommand = false;
+  const models = await listOpenCodeModels({
+    binPath: "/usr/local/bin/opencode",
+    openCodeFactory: async () => ({
+      client: {
+        config: {
+          providers: async () => ({
+            providers: [],
+            default: { "Custom Provider": "model-alpha" },
+          }),
+        },
+      },
+      server: { close() {} },
+    }),
+    cliModelListSpawn: createStdoutSpawn([
+      "builtin-provider/model-base",
+      "Custom Provider/model-alpha",
+      "vendor/model-beta",
+    ].join("\n"), (_command, args) => {
+      sawCliModelsCommand = true;
+      assert.deepEqual(args, ["models"]);
+    }),
+  });
+
+  assert.equal(sawCliModelsCommand, true);
+  assert.deepEqual(models, {
+    currentModelId: "Custom Provider/model-alpha",
+    models: [
+      { id: "builtin-provider/model-base", name: "builtin-provider/model-base" },
+      { id: "Custom Provider/model-alpha", name: "Custom Provider/model-alpha" },
+      { id: "vendor/model-beta", name: "vendor/model-beta" },
+    ],
+  });
+  resetOpenCodeListServerPool();
+});
+
+test("listOpenCodeModels prefers CLI model output for custom command names", async () => {
+  resetOpenCodeListServerPool();
+  let factoryCalled = false;
+  let sawCliModelsCommand = false;
+  const models = await listOpenCodeModels({
+    binPath: "/usr/local/bin/custom-agent",
+    openCodeFactory: async () => {
+      factoryCalled = true;
+      return {
+        client: { config: { providers: async () => ({ providers: [] }) } },
+        server: { close() {} },
+      };
+    },
+    cliModelListSpawn: createStdoutSpawn("Custom Provider/model-alpha\n", (_command, args) => {
+      sawCliModelsCommand = true;
+      assert.deepEqual(args, ["models"]);
+    }),
+  });
+
+  assert.equal(factoryCalled, false);
+  assert.equal(sawCliModelsCommand, true);
+  assert.deepEqual(models, {
+    currentModelId: null,
+    models: [{ id: "Custom Provider/model-alpha", name: "Custom Provider/model-alpha" }],
+  });
+  resetOpenCodeListServerPool();
+});
+
+test("shouldPreferCliModelList detects wrapped OpenCode-compatible CLIs generically", () => {
+  assert.equal(shouldPreferCliModelList("/usr/local/bin/opencode"), false);
+  assert.equal(shouldPreferCliModelList("/usr/local/bin/custom-agent"), true);
+  assert.equal(shouldPreferCliModelList("C:\\Users\\me\\AppData\\Roaming\\npm\\opencode.cmd"), false);
+  assert.equal(shouldPreferCliModelList("C:\\Users\\me\\AppData\\Roaming\\npm\\custom-agent.cmd"), true);
+});
+
+test("runOpenCodeTurn uses CLI run JSON output for custom OpenCode-compatible commands", async () => {
+  const { events, emitter } = collector();
+  let sawRunCommand = false;
+  const output = [
+    JSON.stringify({
+      type: "text",
+      sessionID: "sess-custom",
+      part: { id: "part-1", type: "text", text: "hello from cli" },
+    }),
+    JSON.stringify({
+      type: "step_finish",
+      sessionID: "sess-custom",
+      part: { id: "part-2", type: "step-finish" },
+    }),
+    "",
+  ].join("\n");
+
+  const result = await runOpenCodeTurn({
+    prompt: "hello",
+    systemPrompt: "system context",
+    cwd: "/repo",
+    model: "Custom Provider/model-alpha",
+    binPath: "/usr/local/bin/custom-agent",
+    emitter,
+    abortController: new AbortController(),
+    cliRunSpawn: createStdoutSpawn(output, (command, args, options) => {
+      sawRunCommand = true;
+      assert.equal(command, "/usr/local/bin/custom-agent");
+      assert.deepEqual(args.slice(0, 2), ["run", "--format"]);
+      assert.equal(args[2], "json");
+      assert.deepEqual(args.slice(3, 5), ["--dir", "/repo"]);
+      assert.equal(args.includes("--model"), false);
+      assert.equal(args.at(-1), "system context\n\nhello");
+      assert.equal(options.cwd, "/repo");
+    }),
+  });
+
+  assert.equal(sawRunCommand, true);
+  assert.deepEqual(result, { sessionId: "sess-custom" });
+  assert.deepEqual(events, [
+    { k: "sessionId", s: "sess-custom" },
+    { k: "text", t: "hello from cli" },
+    { k: "done" },
+  ]);
+});
+
+test("runOpenCodeTurn passes whitespace-free models to CLI run", async () => {
+  const { emitter } = collector();
+  await runOpenCodeTurn({
+    prompt: "hello",
+    model: "zhipuai/glm-5.1",
+    binPath: "/usr/local/bin/custom-agent",
+    emitter,
+    abortController: new AbortController(),
+    cliRunSpawn: createStdoutSpawn(`${JSON.stringify({
+      type: "text",
+      sessionID: "sess-model",
+      part: { id: "part-1", type: "text", text: "ok" },
+    })}\n`, (_command, args) => {
+      assert.equal(args.includes("--model"), true);
+      assert.equal(args[args.indexOf("--model") + 1], "zhipuai/glm-5.1");
+    }),
+  });
+});
+
+test("listOpenCodeCliModels launches Windows cmd shims through cmd.exe", async () => {
+  const models = await listOpenCodeCliModels({
+    binPath: "C:\\Users\\me\\AppData\\Roaming\\npm\\custom-opencode.cmd",
+    env: { ComSpec: "cmd.exe" },
+    platform: "win32",
+    spawnImpl: createStdoutSpawn("Custom Provider/model-alpha\n", (command, args) => {
+      assert.equal(command, "cmd.exe");
+      assert.deepEqual(args, ["/d", "/c", "C:\\Users\\me\\AppData\\Roaming\\npm\\custom-opencode.cmd", "models"]);
+    }),
+  });
+
+  assert.deepEqual(models, {
+    currentModelId: null,
+    models: [{ id: "Custom Provider/model-alpha", name: "Custom Provider/model-alpha" }],
+  });
+});
+
+test("listOpenCodeCliModels launches POSIX CLIs directly", async () => {
+  const models = await listOpenCodeCliModels({
+    binPath: "/usr/local/bin/custom-opencode",
+    env: { PATH: "/usr/local/bin:/usr/bin" },
+    platform: "darwin",
+    spawnImpl: createStdoutSpawn("Custom Provider/model-alpha\nvendor/model-beta\n", (command, args, options) => {
+      assert.equal(command, "/usr/local/bin/custom-opencode");
+      assert.deepEqual(args, ["models"]);
+      assert.equal(options.env.PATH, "/usr/local/bin:/usr/bin");
+    }),
+  });
+
+  assert.deepEqual(models, {
+    currentModelId: null,
+    models: [
+      { id: "Custom Provider/model-alpha", name: "Custom Provider/model-alpha" },
+      { id: "vendor/model-beta", name: "vendor/model-beta" },
+    ],
+  });
 });
 
 test("listOpenCodeModels aborts a hanging providers() call and tears down the pooled server", async () => {

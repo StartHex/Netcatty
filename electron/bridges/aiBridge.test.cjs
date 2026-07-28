@@ -404,6 +404,48 @@ test("resolve-cli does not fall back to PATH when a custom path is invalid", asy
   }
 });
 
+test("resolve-cli accepts a custom PATH command name", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "netcatty-custom-cli-"));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  const cliPath = path.join(tempDir, process.platform === "win32" ? "custom-agent.cmd" : "custom-agent");
+  fs.writeFileSync(
+    cliPath,
+    process.platform === "win32" ? "@echo off\r\necho custom-agent 1.0.0\r\n" : "#!/bin/sh\necho 'custom-agent 1.0.0'\n",
+    { mode: 0o755 },
+  );
+
+  const { bridge, restore } = loadBridgeWithMocks({
+    normalizeCliPathForPlatform: () => null,
+    resolveCliFromPathAsync: (command) => (command === "custom-agent" ? cliPath : null),
+    isPlausibleCliVersionOutput: () => true,
+  });
+  const ipcMain = createIpcMainStub();
+
+  bridge.init({
+    sessions: new Map(),
+    sftpClients: new Map(),
+    electronModule: { app: { getPath: () => process.cwd() } },
+  });
+  bridge.registerHandlers(ipcMain);
+
+  try {
+    const resolveCli = ipcMain.handlers.get("netcatty:ai:resolve-cli");
+    const result = await resolveCli({ sender: { id: 1 } }, {
+      command: "opencode",
+      customPath: "custom-agent",
+      refreshShellEnv: true,
+    });
+
+    assert.equal(result.path, cliPath);
+    assert.equal(result.binPath, cliPath);
+    assert.equal(result.version, "custom-agent 1.0.0");
+    assert.equal(result.available, true);
+    assert.equal(result.installed, true);
+  } finally {
+    restore();
+  }
+});
+
 test("codex login does not reuse an active session from a different resolved path", async () => {
   const { bridge, restore } = loadBridgeWithMocks({
     resolveCliFromPathAsync: (command) => (command === "codex" ? "/usr/bin/codex" : null),
