@@ -32,4 +32,6 @@ test("buildExternalAgentSystemContext (MCP mode) prefers the default target sess
   assert.match(context, /sessionId="sess-default"/);
   assert.match(context, /terminal_execute/);
   assert.match(context, /instead of asking what to do or starting with get_environment/);
+  assert.match(context, /current host system resources/);
+  assert.match(context, /do not answer with greetings/);
 });
