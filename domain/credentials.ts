@@ -237,6 +237,12 @@ export const stripSyncPayloadEncryptedCredentials = (
     return { ...profile, config: configRest };
   });
 
+  const otpAuthenticators = payload.otpAuthenticators?.map((authenticator) => {
+    if (!isEncryptedCredentialPlaceholder(authenticator.secret)) return authenticator;
+    const { secret: _removed, ...rest } = authenticator;
+    return rest;
+  });
+
   const groupConfigs = payload.groupConfigs?.map((config) => {
     const next = { ...config };
     if (isEncryptedCredentialPlaceholder(next.password)) delete next.password;
@@ -254,6 +260,9 @@ export const stripSyncPayloadEncryptedCredentials = (
     keys,
     identities: identities ?? payload.identities,
     proxyProfiles: proxyProfiles ?? payload.proxyProfiles,
+    ...(payload.otpAuthenticators !== undefined
+      ? { otpAuthenticators: otpAuthenticators ?? payload.otpAuthenticators }
+      : {}),
     groupConfigs: groupConfigs ?? payload.groupConfigs,
   };
 };

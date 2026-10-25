@@ -15,6 +15,7 @@ import type {
   Host,
   Identity,
   ManagedSource,
+  OtpAuthenticator,
   ProxyProfile,
   Snippet,
   SSHKey,
@@ -80,6 +81,7 @@ interface AppHostEditorLayerProps {
   keys: SSHKey[];
   identities: Identity[];
   proxyProfiles: ProxyProfile[];
+  otpAuthenticators: OtpAuthenticator[];
   managedSources: ManagedSource[];
   snippets: Snippet[];
   terminalThemeId: string;
@@ -108,6 +110,7 @@ export const AppHostEditorLayer: React.FC<AppHostEditorLayerProps> = ({
   keys,
   identities,
   proxyProfiles,
+  otpAuthenticators,
   managedSources,
   snippets,
   terminalThemeId,
@@ -194,6 +197,7 @@ export const AppHostEditorLayer: React.FC<AppHostEditorLayerProps> = ({
             availableKeys={keys}
             identities={identities}
             proxyProfiles={proxyProfiles}
+            otpAuthenticators={otpAuthenticators}
             groups={groups}
             managedSources={managedSources}
             allTags={allTags}

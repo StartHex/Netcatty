@@ -27,6 +27,7 @@ test("host totp setup stays on the shared setting row and opens a dialog", async
   install("HTMLButtonElement", dom.window.HTMLButtonElement);
   install("Element", dom.window.Element);
   install("Node", dom.window.Node);
+  install("DocumentFragment", dom.window.DocumentFragment);
   install("MutationObserver", dom.window.MutationObserver);
   install("Event", dom.window.Event);
   install("CustomEvent", dom.window.CustomEvent);

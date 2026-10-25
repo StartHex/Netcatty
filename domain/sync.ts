@@ -276,6 +276,7 @@ export interface SyncPayload {
   keys: import('./models').SSHKey[];
   identities?: import('./models').Identity[];
   proxyProfiles?: import('./models').ProxyProfile[];
+  otpAuthenticators?: import('./models').OtpAuthenticator[];
   snippets: import('./models').Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -481,6 +482,7 @@ export const SYNC_PAYLOAD_ENTITY_KEYS = [
   'keys',
   'identities',
   'proxyProfiles',
+  'otpAuthenticators',
   'snippets',
   'customGroups',
   'snippetPackages',
@@ -498,6 +500,7 @@ export const CLOUD_SYNC_PAYLOAD_ENTITY_KEYS = [
   'keys',
   'identities',
   'proxyProfiles',
+  'otpAuthenticators',
   'snippets',
   'customGroups',
   'snippetPackages',

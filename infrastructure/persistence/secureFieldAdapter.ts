@@ -11,7 +11,7 @@
  * plaintext, and never persist empty over recoverable ciphertext.
  */
 
-import type { GroupConfig, Host, Identity, ProxyProfile, SSHKey } from "../../domain/models";
+import type { GroupConfig, Host, Identity, OtpAuthenticator, ProxyProfile, SSHKey } from "../../domain/models";
 import type { ProviderConnection, S3Config, WebDAVConfig } from "../../domain/sync";
 import {
   isEncryptedCredentialPlaceholder,
@@ -417,6 +417,30 @@ export function encryptProxyProfiles(profiles: ProxyProfile[]): Promise<ProxyPro
 
 export function decryptProxyProfiles(profiles: ProxyProfile[]): Promise<ProxyProfile[]> {
   return Promise.all(profiles.map(decryptProxyProfileSecrets));
+}
+
+// ---------------------------------------------------------------------------
+// OtpAuthenticator
+// ---------------------------------------------------------------------------
+
+export async function encryptOtpAuthenticatorSecrets(authenticator: OtpAuthenticator): Promise<OtpAuthenticator> {
+  const out = { ...authenticator };
+  out.secret = await encryptField(out.secret);
+  return out;
+}
+
+export async function decryptOtpAuthenticatorSecrets(authenticator: OtpAuthenticator): Promise<OtpAuthenticator> {
+  const out = { ...authenticator };
+  out.secret = persistDecryptedSecret(out.secret, await decryptField(out.secret)) ?? out.secret;
+  return out;
+}
+
+export function encryptOtpAuthenticators(authenticators: OtpAuthenticator[]): Promise<OtpAuthenticator[]> {
+  return Promise.all(authenticators.map(encryptOtpAuthenticatorSecrets));
+}
+
+export function decryptOtpAuthenticators(authenticators: OtpAuthenticator[]): Promise<OtpAuthenticator[]> {
+  return Promise.all(authenticators.map(decryptOtpAuthenticatorSecrets));
 }
 
 // ---------------------------------------------------------------------------

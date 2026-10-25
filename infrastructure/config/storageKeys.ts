@@ -62,6 +62,8 @@ export const STORAGE_KEY_RESTORE_TERMINAL_CWD = 'netcatty_restore_terminal_cwd_v
 export const STORAGE_KEY_STARTUP_LANDING = 'netcatty_startup_landing_v1';
 export const STORAGE_KEY_IDENTITIES = 'netcatty_identities_v1';
 export const STORAGE_KEY_PROXY_PROFILES = 'netcatty_proxy_profiles_v1';
+/** Reusable OTP authenticators referenced by hosts through otpAuthenticatorId. */
+export const STORAGE_KEY_OTP_AUTHENTICATORS = 'netcatty_otp_authenticators_v1';
 export const STORAGE_KEY_VAULT_HOSTS_VIEW_MODE = 'netcatty_vault_hosts_view_mode_v1';
 export const STORAGE_KEY_VAULT_HOSTS_SORT_MODE = 'netcatty_vault_hosts_sort_mode_v1';
 export const STORAGE_KEY_VAULT_HOSTS_TREE_EXPANDED = 'netcatty_vault_hosts_tree_expanded_v1';

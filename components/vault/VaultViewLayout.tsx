@@ -1,6 +1,7 @@
 import { MonitorPanels } from './MonitorPanels';
 import { MonitorNavButton } from './MonitorNavButton';
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { ShieldCheck } from "lucide-react";
 import { Combobox } from "../ui/combobox";
 import React, { useCallback } from "react";
 import { deleteVaultKey } from "../../application/defaultKeyPassphrases";
@@ -279,6 +280,9 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     PortForwarding,
     protocolSelectHost,
     proxyProfiles,
+    otpAuthenticators,
+    onUpdateOtpAuthenticators,
+    OtpAuthenticatorsManager,
     ProxyProfilesManager,
     quickConnectTarget,
     quickConnectWarnings,
@@ -678,6 +682,32 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
               {sidebarCollapsed && (
                 <TooltipContent side="right">
                   {t("vault.nav.proxies")}
+                </TooltipContent>
+              )}
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <RippleButton
+                  variant={currentSection === "authenticators" ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full h-10",
+                    sidebarCollapsed
+                      ? "justify-center p-0"
+                      : "justify-start gap-3",
+                    currentSection === "authenticators" &&
+                      "bg-foreground/10 text-foreground hover:bg-foreground/15 border-border/40",
+                  )}
+                  onClick={() => {
+                    setCurrentSection("authenticators");
+                  }}
+                >
+                  <ShieldCheck size={16} className="flex-shrink-0" />
+                  {!sidebarCollapsed && t("vault.nav.authenticators")}
+                </RippleButton>
+              </TooltipTrigger>
+              {sidebarCollapsed && (
+                <TooltipContent side="right">
+                  {t("vault.nav.authenticators")}
                 </TooltipContent>
               )}
             </Tooltip>
@@ -1419,6 +1449,18 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                 </Suspense>
               </LazyLoadBoundary>
             )}
+            {currentSection === "authenticators" && (
+              <LazyLoadBoundary name="OTP authenticators" resetKey="authenticators">
+                <Suspense fallback={<VaultSectionLoading />}>
+                  <OtpAuthenticatorsManager
+                    authenticators={otpAuthenticators}
+                    hosts={hosts}
+                    onUpdateAuthenticators={onUpdateOtpAuthenticators}
+                    onUpdateHosts={onUpdateHosts}
+                  />
+                </Suspense>
+              </LazyLoadBoundary>
+            )}
             {currentSection === "monitor" && <MonitorPanels hosts={hosts} customGroups={customGroups} onConnect={onConnect} />}
             {currentSection === "port" && (
               <LazyLoadBoundary
@@ -1519,6 +1561,7 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                 terminalFontSize={terminalFontSize}
                 groupDefaults={editingHostGroupDefaults}
                 groupConfigs={groupConfigs}
+                otpAuthenticators={otpAuthenticators}
                 snippets={snippets}
                 onSnippetsChange={onUpdateSnippets}
                 onHostsChange={onUpdateHosts}

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 import { RE2JS } from "re2js";
-import type { Host, HostTotpConfig } from "../domain/models";
+import type { Host, HostTotpConfig, OtpAuthenticator } from "../domain/models";
+import { materializeHostTotp } from "../domain/otpAuthenticator";
 import { netcattyBridge } from "@/infrastructure/services/netcattyBridge.ts";
 import { Button } from "./ui/button";
 import {
@@ -17,6 +18,7 @@ import { SystemPanelConfirmDialog } from "./systemManager/SystemPanelConfirmDial
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 type Preview = {
   uri: string;
@@ -36,9 +38,12 @@ type HostTotpFieldsProps = {
   setForm: (updater: Host | ((host: Host) => Host)) => void;
   effectiveProtocol?: string;
   flushRef?: React.MutableRefObject<(() => Promise<HostTotpFlushResult>) | null>;
+  /** Reusable vault authenticators the host may reference by id. */
+  authenticators?: OtpAuthenticator[];
 };
 
 const HIDDEN_PROTOCOLS = new Set(["telnet", "serial"]);
+const MANUAL_SOURCE = "__manual__";
 
 function errorKey(error: string | undefined): string {
   switch (error) {
@@ -54,6 +59,8 @@ function errorKey(error: string | undefined): string {
       return "hostDetails.totp.error.unavailable";
     case "pattern":
       return "hostDetails.totp.error.pattern";
+    case "missing-secret":
+      return "hostDetails.totp.authenticatorMissingSecret";
     default:
       return "hostDetails.totp.error.invalid";
   }
@@ -164,6 +171,7 @@ export const HostTotpFields: React.FC<HostTotpFieldsProps> = ({
   setForm,
   effectiveProtocol,
   flushRef,
+  authenticators = [],
 }) => {
   const configured = Boolean(form.totp?.uri);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -191,6 +199,7 @@ export const HostTotpFields: React.FC<HostTotpFieldsProps> = ({
   autoSubmitRef.current = autoSubmit;
   modalUriRef.current = modalUri;
 
+  const selectedAuthenticator = authenticators.find((entry) => entry.id === form.otpAuthenticatorId);
   const [trackedHostId, setTrackedHostId] = useState(form.id);
   if (form.id !== trackedHostId) {
     setTrackedHostId(form.id);
@@ -219,6 +228,7 @@ export const HostTotpFields: React.FC<HostTotpFieldsProps> = ({
     setForm((current) => {
       if (current.id !== expectedHostId) return current;
       const updated = { ...current };
+      delete updated.otpAuthenticatorId;
       if (next?.uri) updated.totp = next;
       else delete updated.totp;
       return updated;
@@ -340,6 +350,22 @@ export const HostTotpFields: React.FC<HostTotpFieldsProps> = ({
     writeTotp(undefined);
   };
 
+  const selectAuthenticator = (authenticatorId: string) => {
+    const expectedHostId = hostIdRef.current;
+    const entry = authenticators.find((candidate) => candidate.id === authenticatorId);
+    if (!entry) return;
+    const materialized = materializeHostTotp(entry, formRef.current.totp);
+    if (!materialized) {
+      setError("missing-secret");
+      return;
+    }
+    setForm((current) => {
+      if (current.id !== expectedHostId) return current;
+      return { ...current, otpAuthenticatorId: entry.id, totp: materialized };
+    });
+    cancelSetup();
+  };
+
   if (effectiveProtocol && HIDDEN_PROTOCOLS.has(effectiveProtocol)) return null;
 
   const scanScreen = async () => {
@@ -389,6 +415,11 @@ export const HostTotpFields: React.FC<HostTotpFieldsProps> = ({
               {rowPreview.code}
             </span>
           )}
+          {selectedAuthenticator ? (
+            <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">
+              {t("hostDetails.totp.fromAuthenticator", { label: selectedAuthenticator.label })}
+            </span>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -408,6 +439,32 @@ export const HostTotpFields: React.FC<HostTotpFieldsProps> = ({
             <DialogDescription>{t("hostDetails.totp.warning")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>{t("hostDetails.totp.authenticatorSource")}</Label>
+              <Select
+                value={selectedAuthenticator ? selectedAuthenticator.id : MANUAL_SOURCE}
+                onValueChange={(value) => {
+                  if (value === MANUAL_SOURCE) {
+                    setForm((current) => ({ ...current, otpAuthenticatorId: undefined }));
+                    return;
+                  }
+                  selectAuthenticator(value);
+                }}
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={MANUAL_SOURCE}>{t("hostDetails.totp.authenticatorManual")}</SelectItem>
+                  {authenticators.map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("hostDetails.totp.authenticatorHint")}</p>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="host-totp-secret">{t("hostDetails.totp.secret")}</Label>
               <Input

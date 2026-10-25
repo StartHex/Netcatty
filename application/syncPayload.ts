@@ -15,6 +15,7 @@ import type {
   Host,
   Identity,
   KnownHost,
+  OtpAuthenticator,
   PortForwardingRule,
   ProxyProfile,
   SftpBookmark,
@@ -158,6 +159,7 @@ export interface SyncableVaultData {
   keys: SSHKey[];
   identities: Identity[];
   proxyProfiles?: ProxyProfile[];
+  otpAuthenticators?: OtpAuthenticator[];
   snippets: Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -1099,6 +1101,7 @@ function buildVaultSyncPayload(
     keys: vault.keys,
     identities: vault.identities,
     proxyProfiles: vault.proxyProfiles,
+    ...(vault.otpAuthenticators?.length ? { otpAuthenticators: vault.otpAuthenticators } : {}),
     snippets: vault.snippets,
     customGroups: vault.customGroups,
     snippetPackages: vault.snippetPackages,
@@ -1188,6 +1191,7 @@ export async function buildCloudSyncPayload(
     keys: vault.keys,
     identities: vault.identities,
     proxyProfiles: vault.proxyProfiles,
+    ...(vault.otpAuthenticators?.length ? { otpAuthenticators: vault.otpAuthenticators } : {}),
     snippets: vault.snippets,
     customGroups: vault.customGroups,
     snippetPackages: vault.snippetPackages,
@@ -1398,6 +1402,7 @@ async function preparePayloadApply(
     keys: sanitizedPayload.keys,
     identities: sanitizedPayload.identities,
     proxyProfiles: sanitizedPayload.proxyProfiles,
+    otpAuthenticators: sanitizedPayload.otpAuthenticators,
     snippets: sanitizedPayload.snippets,
     customGroups: sanitizedPayload.customGroups,
   };

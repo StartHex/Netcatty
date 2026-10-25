@@ -11,6 +11,30 @@ const bookmark = (id: string, title = id) => ({
   createdAt: 1, updatedAt: 1,
 });
 
+const otpAuthenticator = (id: string, label = id) => ({
+  id, label, type: 'totp' as const, secret: 'JBSWY3DPEHPK3PXP',
+  algorithm: 'SHA1' as const, digits: 6 as const, period: 30,
+  createdAt: 1, updatedAt: 1,
+});
+
+test('OTP authenticator additions from two devices merge by ID', () => {
+  const result = mergeSyncPayloads(
+    payload({ otpAuthenticators: [] }),
+    payload({ otpAuthenticators: [otpAuthenticator('local')] }),
+    payload({ otpAuthenticators: [otpAuthenticator('remote')] }),
+  );
+  assert.deepEqual(result.payload.otpAuthenticators?.map((item) => item.id).sort(), ['local', 'remote']);
+});
+
+test('OTP authenticator deletion survives an unchanged remote and legacy omission', () => {
+  const base = payload({ otpAuthenticators: [otpAuthenticator('app')] });
+  const deleted = payload({ otpAuthenticators: [] });
+  const unchanged = payload({ otpAuthenticators: [otpAuthenticator('app')] });
+  assert.deepEqual(mergeSyncPayloads(base, deleted, unchanged).payload.otpAuthenticators, []);
+  const legacy = payload();
+  assert.deepEqual(mergeSyncPayloads(base, unchanged, legacy).payload.otpAuthenticators, [otpAuthenticator('app')]);
+});
+
 test('browser bookmark additions from two devices merge by ID', () => {
   const result = mergeSyncPayloads(
     payload({ browserBookmarks: [] }),

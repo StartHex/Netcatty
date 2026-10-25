@@ -550,3 +550,27 @@ i18n 新增键（5 语言）：
 - 当前目录 `/Users/shx/Documents/deepseek-harness/NetCatty` 是从 `https://github.com/binaricat/Netcatty.git` 克隆的最新 `main`（`d45fb7537`，v1.1.88）。
 - `origin` 指向上游；本机没有 `gh` CLI，因此**没有**在 GitHub 上创建个人 fork 远端。改动放在本地分支 `feat/group-unified-password-and-otp-authenticator`。
 - 若需要真正的 GitHub fork：安装 `gh` 后执行 `gh repo fork binaricat/Netcatty --remote=true --clone=false`，再把分支 push 到个人 fork。
+
+## 9. 实施记录（2026-10）
+
+### 功能一（已提交 `b194f4ebb`）
+
+- 实际域模块为 `domain/unifiedPassword.ts`（本文早期草案写作 `groupUnifiedPassword.ts`），导出 `resolveUnifiedPasswordScope` / `planUnifiedPasswordForScope` / `collectUnifiedPasswordSubtreeHosts` / `listUnifiedPasswordDonorHosts` / `countUnifiedPasswordTargets`。
+- `GroupConfig.unifiedPassword` 默认缺省即关闭；`sanitizeGroupConfig` 仅在值为 `true` 时保留。
+- 传播入口收敛为两处：`VaultView.handleSaveGroupConfig` 的第 4 个参数（来源主机 id）与主机侧密码变更（`VaultViewLayout` 主机会话、`AppHandlers` 键盘交互保存密码）。批量导入 / 云同步不触发传播。
+- 覆盖子分组、最近启用层生效、`savePassword === false` 的主机跳过；重命名分组时按旧路径传播。
+
+### 功能二（TOTP only）
+
+- 实体：`OtpAuthenticator`（`domain/models/connection.ts`）+ 存储键 `netcatty_otp_authenticators_v1`；密钥随 `secureFieldAdapter` 加密落盘，同步时按 `enc:v1:` 占位剥离。
+- 域模块：`domain/otpAuthenticator.ts`（校验、`otpauth://` 互转、materialize、引用计数、重算/清理）。
+- materialize 方案：选中验证器后把密钥/算法/位数/周期写进 `host.totp.uri`，并记录 `host.otpAuthenticatorId`；连接链路（会话启动、SFTP、端口转发、键盘交互）无需改动。
+- UI：Vault 新增 `authenticators` 分区（`components/OtpAuthenticatorsManager.tsx`）+ 主机 OTP 设置中的"验证器来源"下拉（手动密钥 / 已保存验证器）。
+- 同步：`SyncPayload.otpAuthenticators`、实体键列表、三路合并（按 id）、备份导入导出、云端冲突标签、5 种语言文案均已接入。
+- 未做：HOTP（类型字段保留，UI 不提供）、一台主机多个验证器、主机页内直接新建验证器（可跳转 Vault 分区创建）。
+
+### 验证
+
+- 定向测试：`domain/otpAuthenticator.test.ts`(11)、`components/OtpAuthenticatorsManager.test.tsx`(2)、`application/i18n/locales/otpAuthenticatorLocales.test.ts`(2)、`domain/syncMerge.test.ts` 新增 2 条合并用例，全过。
+- `npx tsc --noEmit`：无本次新增类型错误（仓库基线仍有 773 条既有错误）。
+- 全量 `npm test`：15200 tests / 15126 pass / 2 fail；两个失败（`TerminalLayerSupport.dragCleanup.test.ts` 的 Node loader 报错、`sftpBridge.singleChannelDial` 的 fresh-login 计数）在 `v1.1.88` 基线 worktree 上可复现，属环境/既有问题。
