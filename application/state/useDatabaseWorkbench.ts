@@ -176,7 +176,8 @@ export function useDatabaseWorkbench(
   const previewTable = useCallback(
     async (tabId: string, table: DbTableRef) => {
       const quoted = table.schema && table.schema !== 'main' ? `${table.schema}.${table.name}` : table.name;
-      const sql = `select * from ${quoted} limit 100`;
+      const tabLimit = tabsRef.current.find((entry) => entry.id === tabId)?.maxRows ?? 1000;
+      const sql = `select * from ${quoted} limit ${tabLimit}`;
       patchTab(tabId, { sql });
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
       if (!tab) return;
