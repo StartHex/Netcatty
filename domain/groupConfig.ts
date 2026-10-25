@@ -22,6 +22,15 @@ export function sanitizeGroupConfig(config: GroupConfig): GroupConfig {
   const next = hasLegacyPasswordOnlyCredentials
     ? { ...migrated, authMethod: 'password' as const }
     : migrated;
+  // Unified password is opt-in: only a real boolean `true` enables it, and
+  // anything else must not survive a load/save round-trip.
+  if (next.unifiedPassword !== true) {
+    const cleaned = { ...next };
+    delete (cleaned as { unifiedPassword?: unknown }).unifiedPassword;
+    if (!Object.prototype.hasOwnProperty.call(cleaned, 'singleChannelSsh')) return cleaned;
+    delete (cleaned as { singleChannelSsh?: unknown }).singleChannelSsh;
+    return cleaned;
+  }
   if (!Object.prototype.hasOwnProperty.call(next, 'singleChannelSsh')) return next;
   const cleaned = { ...next };
   delete (cleaned as { singleChannelSsh?: unknown }).singleChannelSsh;

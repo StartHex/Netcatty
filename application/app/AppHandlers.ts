@@ -1,10 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type React from 'react';
-import type { Host, HostProtocol, TerminalSession } from '../../types';
+import type { GroupConfig, Host, HostProtocol, TerminalSession } from '../../types';
 import type { PassphraseRequest } from '../../components/PassphraseModal';
 import type { TerminalPopupPayload } from '../../domain/systemManager/types';
 import { getEffectiveHostDistro, classifyDistroId, hostRestrictsExtraSshChannels, shouldProbeSessionCwd } from '../../domain/host';
 import { resolveHostDefaultLocalShell } from '../../domain/localShellHost';
+import {
+  planUnifiedPasswordForScope,
+  resolveUnifiedPasswordScope,
+} from '../../domain/unifiedPassword';
 import { getAvailablePaneMagnificationController } from '../../domain/paneMagnification';
 import { sanitizeHostIconFields } from '../../domain/hostIcon';
 import { resolveEffectiveTerminalProtocol } from '../../domain/terminalProtocol';
@@ -397,6 +401,8 @@ export async function handleKeyboardInteractiveSubmitImpl(
     sessions,
     setKeyboardInteractiveQueue,
     updateHosts,
+    groupConfigs,
+    updateGroupConfigs,
   } = ctx;
 {
     if (!await deliverKeyboardInteractiveResponse(ctx, requestId, responses, false)) return false;
@@ -425,11 +431,29 @@ export async function handleKeyboardInteractiveSubmitImpl(
     // (allowSavePassword === false) so a secondary secret cannot overwrite the
     // host login password (#2150 / Codex review on #2151).
     if (savePassword && host && request?.allowSavePassword !== false) {
-      updateHosts(latestHosts.map((h: Host) => h.id === host.id ? {
-        ...h,
+      const nextHost = {
+        ...host,
         password: savePassword,
         savePassword: true,
-      } : h));
+      };
+      updateHosts(latestHosts.map((h: Host) => h.id === host.id ? nextHost : h));
+
+      // Unified password: a saved login password for a host owned by a unified
+      // group becomes the group default and every sibling's password.
+      const unifiedScope = resolveUnifiedPasswordScope(nextHost, groupConfigs as GroupConfig[]);
+      if (unifiedScope) {
+        updateHosts((prevHosts: Host[]) => planUnifiedPasswordForScope({
+          hosts: prevHosts,
+          groupConfigs: groupConfigs as GroupConfig[],
+          scopePath: unifiedScope.groupPath,
+          password: savePassword,
+        }).hosts);
+        updateGroupConfigs((groupConfigs as GroupConfig[]).map((config) => (
+          config.path === unifiedScope.groupPath
+            ? { ...config, password: savePassword, savePassword: true }
+            : config
+        )));
+      }
     }
     // Remove from queue by requestId
     setKeyboardInteractiveQueue(prev => prev.filter(r => r.requestId !== requestId));

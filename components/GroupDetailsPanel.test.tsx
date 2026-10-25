@@ -20,6 +20,11 @@ test("GroupDetailsPanel keeps the SSH section when X11 forwarding is set", () =>
   assert.equal(hasGroupSshFields({ x11Forwarding: false }), true);
 });
 
+test("GroupDetailsPanel keeps the SSH section when unified password is enabled", () => {
+  assert.equal(hasGroupSshFields({ unifiedPassword: true }), true);
+  assert.equal(hasGroupSshFields({ unifiedPassword: false }), false);
+});
+
 test("GroupDetailsPanel treats cleared telnet credentials as explicit settings", () => {
   assert.equal(hasGroupTelnetFields({ telnetUsername: "" }), true);
   assert.equal(hasGroupTelnetFields({ telnetPassword: "" }), true);

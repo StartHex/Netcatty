@@ -441,6 +441,12 @@ export interface GroupConfig {
   username?: string;
   password?: string;
   savePassword?: boolean;
+  /**
+   * Unified password for this group (default off). When enabled, editing the
+   * password of any host in this group (or a subgroup that does not enable it
+   * itself) applies the password to every owned host and to this group default.
+   */
+  unifiedPassword?: boolean;
   authMethod?: HostAuthMethod;
   identityId?: string;
   identityFileId?: string;
