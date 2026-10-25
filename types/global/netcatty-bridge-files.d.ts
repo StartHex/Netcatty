@@ -175,6 +175,8 @@ declare global {
       error?: { message: string; code?: string; sqlState?: string; position?: number; detail?: string; hint?: string };
     }>;
     dbControl?(payload: { target: unknown; action: 'begin' | 'commit' | 'rollback' }): Promise<{ ok: boolean; action?: string; error?: { message: string; code?: string; sqlState?: string } }>;
+    dbTables?(payload: { target: unknown }): Promise<{ ok: boolean; tables?: { schema: string; name: string; type: 'table' | 'view' }[]; error?: { message: string; code?: string; sqlState?: string } }>;
+    dbColumns?(payload: { target: unknown; schema?: string; table: string }): Promise<{ ok: boolean; columns?: { name: string; type?: string; nullable?: boolean }[]; error?: { message: string; code?: string; sqlState?: string } }>;
     dbCancel?(payload: { id: string }): Promise<{ ok: boolean }>;
     dbDisconnect?(payload: { id: string }): Promise<{ ok: boolean }>;
     dbDispose?(): Promise<{ ok: boolean }>;

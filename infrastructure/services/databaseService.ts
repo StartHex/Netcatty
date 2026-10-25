@@ -88,6 +88,44 @@ export async function runDatabaseQuery(
   return { ok: true, result: response.result };
 }
 
+export interface DbTableRef {
+  schema: string;
+  name: string;
+  type: 'table' | 'view';
+}
+
+export interface DbColumnInfo {
+  name: string;
+  type?: string;
+  nullable?: boolean;
+}
+
+export async function listDatabaseTables(
+  target: DbConnectionTarget,
+): Promise<{ ok: true; tables: DbTableRef[] } | { ok: false; error: DbBridgeError }> {
+  const api = requireDbBridge();
+  const response = await api.dbTables?.({ target });
+  if (!response) return { ok: false, error: { message: 'No response from database bridge' } };
+  if (!response.ok || !response.tables) {
+    return { ok: false, error: response.error ?? { message: 'Listing tables failed' } };
+  }
+  return { ok: true, tables: response.tables };
+}
+
+export async function listDatabaseColumns(
+  target: DbConnectionTarget,
+  table: string,
+  schema?: string,
+): Promise<{ ok: true; columns: DbColumnInfo[] } | { ok: false; error: DbBridgeError }> {
+  const api = requireDbBridge();
+  const response = await api.dbColumns?.({ target, schema, table });
+  if (!response) return { ok: false, error: { message: 'No response from database bridge' } };
+  if (!response.ok || !response.columns) {
+    return { ok: false, error: response.error ?? { message: 'Listing columns failed' } };
+  }
+  return { ok: true, columns: response.columns };
+}
+
 export type DbTransactionAction = 'begin' | 'commit' | 'rollback';
 
 export async function controlDatabaseTransaction(

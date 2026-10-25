@@ -1879,6 +1879,8 @@ function createPreloadApi(ctx) {
   dbConnect: (target) => ipcRenderer.invoke("netcatty:db:connect", target),
   dbQuery: (payload) => ipcRenderer.invoke("netcatty:db:query", payload),
   dbControl: (payload) => ipcRenderer.invoke("netcatty:db:control", payload),
+  dbTables: (payload) => ipcRenderer.invoke("netcatty:db:tables", payload),
+  dbColumns: (payload) => ipcRenderer.invoke("netcatty:db:columns", payload),
   dbCancel: (payload) => ipcRenderer.invoke("netcatty:db:cancel", payload),
   dbDisconnect: (payload) => ipcRenderer.invoke("netcatty:db:disconnect", payload),
   dbDispose: () => ipcRenderer.invoke("netcatty:db:dispose"),

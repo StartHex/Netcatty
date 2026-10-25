@@ -12,6 +12,8 @@ import {
   Play,
   RotateCw,
   Square,
+  Table2,
+  Eye,
   Wand2,
   X,
 } from 'lucide-react';
@@ -28,7 +30,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/ScriptCodeEditor';
 import { useSqlHistory } from '../../application/state/useSqlHistory';
-import type { DatabaseTunnelDeps } from '../../application/state/useDatabaseWorkbench';
+import type { DatabaseTunnelDeps, DbTableRef } from '../../application/state/useDatabaseWorkbench';
 import { resultToCsv, suggestExportFileName } from '../../domain/database/sqlResultExport';
 
 const SQL_DIALECTS: Record<string, 'postgresql' | 'mysql' | 'mariadb' | 'plsql' | 'sqlite'> = {
@@ -312,6 +314,14 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
               </span>
             </div>
 
+            <div className="flex min-h-0 flex-1">
+              <SchemaPanel
+                tab={activeTab}
+                onRefresh={() => void workbench.refreshTables(activeTab.id)}
+                onPreview={(table) => void workbench.previewTable(activeTab.id, table)}
+                t={t}
+              />
+              <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex min-h-0 basis-[38%] flex-col border-b border-border/60">
               <ScriptCodeEditor
                 value={activeTab.sql}
@@ -377,6 +387,8 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                 ) : null}
               </div>
             </div>
+              </div>
+            </div>
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
@@ -385,6 +397,84 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
         )}
       </DialogContent>
     </Dialog>
+  );
+};
+
+interface SchemaPanelProps {
+  tab: DatabaseTab;
+  onRefresh: () => void;
+  onPreview: (table: DbTableRef) => void;
+  t: ReturnType<typeof useI18n>['t'];
+}
+
+const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, onRefresh, onPreview, t }) => {
+  const grouped = useMemo(() => {
+    const map = new Map<string, DbTableRef[]>();
+    for (const table of tab.tables ?? []) {
+      const list = map.get(table.schema) ?? [];
+      list.push(table);
+      map.set(table.schema, list);
+    }
+    return [...map.entries()];
+  }, [tab.tables]);
+
+  return (
+    <div className="flex w-[190px] shrink-0 flex-col border-r border-border/60">
+      <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-2 py-1">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {t('databases.schema.title')}
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-5 w-5 p-0"
+              disabled={tab.tablesLoading}
+              onClick={onRefresh}
+            >
+              <RotateCw className={cn('h-3 w-3', tab.tablesLoading && 'animate-spin')} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('databases.schema.refresh')}</TooltipContent>
+        </Tooltip>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-1">
+        {tab.tablesError ? (
+          <p className="px-1 py-2 text-[11px] text-destructive">{tab.tablesError}</p>
+        ) : grouped.length === 0 ? (
+          <p className="px-1 py-2 text-[11px] text-muted-foreground">
+            {tab.tablesLoading ? t('databases.schema.loading') : t('databases.schema.empty')}
+          </p>
+        ) : (
+          grouped.map(([schema, tables]) => (
+            <div key={schema} className="mb-1">
+              {grouped.length > 1 ? (
+                <p className="px-1 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground/80">
+                  {schema}
+                </p>
+              ) : null}
+              {tables.map((table) => (
+                <button
+                  key={`${table.schema}.${table.name}`}
+                  type="button"
+                  className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] hover:bg-secondary"
+                  title={`${table.schema}.${table.name}`}
+                  onClick={() => onPreview(table)}
+                >
+                  {table.type === 'view' ? (
+                    <Eye className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <Table2 className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="truncate">{table.name}</span>
+                </button>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 };
 

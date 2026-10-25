@@ -13,9 +13,11 @@ import {
   formatDatabaseError,
   openDatabaseConnection,
   controlDatabaseTransaction,
+  listDatabaseTables,
   runDatabaseQuery,
   testDatabaseConnection,
   type DbBridgeError,
+  type DbTableRef,
 } from '../../infrastructure/services/databaseService';
 import {
   applyDatabaseTunnel,
@@ -27,6 +29,7 @@ import {
 import type { DbConnectionTarget, DbTestConnectionResult } from '../../domain/models';
 
 export type { DatabaseTunnelDeps } from '../../infrastructure/services/databaseTunnelService';
+export type { DbColumnInfo, DbTableRef } from '../../infrastructure/services/databaseService';
 
 export type DatabaseTabStatus = 'connecting' | 'ready' | 'error';
 
@@ -45,6 +48,9 @@ export interface DatabaseTab {
   errorDetail?: DbBridgeError;
   durationMs?: number;
   transactionOpen?: boolean;
+  tables?: DbTableRef[];
+  tablesLoading?: boolean;
+  tablesError?: string;
 }
 
 export interface UseDatabaseWorkbenchResult {
@@ -59,6 +65,8 @@ export interface UseDatabaseWorkbenchResult {
   beginTransaction: (tabId: string) => Promise<void>;
   commitTransaction: (tabId: string) => Promise<void>;
   rollbackTransaction: (tabId: string) => Promise<void>;
+  refreshTables: (tabId: string) => Promise<void>;
+  previewTable: (tabId: string, table: DbTableRef) => Promise<void>;
   cancelQuery: (tabId: string) => void;
   reconnect: (tabId: string) => Promise<void>;
 }
@@ -130,6 +138,76 @@ export function useDatabaseWorkbench(
     [],
   );
 
+  const loadTables = useCallback(
+    async (tabId: string, connection: DatabaseConnection) => {
+      patchTab(tabId, { tablesLoading: true, tablesError: undefined });
+      const resolved = await resolveTarget(connection);
+      if (resolved.ok !== true) {
+        patchTab(tabId, { tablesLoading: false, tablesError: resolved.error });
+        return;
+      }
+      const response = await listDatabaseTables(resolved.target);
+      if (response.ok === true) {
+        patchTab(tabId, { tablesLoading: false, tables: response.tables });
+      } else {
+        patchTab(tabId, {
+          tablesLoading: false,
+          tablesError: formatDatabaseError(response.error),
+        });
+      }
+    },
+    [patchTab, resolveTarget],
+  );
+
+  const refreshTables = useCallback(
+    async (tabId: string) => {
+      const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!tab) return;
+      const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
+      if (!connection) return;
+      await loadTables(tabId, connection);
+    },
+    [loadTables],
+  );
+
+  const previewTable = useCallback(
+    async (tabId: string, table: DbTableRef) => {
+      const quoted = table.schema && table.schema !== 'main' ? `${table.schema}.${table.name}` : table.name;
+      const sql = `select * from ${quoted} limit 100`;
+      patchTab(tabId, { sql });
+      const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!tab) return;
+      const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
+      if (!connection) return;
+      // Run through the same path as the toolbar button.
+      const resolved = await resolveTarget(connection);
+      if (resolved.ok !== true) {
+        patchTab(tabId, { error: resolved.error });
+        return;
+      }
+      patchTab(tabId, { running: true, error: undefined, errorDetail: undefined });
+      const startedAt = Date.now();
+      const response = await runDatabaseQuery(resolved.target, sql);
+      if (response.ok === true && response.result) {
+        patchTab(tabId, {
+          running: false,
+          result: response.result,
+          durationMs: Date.now() - startedAt,
+          error: undefined,
+          errorDetail: undefined,
+        });
+      } else {
+        const failureInfo = (response as { error?: DbBridgeError }).error;
+        patchTab(tabId, {
+          running: false,
+          error: formatDatabaseError(failureInfo),
+          errorDetail: failureInfo,
+        });
+      }
+    },
+    [patchTab, resolveTarget],
+  );
+
   const connectTab = useCallback(
     async (tabId: string, connection: DatabaseConnection) => {
       const seq = (openSeqRef.current.get(tabId) ?? 0) + 1;
@@ -159,6 +237,7 @@ export function useDatabaseWorkbench(
           error: undefined,
           errorDetail: undefined,
         });
+        void loadTables(tabId, connection);
       } catch (error) {
         if (openSeqRef.current.get(tabId) !== seq) return;
         patchTab(tabId, {
@@ -168,7 +247,7 @@ export function useDatabaseWorkbench(
         });
       }
     },
-    [patchTab, resolveTarget],
+    [loadTables, patchTab, resolveTarget],
   );
 
   const openTab = useCallback(
@@ -344,6 +423,8 @@ export function useDatabaseWorkbench(
     setActiveTabId,
     updateSql,
     runQuery,
+    refreshTables,
+    previewTable,
     beginTransaction,
     commitTransaction,
     rollbackTransaction,

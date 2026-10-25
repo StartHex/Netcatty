@@ -191,6 +191,34 @@ function createPgSession(target) {
         durationMs: Date.now() - started,
       };
     },
+    async tables() {
+      const instance = await ensure();
+      const result = await instance.query(
+        "select table_schema as schema, table_name as name, table_type as type " +
+          "from information_schema.tables " +
+          "where table_schema not in ('pg_catalog', 'information_schema') " +
+          "order by table_schema, table_name",
+      );
+      return result.rows.map((row) => ({
+        schema: row.schema,
+        name: row.name,
+        type: String(row.type || "").includes("VIEW") ? "view" : "table",
+      }));
+    },
+    async columns(schema, table) {
+      const instance = await ensure();
+      const result = await instance.query(
+        "select column_name as name, data_type as type, is_nullable as nullable " +
+          "from information_schema.columns where table_schema = $1 and table_name = $2 " +
+          "order by ordinal_position",
+        [schema, table],
+      );
+      return result.rows.map((row) => ({
+        name: row.name,
+        type: row.type,
+        nullable: row.nullable === "YES",
+      }));
+    },
     async control(action) {
       const instance = await ensure();
       const statement =
@@ -298,6 +326,34 @@ function createMysqlSession(target) {
         durationMs: Date.now() - started,
       };
     },
+    async tables() {
+      const instance = await ensure();
+      const [rows] = await instance.query(
+        "select table_schema as `schema`, table_name as name, table_type as type " +
+          "from information_schema.tables " +
+          "where table_schema not in ('mysql', 'information_schema', 'performance_schema', 'sys') " +
+          "order by table_schema, table_name",
+      );
+      return (rows || []).map((row) => ({
+        schema: row.schema,
+        name: row.name,
+        type: String(row.type || "").includes("VIEW") ? "view" : "table",
+      }));
+    },
+    async columns(schema, table) {
+      const instance = await ensure();
+      const [rows] = await instance.query(
+        "select column_name as name, column_type as type, is_nullable as nullable " +
+          "from information_schema.columns where table_schema = ? and table_name = ? " +
+          "order by ordinal_position",
+        [schema, table],
+      );
+      return (rows || []).map((row) => ({
+        name: row.name,
+        type: row.type,
+        nullable: row.nullable === "YES",
+      }));
+    },
     cancel() {
       try {
         connection?.destroy?.();
@@ -389,6 +445,35 @@ function createOracleSession(target) {
         durationMs: Date.now() - started,
       };
     },
+    async tables() {
+      const instance = await ensure();
+      const result = await instance.execute(
+        "select owner as schema, table_name as name, 'table' as type from all_tables " +
+          "where owner not in ('SYS', 'SYSTEM', 'XDB', 'MDSYS', 'CTXSYS', 'ORDSYS') " +
+          "order by owner, table_name",
+        [],
+        { outFormat: oracledb.OUT_FORMAT_ARRAY, maxRows: 5000 },
+      );
+      return (result.rows || []).map((row) => ({
+        schema: String(row[0] || ""),
+        name: String(row[1] || ""),
+        type: "table",
+      }));
+    },
+    async columns(schema, table) {
+      const instance = await ensure();
+      const result = await instance.execute(
+        "select column_name, data_type, nullable from all_tab_columns " +
+          "where owner = :1 and table_name = :2 order by column_id",
+        [schema, table],
+        { outFormat: oracledb.OUT_FORMAT_ARRAY },
+      );
+      return (result.rows || []).map((row) => ({
+        name: String(row[0] || ""),
+        type: String(row[1] || ""),
+        nullable: row[2] === "Y",
+      }));
+    },
     async control(action) {
       const instance = await ensure();
       if (action === "commit") await instance.commit();
@@ -459,6 +544,27 @@ function createSqliteSession(target) {
         command: "SELECT",
         durationMs: Date.now() - started,
       };
+    },
+    async tables() {
+      const rows = db
+        .prepare(
+          "select name, type from sqlite_master where type in ('table', 'view') " +
+            "and name not like 'sqlite_%' order by name",
+        )
+        .all();
+      return rows.map((row) => ({
+        schema: "main",
+        name: String(row.name),
+        type: row.type === "view" ? "view" : "table",
+      }));
+    },
+    async columns(_schema, table) {
+      const rows = db.prepare(`pragma table_info(${JSON.stringify(table)})`).all();
+      return rows.map((row) => ({
+        name: String(row.name),
+        type: String(row.type || ""),
+        nullable: Number(row.notnull) === 0,
+      }));
     },
     async control(action) {
       const statement =
@@ -623,6 +729,39 @@ const handlers = {
     }
   },
 
+  async tables({ target }) {
+    let entry;
+    try {
+      entry = getSession(target);
+    } catch (error) {
+      return failure(error);
+    }
+    try {
+      const tables = await entry.run(() => entry.session.tables());
+      return { ok: true, tables };
+    } catch (error) {
+      return failure(error);
+    }
+  },
+
+  async columns({ target, schema, table }) {
+    if (!table || typeof table !== "string") {
+      return failure(new Error("Table name is required"));
+    }
+    let entry;
+    try {
+      entry = getSession(target);
+    } catch (error) {
+      return failure(error);
+    }
+    try {
+      const columns = await entry.run(() => entry.session.columns(schema, table));
+      return { ok: true, columns };
+    } catch (error) {
+      return failure(error);
+    }
+  },
+
   async control({ target, action }) {
     if (!["begin", "commit", "rollback"].includes(action)) {
       return failure(new Error(`Unsupported transaction action: ${action}`));
@@ -668,6 +807,8 @@ function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:connect", (_event, target) => handlers.connect(target));
   ipcMain.handle("netcatty:db:query", (_event, payload) => handlers.query(payload || {}));
   ipcMain.handle("netcatty:db:control", (_event, payload) => handlers.control(payload || {}));
+  ipcMain.handle("netcatty:db:tables", (_event, payload) => handlers.tables(payload || {}));
+  ipcMain.handle("netcatty:db:columns", (_event, payload) => handlers.columns(payload || {}));
   ipcMain.handle("netcatty:db:cancel", (_event, payload) => handlers.cancel(payload || {}));
   ipcMain.handle("netcatty:db:disconnect", (_event, payload) => handlers.disconnect(payload || {}));
   ipcMain.handle("netcatty:db:dispose", () => handlers.dispose());
