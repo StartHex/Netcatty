@@ -105,10 +105,16 @@ const useAuthenticatorCode = (authenticator: OtpAuthenticator | null): LiveCode 
       void bridge.previewTotp?.({ uri }).then((result) => {
         refreshing = false;
         if (cancelled || !result?.ok || !result.code) return;
-        endsAtRef.current = Date.now() + (result.secondsRemaining ?? result.period ?? 30) * 1000;
+        // Align to the wall-clock boundary instead of adding a rounded
+        // secondsRemaining, otherwise the dialog keeps showing the previous
+        // code for ~1s after the phone has already rolled over.
+        const periodMs = (result.period ?? 30) * 1000;
+        const nowMs = Date.now();
+        const remainingMs = periodMs - (nowMs % periodMs);
+        endsAtRef.current = nowMs + remainingMs;
         setLive({
           code: result.code,
-          secondsRemaining: result.secondsRemaining ?? result.period ?? 30,
+          secondsRemaining: Math.max(0, Math.ceil(remainingMs / 1000)),
         });
       }).catch(() => {
         refreshing = false;
