@@ -3,7 +3,7 @@
  * section list stays a plain list; the form owns no persistence.
  */
 
-import { FolderOpen, Loader2, TestTube2 } from 'lucide-react';
+import { FolderOpen, Loader2, Plus, TestTube2, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import {
@@ -47,6 +47,10 @@ interface FormState {
   sqlitePath: string;
   inMemory: boolean;
   sshHostId: string;
+  jdbcUrl: string;
+  jdbcDriverClass: string;
+  jdbcDriverPaths: string[];
+  javaPath: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -62,6 +66,10 @@ const EMPTY_FORM: FormState = {
   sqlitePath: '',
   inMemory: false,
   sshHostId: '',
+  jdbcUrl: '',
+  jdbcDriverClass: '',
+  jdbcDriverPaths: [],
+  javaPath: '',
 };
 
 function formFromConnection(connection: DatabaseConnection): FormState {
@@ -78,6 +86,10 @@ function formFromConnection(connection: DatabaseConnection): FormState {
     sqlitePath: connection.sqlitePath ?? '',
     inMemory: connection.inMemory === true,
     sshHostId: connection.sshHostId ?? '',
+    jdbcUrl: connection.jdbcUrl ?? '',
+    jdbcDriverClass: connection.jdbcDriverClass ?? '',
+    jdbcDriverPaths: connection.jdbcDriverPaths ?? [],
+    javaPath: connection.javaPath ?? '',
   };
 }
 
@@ -138,6 +150,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
   };
 
   const isSqlite = form.kind === 'sqlite';
+  const isJdbc = form.kind === 'jdbc';
 
   const draft = useMemo<DatabaseConnection>(() => {
     const base = connection ?? { id: crypto.randomUUID(), createdAt: Date.now() };
@@ -155,13 +168,19 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       sqlitePath: isSqlite ? form.sqlitePath.trim() : undefined,
       inMemory: isSqlite ? form.inMemory : undefined,
       sshHostId: isSqlite ? undefined : form.sshHostId || undefined,
+      jdbcUrl: isJdbc ? form.jdbcUrl.trim() : undefined,
+      jdbcDriverClass: isJdbc ? form.jdbcDriverClass.trim() || undefined : undefined,
+      jdbcDriverPaths: isJdbc && form.jdbcDriverPaths.length > 0 ? form.jdbcDriverPaths : undefined,
+      javaPath: isJdbc ? form.javaPath.trim() || undefined : undefined,
     });
-  }, [connection, form, isSqlite]);
+  }, [connection, form, isJdbc, isSqlite]);
 
   const labelError = !draft.label;
   const targetError = isSqlite
     ? !draft.inMemory && !draft.sqlitePath
-    : !draft.host || !draft.port || draft.port < 1 || draft.port > 65535;
+    : isJdbc
+      ? !draft.jdbcUrl || !/^jdbc:/.test(draft.jdbcUrl) || (draft.jdbcDriverPaths?.length ?? 0) === 0
+      : !draft.host || !draft.port || draft.port < 1 || draft.port > 65535;
   const invalid = labelError || targetError;
 
   const handleSave = () => {
@@ -189,6 +208,17 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
     } else {
       setTest({ status: 'error', message: result.error ?? t('databases.testFailed') });
     }
+  };
+
+  const addDriverJar = async () => {
+    const selected = await netcattyBridge.get()?.selectFile?.(
+      t('databases.form.jdbcDriverJars'),
+      undefined,
+      [{ name: 'JAR', extensions: ['jar'] }],
+    );
+    if (!selected) return;
+    if (form.jdbcDriverPaths.includes(selected)) return;
+    update('jdbcDriverPaths', [...form.jdbcDriverPaths, selected]);
   };
 
   const browse = async () => {
@@ -240,7 +270,79 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
             </Select>
           </div>
 
-          {isSqlite ? (
+          {isJdbc ? (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="db-jdbc-url">{t('databases.form.jdbcUrl')}</Label>
+                <Input
+                  id="db-jdbc-url"
+                  value={form.jdbcUrl}
+                  placeholder={t('databases.form.jdbcUrlPlaceholder')}
+                  onChange={(event) => update('jdbcUrl', event.target.value)}
+                />
+                {showError && targetError ? (
+                  <p className="text-xs text-destructive">{t('databases.form.jdbcUrlRequired')}</p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="db-jdbc-class">{t('databases.form.jdbcDriverClass')}</Label>
+                <Input
+                  id="db-jdbc-class"
+                  value={form.jdbcDriverClass}
+                  placeholder={t('databases.form.jdbcDriverClassPlaceholder')}
+                  onChange={(event) => update('jdbcDriverClass', event.target.value)}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label>{t('databases.form.jdbcDriverJars')}</Label>
+                <div className="flex flex-col gap-1">
+                  {form.jdbcDriverPaths.map((jarPath) => (
+                    <div
+                      key={jarPath}
+                      className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1"
+                    >
+                      <span className="min-w-0 flex-1 truncate font-mono text-[11px]" title={jarPath}>
+                        {jarPath}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-5 w-5 p-0"
+                        onClick={() =>
+                          update('jdbcDriverPaths', form.jdbcDriverPaths.filter((entry) => entry !== jarPath))
+                        }
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 self-start text-xs"
+                    onClick={() => void addDriverJar()}
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    {t('databases.form.jdbcAddJar')}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">{t('databases.form.jdbcJarHint')}</p>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="db-java-path">{t('databases.form.javaPath')}</Label>
+                <Input
+                  id="db-java-path"
+                  value={form.javaPath}
+                  placeholder={t('databases.form.javaPathPlaceholder')}
+                  onChange={(event) => update('javaPath', event.target.value)}
+                />
+              </div>
+            </>
+          ) : isSqlite ? (
             <>
               <div className="grid gap-2">
                 <Label htmlFor="db-sqlite-path">{t('databases.form.sqlitePath')}</Label>

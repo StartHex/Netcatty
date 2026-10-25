@@ -98,6 +98,12 @@ export interface DatabaseConnection {
   /** JDBC-only: registered driver, URL template and connection properties. */
   jdbcDriverId?: string;
   jdbcUrl?: string;
+  /** Fully-qualified driver class, e.g. com.mysql.cj.jdbc.Driver. */
+  jdbcDriverClass?: string;
+  /** Absolute paths of the driver jars (and any dependency jars). */
+  jdbcDriverPaths?: string[];
+  /** Optional JRE home used only by this connection. */
+  javaPath?: string;
   jdbcProperties?: Record<string, string>;
   /** JDBC-only: keep a private in-memory database alive for the session. */
   inMemory?: boolean;
@@ -175,6 +181,9 @@ export interface DbConnectionTarget {
   sqlitePath?: string;
   jdbcDriverId?: string;
   jdbcUrl?: string;
+  jdbcDriverClass?: string;
+  jdbcDriverPaths?: string[];
+  javaPath?: string;
   jdbcProperties?: Record<string, string>;
   inMemory?: boolean;
   initSql?: string;
@@ -249,6 +258,13 @@ export function sanitizeDatabaseConnection(
     sshHostId: NON_EMPTY(input.sshHostId),
     jdbcDriverId: NON_EMPTY(input.jdbcDriverId),
     jdbcUrl: NON_EMPTY(input.jdbcUrl),
+    jdbcDriverClass: NON_EMPTY(input.jdbcDriverClass),
+    jdbcDriverPaths: Array.isArray(input.jdbcDriverPaths)
+      ? input.jdbcDriverPaths
+          .map(NON_EMPTY)
+          .filter((path): path is string => Boolean(path))
+      : undefined,
+    javaPath: NON_EMPTY(input.javaPath),
     jdbcProperties: sanitizeProperties(input.jdbcProperties),
     inMemory: input.inMemory === true ? true : undefined,
     initSql: NON_EMPTY(input.initSql),
@@ -285,7 +301,7 @@ export function isDatabaseConnectionReady(connection: DatabaseConnection): boole
     return Boolean(connection.sqlitePath);
   }
   if (databaseKindUsesJdbc(connection.kind)) {
-    return Boolean(connection.jdbcDriverId && connection.jdbcUrl);
+    return Boolean(connection.jdbcUrl && (connection.jdbcDriverId || connection.jdbcDriverClass));
   }
   return Boolean(connection.host && (connection.username || connection.kind === 'postgresql'));
 }
@@ -332,6 +348,9 @@ export function databaseConnectionTarget(
     sqlitePath: connection.sqlitePath,
     jdbcDriverId: connection.jdbcDriverId,
     jdbcUrl: connection.jdbcUrl,
+    jdbcDriverClass: connection.jdbcDriverClass,
+    jdbcDriverPaths: connection.jdbcDriverPaths,
+    javaPath: connection.javaPath,
     jdbcProperties: connection.jdbcProperties,
     inMemory: connection.inMemory,
     initSql: connection.initSql,

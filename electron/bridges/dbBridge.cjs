@@ -580,12 +580,141 @@ function createSqliteSession(target) {
   };
 }
 
-async function createJdbcSession() {
-  const error = new Error(
-    "JDBC connections need the Java sidecar, which is not enabled in this build yet",
-  );
-  error.code = "jdbc-unavailable";
-  throw error;
+function createJdbcSession(target) {
+  const { JdbcSidecar } = require("./jdbcSidecar.cjs");
+  const sidecar = new JdbcSidecar({ javaPath: target.javaPath });
+  const connId = "conn-1";
+  let connecting = null;
+
+  const ensure = async () => {
+    if (!connecting) {
+      connecting = (async () => {
+        const started = await sidecar.start();
+        if (!started.ok) {
+          const error = new Error(started.error || "JDBC sidecar failed to start");
+          error.code = started.code || "jdbc-unavailable";
+          throw error;
+        }
+        const response = await sidecar.request("CONNECT", {
+          connId,
+          url: target.jdbcUrl,
+          user: target.username,
+          password: target.password,
+          driverClass: target.jdbcDriverClass,
+          jars: Array.isArray(target.jdbcDriverPaths)
+            ? target.jdbcDriverPaths.join(require("node:path").delimiter)
+            : target.jdbcDriverPaths,
+        });
+        if (!response.ok) {
+          const error = new Error(response.error?.message || "JDBC connect failed");
+          error.code = response.error?.code || "jdbc-error";
+          error.sqlState = response.error?.sqlState;
+          throw error;
+        }
+        return response.fields || {};
+      })();
+      connecting = connecting.catch((error) => {
+        connecting = null;
+        throw error;
+      });
+    }
+    return connecting;
+  };
+
+  return {
+    async serverVersion() {
+      const fields = await ensure();
+      const product = fields.product || "JDBC";
+      const version = fields.version || "";
+      return version ? `${product} ${version}` : product;
+    },
+    async query(sql, { maxRows }) {
+      await ensure();
+      const response = await sidecar.request("QUERY", { connId, sql, maxRows });
+      if (!response.ok) {
+        const error = new Error(response.error?.message || "JDBC query failed");
+        error.code = response.error?.code || "jdbc-error";
+        error.sqlState = response.error?.sqlState;
+        throw error;
+      }
+      const started = Date.now();
+      const columns = response.columns || [];
+      const truncated = response.fields?.truncated === "true";
+      const rows = (response.rows || []).map((row) =>
+        row.map((cell) => (cell === null || cell === undefined ? null : cell)),
+      );
+      return {
+        columns: columns.map((column) => ({ name: column.name, type: column.type })),
+        rows,
+        rowCount: rows.length,
+        truncated,
+        command: "SELECT",
+        durationMs: Date.now() - started,
+      };
+    },
+    async execute(sql) {
+      await ensure();
+      const response = await sidecar.request("UPDATE", { connId, sql });
+      if (!response.ok) {
+        const error = new Error(response.error?.message || "JDBC statement failed");
+        error.code = response.error?.code || "jdbc-error";
+        error.sqlState = response.error?.sqlState;
+        throw error;
+      }
+      return { rowCount: Number(response.fields?.rows || 0) };
+    },
+    async tables() {
+      await ensure();
+      const response = await sidecar.request("METATABLES", { connId });
+      if (!response.ok) {
+        const error = new Error(response.error?.message || "JDBC metadata failed");
+        error.code = response.error?.code || "jdbc-error";
+        throw error;
+      }
+      return (response.rows || []).map((row) => ({
+        schema: row[0] || "",
+        name: row[1] || "",
+        type: row[2] === "view" ? "view" : "table",
+      }));
+    },
+    async columns(schema, table) {
+      await ensure();
+      const response = await sidecar.request("METACOLUMNS", { connId, schema, table });
+      if (!response.ok) {
+        const error = new Error(response.error?.message || "JDBC metadata failed");
+        error.code = response.error?.code || "jdbc-error";
+        throw error;
+      }
+      return (response.rows || []).map((row) => ({
+        name: row[0] || "",
+        type: row[1] || "",
+        nullable: row[2] === "true",
+      }));
+    },
+    async control(action) {
+      await ensure();
+      const method = action === "begin" ? null : action === "commit" ? "COMMIT" : "ROLLBACK";
+      if (method) {
+        const response = await sidecar.request(method, { connId });
+        if (!response.ok) {
+          const error = new Error(response.error?.message || "JDBC transaction failed");
+          error.code = response.error?.code || "jdbc-error";
+          throw error;
+        }
+      }
+    },
+    async cancel() {
+      // The sidecar runs statements serially; cancelling is best effort.
+    },
+    async close() {
+      try {
+        if (connecting) await sidecar.request("DISCONNECT", { connId });
+      } catch {
+        // ignore
+      }
+      await sidecar.stop();
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
