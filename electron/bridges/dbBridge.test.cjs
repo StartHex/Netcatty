@@ -173,3 +173,35 @@ test("transaction control rejects unknown actions", async () => {
   assert.equal(failed.ok, false);
   assert.match(failed.error.message, /unsupported transaction action/i);
 });
+
+test("sqlite: lists tables and columns for the schema tree", async () => {
+  const target = { id: "sqlite-schema-test", kind: "sqlite" };
+  try {
+    await handlers.query({
+      target,
+      sql: "create table people (id integer primary key, name text not null)",
+    });
+    const tables = await handlers.tables({ target });
+    assert.equal(tables.ok, true, JSON.stringify(tables));
+    const people = tables.tables.find((entry) => entry.name === "people");
+    assert.ok(people, JSON.stringify(tables.tables));
+    assert.equal(people.type, "table");
+    assert.equal(people.schema, "main");
+
+    const columns = await handlers.columns({ target, schema: "main", table: "people" });
+    assert.equal(columns.ok, true, JSON.stringify(columns));
+    assert.deepEqual(
+      columns.columns.map((entry) => entry.name),
+      ["id", "name"],
+    );
+    assert.equal(columns.columns[1].nullable, false);
+  } finally {
+    await handlers.disconnect({ id: "sqlite-schema-test", kind: "sqlite" });
+  }
+});
+
+test("columns rejects a missing table name", async () => {
+  const failed = await handlers.columns({ target: { id: "x", kind: "sqlite" }, table: "" });
+  assert.equal(failed.ok, false);
+  assert.match(failed.error.message, /table name is required/i);
+});
