@@ -483,6 +483,12 @@ export interface GroupConfig {
    * itself) applies the password to every owned host and to this group default.
    */
   unifiedPassword?: boolean;
+  /**
+   * Host whose saved password was imported as the unified password. Kept so the
+   * group settings can show the chosen source after reopening the panel; it is
+   * informational and never used to resolve the password at connect time.
+   */
+  unifiedPasswordSourceHostId?: string;
   authMethod?: HostAuthMethod;
   identityId?: string;
   identityFileId?: string;

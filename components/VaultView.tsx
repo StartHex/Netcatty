@@ -1229,12 +1229,20 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
         const propagationConfigs = newPath === oldPath
           ? updatedConfigs
           : [...groupConfigs.filter((c) => c.path !== oldPath), { ...config, path: oldPath }];
-        onUpdateHosts((prevHosts) => planUnifiedPasswordForScope({
-          hosts: prevHosts,
+        const plan = planUnifiedPasswordForScope({
+          hosts,
           groupConfigs: propagationConfigs,
           scopePath: propagationPath,
           password: config.password as string,
-        }).hosts);
+        });
+        if (plan.changedHostIds.length > 0) {
+          onUpdateHosts(plan.hosts);
+          toast.success(t("vault.groups.details.unifiedPassword.applied")
+            .replace("{count}", String(plan.changedHostIds.length)));
+        } else if (plan.skippedHostIds.length > 0) {
+          toast.error(t("vault.groups.details.unifiedPassword.skipped")
+            .replace("{count}", String(plan.skippedHostIds.length)));
+        }
       }
 
       // Handle path change (rename or parent change)
@@ -1265,6 +1273,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
       commitGroupPathChange,
       onUpdateGroupConfigs,
       onUpdateHosts,
+      hosts,
       t,
     ],
   );

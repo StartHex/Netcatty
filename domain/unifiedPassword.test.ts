@@ -205,3 +205,23 @@ test("sanitizeGroupConfig drops non-boolean unifiedPassword values", async () =>
     false,
   );
 });
+
+test('sanitizeGroupConfig keeps the chosen source host only while unified is on', async () => {
+  const { sanitizeGroupConfig } = await import('./groupConfig.ts');
+  const enabled = sanitizeGroupConfig({
+    path: 'A',
+    unifiedPassword: true,
+    unifiedPasswordSourceHostId: 'host-1',
+    password: 'p',
+  });
+  assert.equal(enabled.unifiedPassword, true);
+  assert.equal(enabled.unifiedPasswordSourceHostId, 'host-1');
+
+  const disabled = sanitizeGroupConfig({
+    path: 'A',
+    unifiedPasswordSourceHostId: 'host-1',
+    password: 'p',
+  });
+  assert.equal(disabled.unifiedPassword, undefined);
+  assert.equal(disabled.unifiedPasswordSourceHostId, undefined);
+});
