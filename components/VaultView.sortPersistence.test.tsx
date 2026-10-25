@@ -71,6 +71,8 @@ const renderVault = (sortMode: string | null, hosts: Host[]) => {
             identities: [],
             proxyProfiles: [],
             otpAuthenticators: [],
+            dbConnections: [],
+            onUpdateDbConnections: () => {},
             snippets: [],
             snippetPackages: [],
             customGroups: [],

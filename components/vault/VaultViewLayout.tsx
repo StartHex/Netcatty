@@ -1,7 +1,7 @@
 import { MonitorPanels } from './MonitorPanels';
 import { MonitorNavButton } from './MonitorNavButton';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ShieldCheck } from "lucide-react";
+import { Database, ShieldCheck } from "lucide-react";
 import { Combobox } from "../ui/combobox";
 import React, { useCallback } from "react";
 import { deleteVaultKey } from "../../application/defaultKeyPassphrases";
@@ -134,6 +134,7 @@ function VaultConnectionLogsSection({
 }
 
 export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
+  const [databaseWorkbenchConnection, setDatabaseWorkbenchConnection] = React.useState<any>(null);
   const {
     Activity,
     allGroupPaths,
@@ -283,6 +284,10 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     otpAuthenticators,
     onUpdateOtpAuthenticators,
     OtpAuthenticatorsManager,
+    dbConnections,
+    onUpdateDbConnections,
+    DatabasesManager,
+    SqlWorkbench,
     ProxyProfilesManager,
     quickConnectTarget,
     quickConnectWarnings,
@@ -708,6 +713,32 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
               {sidebarCollapsed && (
                 <TooltipContent side="right">
                   {t("vault.nav.authenticators")}
+                </TooltipContent>
+              )}
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <RippleButton
+                  variant={currentSection === "databases" ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full h-10",
+                    sidebarCollapsed
+                      ? "justify-center p-0"
+                      : "justify-start gap-3",
+                    currentSection === "databases" &&
+                      "bg-foreground/10 text-foreground hover:bg-foreground/15 border-border/40",
+                  )}
+                  onClick={() => {
+                    setCurrentSection("databases");
+                  }}
+                >
+                  <Database size={16} className="flex-shrink-0" />
+                  {!sidebarCollapsed && t("vault.nav.databases")}
+                </RippleButton>
+              </TooltipTrigger>
+              {sidebarCollapsed && (
+                <TooltipContent side="right">
+                  {t("vault.nav.databases")}
                 </TooltipContent>
               )}
             </Tooltip>
@@ -1461,6 +1492,17 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                 </Suspense>
               </LazyLoadBoundary>
             )}
+            {currentSection === "databases" && (
+              <LazyLoadBoundary name="Databases" resetKey="databases">
+                <Suspense fallback={<VaultSectionLoading />}>
+                  <DatabasesManager
+                    dbConnections={dbConnections}
+                    onUpdateDbConnections={onUpdateDbConnections}
+                    onOpenConnection={setDatabaseWorkbenchConnection}
+                  />
+                </Suspense>
+              </LazyLoadBoundary>
+            )}
             {currentSection === "monitor" && <MonitorPanels hosts={hosts} customGroups={customGroups} onConnect={onConnect} />}
             {currentSection === "port" && (
               <LazyLoadBoundary
@@ -1984,6 +2026,18 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
           </Suspense>
         </LazyLoadBoundary>
       )}
+
+      {/* Database workbench */}
+      {databaseWorkbenchConnection && SqlWorkbench ? (
+        <Suspense fallback={null}>
+          <SqlWorkbench
+            open={Boolean(databaseWorkbenchConnection)}
+            connections={dbConnections}
+            initialConnection={databaseWorkbenchConnection}
+            onClose={() => setDatabaseWorkbenchConnection(null)}
+          />
+        </Suspense>
+      ) : null}
 
       {/* Serial Connect Modal */}
       <SerialConnectModal

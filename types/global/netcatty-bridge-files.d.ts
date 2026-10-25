@@ -159,6 +159,25 @@ declare global {
     credentialsAvailable?(): Promise<boolean>;
     credentialsEncrypt?(plaintext: string): Promise<string>;
     credentialsDecrypt?(value: string): Promise<string>;
+    // Database workbench (SQL editor). Targets carry resolved credentials per call.
+    dbTestConnection?(target: unknown): Promise<{ ok: boolean; durationMs: number; serverVersion?: string; error?: { message: string; code?: string; sqlState?: string } }>;
+    dbConnect?(target: unknown): Promise<{ ok: boolean; durationMs: number; serverVersion?: string; error?: { message: string; code?: string; sqlState?: string } }>;
+    dbQuery?(payload: { target: unknown; sql: string; maxRows?: number; timeoutMs?: number }): Promise<{
+      ok: boolean;
+      result?: {
+        columns: Array<{ name: string; type?: string }>;
+        rows: Array<Array<string | number | boolean | null>>;
+        rowCount: number;
+        durationMs: number;
+        truncated?: boolean;
+        command?: string;
+      };
+      error?: { message: string; code?: string; sqlState?: string; position?: number; detail?: string; hint?: string };
+    }>;
+    dbCancel?(payload: { id: string }): Promise<{ ok: boolean }>;
+    dbDisconnect?(payload: { id: string }): Promise<{ ok: boolean }>;
+    dbDispose?(): Promise<{ ok: boolean }>;
+
     previewTotp?(payload: { text?: string; uri?: string }): Promise<{
       ok: boolean;
       uri?: string;

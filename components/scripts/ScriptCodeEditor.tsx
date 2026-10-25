@@ -19,7 +19,7 @@ loader.config({ paths: { vs: monacoBasePath } });
 export interface ScriptCodeEditorProps {
   value: string;
   onChange: (value: string) => void;
-  language: 'javascript' | 'python' | 'shell';
+  language: 'javascript' | 'python' | 'shell' | 'sql';
   /** Fill parent flex container (modal). Parent must have explicit height. */
   fill?: boolean;
   /** Fixed pixel height (sidebar). Ignored when fill is true. */

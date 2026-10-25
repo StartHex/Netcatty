@@ -570,6 +570,7 @@ const CONFLICT_ENTITY_LABEL_KEYS: Record<SyncChangeEntityKey, string> = {
     identities: 'cloudSync.conflict.entity.identities',
     proxyProfiles: 'cloudSync.conflict.entity.proxyProfiles',
     otpAuthenticators: 'cloudSync.conflict.entity.otpAuthenticators',
+    dbConnections: 'cloudSync.conflict.entity.dbConnections',
     snippets: 'cloudSync.conflict.entity.snippets',
     notes: 'cloudSync.conflict.entity.notes',
     noteGroups: 'cloudSync.conflict.entity.noteGroups',

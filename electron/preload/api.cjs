@@ -1874,6 +1874,14 @@ function createPreloadApi(ctx) {
   credentialsAvailable: () => ipcRenderer.invoke("netcatty:credentials:available"),
   credentialsEncrypt: (plaintext) => ipcRenderer.invoke("netcatty:credentials:encrypt", plaintext),
   credentialsDecrypt: (value) => ipcRenderer.invoke("netcatty:credentials:decrypt", value),
+  // Database workbench
+  dbTestConnection: (target) => ipcRenderer.invoke("netcatty:db:test", target),
+  dbConnect: (target) => ipcRenderer.invoke("netcatty:db:connect", target),
+  dbQuery: (payload) => ipcRenderer.invoke("netcatty:db:query", payload),
+  dbCancel: (payload) => ipcRenderer.invoke("netcatty:db:cancel", payload),
+  dbDisconnect: (payload) => ipcRenderer.invoke("netcatty:db:disconnect", payload),
+  dbDispose: () => ipcRenderer.invoke("netcatty:db:dispose"),
+
   previewTotp: (payload) => ipcRenderer.invoke("netcatty:totp:preview", payload),
   scanTotpQrFromScreen: () => ipcRenderer.invoke("netcatty:totp:scan-screen"),
 

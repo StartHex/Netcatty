@@ -548,6 +548,7 @@ export const esTerminalMessages: Messages = {
   'cloudSync.conflict.entity.identities': 'Identidades',
   'cloudSync.conflict.entity.proxyProfiles': 'Perfiles de proxy',
   'cloudSync.conflict.entity.otpAuthenticators': 'Autenticadores OTP',
+  'cloudSync.conflict.entity.dbConnections': 'Conexiones de base de datos',
   'cloudSync.conflict.entity.snippets': 'Snippets',
   'cloudSync.conflict.entity.notes': 'Notas',
   'cloudSync.conflict.entity.noteGroups': 'Grupos de notas',

@@ -157,7 +157,7 @@ import {
   TooltipProvider,
 } from "./ui/tooltip";
 import { Badge } from "./ui/badge";
-import { HotkeyScheme, KeyBinding, OtpAuthenticator } from "../domain/models";
+import { DatabaseConnection, HotkeyScheme, KeyBinding, OtpAuthenticator } from "../domain/models";
 import { VaultViewLayout } from "./vault/VaultViewLayout";
 import { useVaultHostCollections } from "./vault/useVaultHostCollections";
 import { useVaultImportHandlers } from "../application/state/useVaultImportHandlers";
@@ -169,6 +169,12 @@ const KeychainManager = lazy(() => import("./KeychainManager"));
 const PortForwarding = lazy(() => import("./PortForwardingNew"));
 const ProxyProfilesManager = lazy(() => import("./ProxyProfilesManager"));
 const OtpAuthenticatorsManager = lazy(() => import("./OtpAuthenticatorsManager"));
+const DatabasesManager = lazy(() =>
+  import("./databases/DatabasesManager").then((module) => ({ default: module.DatabasesManager })),
+);
+const SqlWorkbench = lazy(() =>
+  import("./databases/SqlWorkbench").then((module) => ({ default: module.SqlWorkbench })),
+);
 const SnippetsManager = lazy(() => import("./SnippetsManager"));
 
 export type VaultSection =
@@ -177,6 +183,7 @@ export type VaultSection =
   | "keys"
   | "proxies"
   | "authenticators"
+  | "databases"
   | "snippets"
   | "notes"
   | "port"
@@ -226,6 +233,7 @@ interface VaultViewProps {
   identities: Identity[];
   proxyProfiles: ProxyProfile[];
   otpAuthenticators: OtpAuthenticator[];
+  dbConnections: DatabaseConnection[];
   snippets: Snippet[];
   snippetPackages: string[];
   customGroups: string[];
@@ -255,6 +263,7 @@ interface VaultViewProps {
   onUpdateIdentities: (identities: Identity[]) => void;
   onUpdateProxyProfiles: (profiles: ProxyProfile[]) => void;
   onUpdateOtpAuthenticators: (authenticators: OtpAuthenticator[]) => void;
+  onUpdateDbConnections: (connections: DatabaseConnection[]) => void;
   onUpdateSnippets: (snippets: Snippet[]) => void;
   onUpdateSnippetPackages: (pkgs: string[]) => void;
   onUpdateCustomGroups: (
@@ -320,6 +329,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   identities,
   proxyProfiles,
   otpAuthenticators,
+  dbConnections,
   snippets,
   snippetPackages,
   customGroups,
@@ -344,6 +354,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   onUpdateIdentities,
   onUpdateProxyProfiles,
   onUpdateOtpAuthenticators,
+  onUpdateDbConnections,
   onUpdateSnippets,
   onUpdateSnippetPackages,
   onUpdateCustomGroups,
@@ -1699,6 +1710,10 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           proxyProfiles,
           otpAuthenticators,
           onUpdateOtpAuthenticators,
+          dbConnections,
+          onUpdateDbConnections,
+          DatabasesManager,
+          SqlWorkbench,
           OtpAuthenticatorsManager,
           ProxyProfilesManager,
           quickConnectTarget,
@@ -1824,6 +1839,8 @@ export const vaultViewAreEqual = (
     prev.proxyProfiles === next.proxyProfiles &&
     prev.otpAuthenticators === next.otpAuthenticators &&
     prev.onUpdateOtpAuthenticators === next.onUpdateOtpAuthenticators &&
+    prev.dbConnections === next.dbConnections &&
+    prev.onUpdateDbConnections === next.onUpdateDbConnections &&
     prev.snippets === next.snippets &&
     prev.snippetPackages === next.snippetPackages &&
     prev.customGroups === next.customGroups &&

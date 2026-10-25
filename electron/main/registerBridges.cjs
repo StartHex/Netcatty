@@ -533,6 +533,8 @@ function createBridgeRegistrar(context) {
     credentialBridge.registerHandlers(ipcMain, electronModule);
     const { registerTotpHandlers } = require("../bridges/totpBridge.cjs");
     registerTotpHandlers(ipcMain, electronModule);
+    const { registerDbHandlers } = require("../bridges/dbBridge.cjs");
+    registerDbHandlers(ipcMain);
     autoUpdateBridge.init(deps);
     autoUpdateBridge.registerHandlers(ipcMain);
     aiBridge.registerHandlers(ipcMain);

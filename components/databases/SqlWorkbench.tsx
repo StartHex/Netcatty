@@ -1,0 +1,337 @@
+/**
+ * SQL workbench: connection tabs, a Monaco SQL editor, and a virtualized result
+ * grid. All query orchestration lives in useDatabaseWorkbench.
+ */
+
+import { AlertTriangle, ArrowUpDown, Loader2, Play, RotateCw, Square, Wand2, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { format as formatSqlText } from 'sql-formatter';
+import { useI18n } from '../../application/i18n/I18nProvider';
+import { useDatabaseWorkbench, type DatabaseTab } from '../../application/state/useDatabaseWorkbench';
+import type { DatabaseConnection, DbCellValue, DbQueryResult } from '../../domain/models';
+import { cn } from '../../lib/utils';
+import { Button } from '../ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { FixedSizeVirtualList } from '../ui/FixedSizeVirtualList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { ScriptCodeEditor } from '../scripts/ScriptCodeEditor';
+
+const SQL_DIALECTS: Record<string, 'postgresql' | 'mysql' | 'mariadb' | 'plsql' | 'sqlite'> = {
+  postgresql: 'postgresql',
+  mysql: 'mysql',
+  mariadb: 'mariadb',
+  oracle: 'plsql',
+  sqlite: 'sqlite',
+} as const;
+
+const CELL_PADDING_X = 12;
+const MIN_COLUMN_WIDTH = 120;
+const MAX_COLUMN_WIDTH = 420;
+
+function cellText(value: DbCellValue): string {
+  if (value === null) return 'NULL';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return String(value);
+}
+
+function columnWidths(result: DbQueryResult | undefined): number[] {
+  if (!result) return [];
+  const sample = result.rows.slice(0, 50);
+  return result.columns.map((column, index) => {
+    let longest = column.name.length;
+    for (const row of sample) {
+      const text = cellText(row[index]);
+      if (text.length > longest) longest = text.length;
+    }
+    return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, longest * 7.5 + CELL_PADDING_X * 2 + 12));
+  });
+}
+
+function StatusDot({ tab }: { tab: DatabaseTab }) {
+  if (tab.status === 'connecting') {
+    return <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />;
+  }
+  if (tab.status === 'error' || !tab.connected) {
+    return <span className="h-1.5 w-1.5 rounded-full bg-destructive" />;
+  }
+  return <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />;
+}
+
+interface SqlWorkbenchProps {
+  open: boolean;
+  connections: DatabaseConnection[];
+  initialConnection?: DatabaseConnection | null;
+  onClose: () => void;
+}
+
+export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
+  open,
+  connections,
+  initialConnection,
+  onClose,
+}) => {
+  const { t } = useI18n();
+  const workbench = useDatabaseWorkbench(connections);
+  const { tabs, activeTab, activeTabId } = workbench;
+  const openedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      openedRef.current = null;
+      return;
+    }
+    if (!initialConnection) return;
+    if (openedRef.current === initialConnection.id) return;
+    openedRef.current = initialConnection.id;
+    void workbench.openTab(initialConnection);
+  }, [open, initialConnection, workbench]);
+
+  useEffect(() => {
+    if (!open) openedRef.current = null;
+  }, [open]);
+
+  const widths = useMemo(() => columnWidths(activeTab?.result), [activeTab?.result]);
+  const gridTemplate = useMemo(
+    () => widths.map((width) => `${Math.round(width)}px`).join(' '),
+    [widths],
+  );
+
+  const formatSql = () => {
+    if (!activeTab) return;
+    const dialect = SQL_DIALECTS[activeTab.kind] ?? 'postgresql';
+    try {
+      const formatted = formatSqlText(activeTab.sql, { language: dialect as never });
+      if (formatted && formatted !== activeTab.sql) workbench.updateSql(activeTab.id, formatted);
+    } catch {
+      // Formatting is best-effort; leave the statement untouched on parse errors.
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
+      <DialogContent className="flex h-[88vh] w-[94vw] max-w-[1500px] flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-2.5">
+          <DialogTitle className="text-sm">{t('databases.workbench.title')}</DialogTitle>
+        </DialogHeader>
+
+        <div className="flex shrink-0 items-stretch overflow-x-auto border-b border-border/60">
+          {tabs.map((tab) => (
+            <div
+              key={tab.id}
+              role="tab"
+              aria-selected={tab.id === activeTabId}
+              className={cn(
+                'group flex min-w-[140px] max-w-[240px] cursor-pointer items-center gap-1.5 border-r border-border/50 px-3 py-2 text-xs',
+                tab.id === activeTabId ? 'bg-secondary/70 text-foreground' : 'text-muted-foreground hover:bg-secondary/40',
+              )}
+              onClick={() => workbench.setActiveTabId(tab.id)}
+            >
+              <StatusDot tab={tab} />
+              <span className="truncate">{tab.title}</span>
+              <button
+                type="button"
+                className="ml-auto rounded p-0.5 opacity-60 hover:bg-background hover:opacity-100"
+                aria-label={t('databases.workbench.closeTab')}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  workbench.closeTab(tab.id);
+                }}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {activeTab ? (
+          <>
+            <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-1.5">
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                disabled={activeTab.running || !activeTab.connected || !activeTab.sql.trim()}
+                onClick={() => void workbench.runQuery(activeTab.id)}
+              >
+                {activeTab.running ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <Play className="mr-1 h-3 w-3" />
+                )}
+                {activeTab.running ? t('databases.workbench.running') : t('databases.workbench.run')}
+              </Button>
+              {activeTab.running ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => workbench.cancelQuery(activeTab.id)}
+                >
+                  <Square className="mr-1 h-3 w-3" />
+                  {t('databases.workbench.cancel')}
+                </Button>
+              ) : null}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={formatSql}>
+                    <Wand2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('databases.workbench.format')}</TooltipContent>
+              </Tooltip>
+              {activeTab.status === 'error' ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => void workbench.reconnect(activeTab.id)}
+                >
+                  <RotateCw className="mr-1 h-3 w-3" />
+                  {t('databases.workbench.reconnect')}
+                </Button>
+              ) : null}
+              <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
+                {activeTab.serverVersion ?? ''}
+              </span>
+            </div>
+
+            <div className="flex min-h-0 basis-[38%] flex-col border-b border-border/60">
+              <ScriptCodeEditor
+                value={activeTab.sql}
+                onChange={(value) => workbench.updateSql(activeTab.id, value)}
+                language="sql"
+                fill
+                active={open}
+                autoFocus
+                ariaLabel={t('databases.workbench.editorLabel')}
+                placeholder={t('databases.workbench.placeholder')}
+                onSubmitShortcut={() => void workbench.runQuery(activeTab.id)}
+              />
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col">
+              {activeTab.error ? (
+                <div className="shrink-0 border-b border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  <div className="flex items-start gap-1.5">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="whitespace-pre-wrap break-words font-medium">{activeTab.error}</p>
+                      {activeTab.errorDetail?.detail ? (
+                        <p className="opacity-80">{activeTab.errorDetail.detail}</p>
+                      ) : null}
+                      {activeTab.errorDetail?.hint ? (
+                        <p className="opacity-80">{activeTab.errorDetail.hint}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab.result ? (
+                <ResultGrid result={activeTab.result} gridTemplate={gridTemplate} t={t} />
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+                  <ArrowUpDown className="h-5 w-5 text-muted-foreground/60" />
+                  <p className="max-w-md text-xs text-muted-foreground">
+                    {activeTab.status === 'connecting'
+                      ? t('databases.workbench.connecting')
+                      : t('databases.workbench.emptyHint')}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex shrink-0 items-center gap-4 border-t border-border/60 px-3 py-1 text-[11px] text-muted-foreground">
+                <span>
+                  {t('databases.workbench.rowCount', {
+                    count: String(activeTab.result?.rowCount ?? 0),
+                  })}
+                </span>
+                {activeTab.result?.truncated ? (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {t('databases.workbench.truncated')}
+                  </span>
+                ) : null}
+                {activeTab.result?.command ? <span className="font-mono">{activeTab.result.command}</span> : null}
+                {typeof activeTab.durationMs === 'number' ? (
+                  <span className="ml-auto tabular-nums">
+                    {t('databases.workbench.elapsed', { ms: String(activeTab.durationMs) })}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+            {t('databases.workbench.noTab')}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+interface ResultGridProps {
+  result: DbQueryResult;
+  gridTemplate: string;
+  t: ReturnType<typeof useI18n>['t'];
+}
+
+const ResultGrid: React.FC<ResultGridProps> = ({ result, gridTemplate, t }) => {
+  if (result.columns.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+        {result.command
+          ? t('databases.workbench.statementOk', { command: result.command })
+          : t('databases.workbench.noColumns')}
+      </div>
+    );
+  }
+  return (
+    <div className="min-h-0 flex-1 overflow-x-auto">
+      <div className="flex min-h-full flex-col" style={{ minWidth: '100%' }}>
+        <div
+          className="sticky top-0 z-10 grid shrink-0 border-b border-border/60 bg-secondary/60"
+          style={{ gridTemplateColumns: gridTemplate }}
+        >
+          {result.columns.map((column, index) => (
+            <div
+              key={`${column.name}-${index}`}
+              className="truncate px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+              title={column.type ? `${column.name} · ${column.type}` : column.name}
+            >
+              {column.name}
+            </div>
+          ))}
+        </div>
+        <FixedSizeVirtualList
+          items={result.rows}
+          itemHeight={28}
+          className="min-h-0 flex-1"
+          getItemKey={(_row, index) => String(index)}
+          renderItem={(row, rowIndex) => (
+            <div
+              className={cn(
+                'grid h-7 items-center text-xs',
+                rowIndex % 2 === 1 ? 'bg-secondary/20' : 'bg-transparent',
+              )}
+              style={{ gridTemplateColumns: gridTemplate }}
+            >
+              {row.map((value, cellIndex) => (
+                <div
+                  key={cellIndex}
+                  className={cn(
+                    'truncate px-3 font-mono',
+                    value === null && 'italic text-muted-foreground/70',
+                    typeof value === 'number' && 'text-right tabular-nums',
+                  )}
+                  title={cellText(value)}
+                >
+                  {cellText(value)}
+                </div>
+              ))}
+            </div>
+          )}
+        />
+      </div>
+    </div>
+  );
+};

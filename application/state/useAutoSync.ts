@@ -80,6 +80,7 @@ interface AutoSyncConfig {
   identities?: SyncPayload['identities'];
   proxyProfiles?: SyncPayload['proxyProfiles'];
   otpAuthenticators?: SyncPayload['otpAuthenticators'];
+  dbConnections?: SyncPayload['dbConnections'];
   snippets: SyncPayload['snippets'];
   customGroups: SyncPayload['customGroups'];
   snippetPackages?: SyncPayload['snippetPackages'];
@@ -160,6 +161,7 @@ const getSyncPayloadDataHash = (payload: SyncPayload): string => {
     identities: payload.identities,
     proxyProfiles: payload.proxyProfiles,
     otpAuthenticators: payload.otpAuthenticators,
+    dbConnections: payload.dbConnections,
     snippets: payload.snippets,
     customGroups: payload.customGroups,
     snippetPackages: payload.snippetPackages,
@@ -294,6 +296,7 @@ export const useAutoSync = (config: AutoSyncConfig) => {
       identities: config.identities,
       proxyProfiles: config.proxyProfiles,
       otpAuthenticators: config.otpAuthenticators,
+      dbConnections: config.dbConnections,
       snippets: config.snippets,
       customGroups: config.customGroups,
       snippetPackages: config.snippetPackages,
@@ -310,6 +313,7 @@ export const useAutoSync = (config: AutoSyncConfig) => {
     config.identities,
     config.proxyProfiles,
     config.otpAuthenticators,
+    config.dbConnections,
     config.snippets,
     config.customGroups,
     config.snippetPackages,

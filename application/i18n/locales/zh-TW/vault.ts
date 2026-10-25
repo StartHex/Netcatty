@@ -977,6 +977,7 @@ export const zhTWVaultMessages: Messages = {
   'cloudSync.conflict.entity.identities': '身分',
   'cloudSync.conflict.entity.proxyProfiles': '代理設定',
   'cloudSync.conflict.entity.otpAuthenticators': 'OTP 驗證器',
+  'cloudSync.conflict.entity.dbConnections': '資料庫連線',
   'cloudSync.conflict.entity.snippets': '片段',
   'cloudSync.conflict.entity.notes': '筆記',
   'cloudSync.conflict.entity.noteGroups': '筆記群組',

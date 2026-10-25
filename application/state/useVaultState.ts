@@ -11,6 +11,9 @@ import { isEncryptedCredentialPlaceholder } from "../../domain/credentials";
 import { retainLocalHostLastConnectedAt } from "../../domain/sync";
 import { sanitizeGroupConfig } from "../../domain/groupConfig";
 import {
+  sanitizeDatabaseConnections,
+} from "../../domain/models/database";
+import {
   clearOtpAuthenticatorReferences,
   rematerializeHostsForAuthenticator,
   sanitizeOtpAuthenticators,
@@ -25,6 +28,7 @@ import {
 } from "../../domain/pluginImporter";
 import {
   ConnectionLog,
+  DatabaseConnection,
   GroupConfig,
   Host,
   Identity,
@@ -117,18 +121,21 @@ import {
   decryptHosts,
   decryptIdentities,
   decryptKeys,
+  decryptDatabaseConnections,
   decryptOtpAuthenticators,
   decryptProxyProfiles,
   encryptGroupConfigs,
   encryptHosts,
   encryptIdentities,
   encryptKeys,
+  encryptDatabaseConnections,
   encryptOtpAuthenticators,
   encryptProxyProfiles,
   notifyKeysEncryptedWritePending,
 } from "../../infrastructure/persistence/secureFieldAdapter";
 import { pluginExtensionBridge } from "./pluginExtensionBridge";
 import type { PluginImporterCommitRequest } from "./usePluginImporterCommit";
+import { STORAGE_KEY_DB_CONNECTIONS } from "../../infrastructure/config/storageKeys";
 import {
   isVaultImportLockHeld,
   type VaultLockHandle,
@@ -156,6 +163,7 @@ type ExportableVaultData = {
   identities?: Identity[];
   proxyProfiles?: ProxyProfile[];
   otpAuthenticators?: OtpAuthenticator[];
+  dbConnections?: DatabaseConnection[];
   snippets: Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -323,6 +331,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const [identities, setIdentities] = useState<Identity[]>([]);
   const [proxyProfiles, setProxyProfiles] = useState<ProxyProfile[]>([]);
   const [otpAuthenticators, setOtpAuthenticators] = useState<OtpAuthenticator[]>([]);
+  const [dbConnections, setDbConnections] = useState<DatabaseConnection[]>([]);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [customGroups, setCustomGroups] = useState<string[]>([]);
   const [snippetPackages, setSnippetPackages] = useState<string[]>([]);
@@ -339,6 +348,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const snippetsRef = useRef<Snippet[]>([]);
   const groupConfigsRef = useRef<GroupConfig[]>([]);
   const otpAuthenticatorsRef = useRef<OtpAuthenticator[]>([]);
+  const dbConnectionsRef = useRef<DatabaseConnection[]>([]);
   const notesRef = useRef<VaultNote[]>([]);
   const notesStorageRef = useRef<VaultNote[]>([]);
   // An optimistic React echo is not a persistence acknowledgement. Keep this
@@ -354,6 +364,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   snippetsRef.current = snippets;
   groupConfigsRef.current = groupConfigs;
   otpAuthenticatorsRef.current = otpAuthenticators;
+  dbConnectionsRef.current = dbConnections;
   notesRef.current = notes;
   noteGroupsRef.current = noteGroups;
 
@@ -365,6 +376,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const identitiesWriteVersion = useRef(0);
   const proxyProfilesWriteVersion = useRef(0);
   const otpAuthenticatorsWriteVersion = useRef(0);
+  const dbConnectionsWriteVersion = useRef(0);
   const snippetsWriteVersion = useRef(0);
   const managedSourcesWriteVersion = useRef(0);
   // Tracks the latest local updateSnippets schedule. Storage events also bump
@@ -446,6 +458,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const identitiesReadSeq = useRef(0);
   const proxyProfilesReadSeq = useRef(0);
   const otpAuthenticatorsReadSeq = useRef(0);
+  const dbConnectionsReadSeq = useRef(0);
   const groupConfigsReadSeq = useRef(0);
   const connectionLogsRef = useRef<ConnectionLog[]>([]);
   const connectionLogWriteGenerationRef = useRef(0);
@@ -906,6 +919,16 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateOtpAuthenticators(otpAuthenticatorsRef.current.filter((entry) => entry.id !== id));
     updateHosts(clearOtpAuthenticatorReferences(hostsRef.current, id));
   }, [updateHosts, updateOtpAuthenticators]);
+
+  const updateDbConnections = useCallback((data: DatabaseConnection[]) => {
+    const cleaned = sanitizeDatabaseConnections(data);
+    setDbConnections(cleaned);
+    const ver = ++dbConnectionsWriteVersion.current;
+    return encryptDatabaseConnections(cleaned).then((enc) => {
+      if (ver === dbConnectionsWriteVersion.current)
+        localStorageAdapter.write(STORAGE_KEY_DB_CONNECTIONS, enc);
+    });
+  }, []);
 
   const updateSnippets = useCallback((
     data: Snippet[] | ((current: Snippet[]) => Snippet[]),
@@ -1430,6 +1453,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateIdentities([]);
     updateProxyProfiles([]);
     updateOtpAuthenticators([]);
+    updateDbConnections([]);
     updateSnippets([], { replace: true });
     updateSnippetPackages([]);
     updateNotes([], { replace: true });
@@ -1444,6 +1468,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateKeys,
     updateIdentities,
     updateOtpAuthenticators,
+    updateDbConnections,
     updateProxyProfiles,
     updateSnippets,
     updateSnippetPackages,
@@ -1775,6 +1800,22 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
             encryptOtpAuthenticators(orderedAuthenticators).then((enc) => {
               if (otpVer === otpAuthenticatorsWriteVersion.current)
                 localStorageAdapter.write(STORAGE_KEY_OTP_AUTHENTICATORS, enc);
+            });
+          }
+        }
+
+        const savedDbConnections =
+          localStorageAdapter.read<DatabaseConnection[]>(STORAGE_KEY_DB_CONNECTIONS);
+        if (savedDbConnections) {
+          const dbVer = ++dbConnectionsWriteVersion.current;
+          const decryptedConnections = await decryptDatabaseConnections(savedDbConnections);
+          if (cancelled) return;
+          if (dbVer === dbConnectionsWriteVersion.current) {
+            const orderedConnections = sanitizeDatabaseConnections(decryptedConnections);
+            setDbConnections(orderedConnections);
+            encryptDatabaseConnections(orderedConnections).then((enc) => {
+              if (dbVer === dbConnectionsWriteVersion.current)
+                localStorageAdapter.write(STORAGE_KEY_DB_CONNECTIONS, enc);
             });
           }
         }
@@ -2111,6 +2152,18 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
         return;
       }
 
+      if (key === STORAGE_KEY_DB_CONNECTIONS) {
+        const next = safeParse<DatabaseConnection[]>(event.newValue) ?? [];
+        ++dbConnectionsWriteVersion.current;
+        const seq = ++dbConnectionsReadSeq.current;
+        const writeAtStart = dbConnectionsWriteVersion.current;
+        decryptDatabaseConnections(next).then((dec) => {
+          if (seq === dbConnectionsReadSeq.current && writeAtStart === dbConnectionsWriteVersion.current)
+            setDbConnections(sanitizeDatabaseConnections(dec));
+        });
+        return;
+      }
+
       if (key === STORAGE_KEY_OTP_AUTHENTICATORS) {
         const next = safeParse<OtpAuthenticator[]>(event.newValue) ?? [];
         ++otpAuthenticatorsWriteVersion.current;
@@ -2361,6 +2414,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       identities,
       proxyProfiles,
       otpAuthenticators,
+      dbConnections,
       snippets,
       customGroups,
       snippetPackages,
@@ -2369,7 +2423,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       knownHosts,
       groupConfigs,
     }),
-    [hosts, keys, identities, proxyProfiles, otpAuthenticators, snippets, customGroups, snippetPackages, notes, noteGroups, knownHosts, groupConfigs],
+    [hosts, keys, identities, proxyProfiles, otpAuthenticators, dbConnections, snippets, customGroups, snippetPackages, notes, noteGroups, knownHosts, groupConfigs],
   );
 
   const importData = useCallback(
@@ -2379,6 +2433,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       // Write authenticators before hosts so host references resolve as soon
       // as the restored hosts land.
       if (Array.isArray(payload.otpAuthenticators)) encryptedWrites.push(updateOtpAuthenticators(payload.otpAuthenticators));
+      if (Array.isArray(payload.dbConnections)) encryptedWrites.push(updateDbConnections(payload.dbConnections));
       if (payload.hosts) {
         // Cloud payloads no longer carry `lastConnectedAt` (#2629), but any
         // remote reconciliation replaces the whole local host array. Re-attach
@@ -2415,6 +2470,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       updateKeys,
       updateIdentities,
       updateOtpAuthenticators,
+      updateDbConnections,
       updateProxyProfiles,
       updateSnippets,
       updateCustomGroups,
@@ -2583,6 +2639,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     identities,
     proxyProfiles,
     otpAuthenticators,
+    dbConnections,
     snippets,
     customGroups,
     snippetPackages,
@@ -2602,6 +2659,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateOtpAuthenticators,
     saveOtpAuthenticator,
     deleteOtpAuthenticator,
+    updateDbConnections,
     updateSnippets,
     deleteSelectedSnippets,
     updateSnippetPackages,

@@ -79,6 +79,7 @@ const OPTIONAL_ENTITY_KEYS = new Set<CloudSyncPayloadEntityKey>([
   'identities',
   'proxyProfiles',
   'otpAuthenticators',
+  'dbConnections',
   'snippetPackages',
   'notes',
   'noteGroups',
@@ -865,6 +866,14 @@ export function mergeSyncPayloads(
     tombstones('otpAuthenticators'),
     mergeOptions,
   );
+  const baseDbConnections = b.dbConnections ?? [];
+  const dbConnections = mergeEntityArrays(
+    baseDbConnections,
+    entityArray(local, 'dbConnections', baseDbConnections),
+    entityArray(remote, 'dbConnections', baseDbConnections),
+    tombstones('dbConnections'),
+    mergeOptions,
+  );
   const snippets = mergeEntityArrays(b.snippets ?? [], local.snippets ?? [], remote.snippets ?? [], tombstones('snippets'), mergeOptions);
   const baseMonitorPanels = b.monitorPanels ?? [];
   const monitorPanels = mergeEntityArrays(baseMonitorPanels, entityArray(local, 'monitorPanels', baseMonitorPanels), entityArray(remote, 'monitorPanels', baseMonitorPanels), tombstones('monitorPanels'), { ...mergeOptions, mergeFields: true, deleteWins: true });
@@ -919,7 +928,7 @@ export function mergeSyncPayloads(
 
   // Aggregate stats
   const entityResults: Pick<EntityMergeResult<unknown>, 'added' | 'deleted' | 'modified' | 'conflicts'>[] =
-    [hosts, keys, identities, proxyProfiles, otpAuthenticators, snippets, monitorPanels, notes, portForwardingRules, browserBookmarks, groupConfigsResult, aiSessions];
+    [hosts, keys, identities, proxyProfiles, otpAuthenticators, dbConnections, snippets, monitorPanels, notes, portForwardingRules, browserBookmarks, groupConfigsResult, aiSessions];
   for (const r of entityResults) {
     summary.added.local += r.added.local;
     summary.added.remote += r.added.remote;
@@ -1011,6 +1020,9 @@ export function mergeSyncPayloads(
     proxyProfiles: proxyProfiles.merged,
     ...(base?.otpAuthenticators !== undefined || local.otpAuthenticators !== undefined || remote.otpAuthenticators !== undefined
       ? { otpAuthenticators: otpAuthenticators.merged }
+      : {}),
+    ...(base?.dbConnections !== undefined || local.dbConnections !== undefined || remote.dbConnections !== undefined
+      ? { dbConnections: dbConnections.merged }
       : {}),
     snippets: snippets.merged,
     monitorPanels: monitorPanels.merged,

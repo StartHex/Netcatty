@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 import type {
+  DatabaseConnection,
   GroupConfig,
   Host,
   Identity,
@@ -30,6 +31,7 @@ export type VaultSnapshot = {
   identities: readonly Identity[];
   proxyProfiles: readonly ProxyProfile[];
   otpAuthenticators: readonly OtpAuthenticator[];
+  dbConnections: readonly DatabaseConnection[];
   snippets: readonly Snippet[];
   snippetPackages: readonly string[];
   customGroups: readonly string[];
@@ -50,6 +52,7 @@ export type VaultSnapshotActions = Pick<
   | 'updateIdentities'
   | 'updateProxyProfiles'
   | 'updateOtpAuthenticators'
+  | 'updateDbConnections'
   | 'updateSnippets'
   | 'updateSnippetPackages'
   | 'updateCustomGroups'
@@ -74,6 +77,7 @@ const EMPTY_KEYS: readonly SSHKey[] = Object.freeze([]);
 const EMPTY_IDENTITIES: readonly Identity[] = Object.freeze([]);
 const EMPTY_PROXY_PROFILES: readonly ProxyProfile[] = Object.freeze([]);
 const EMPTY_OTP_AUTHENTICATORS: readonly OtpAuthenticator[] = Object.freeze([]);
+const EMPTY_DB_CONNECTIONS: readonly DatabaseConnection[] = Object.freeze([]);
 const EMPTY_SNIPPETS: readonly Snippet[] = Object.freeze([]);
 const EMPTY_STRINGS: readonly string[] = Object.freeze([]);
 const EMPTY_KNOWN_HOSTS: readonly KnownHost[] = Object.freeze([]);
@@ -87,6 +91,7 @@ export const EMPTY_VAULT_SNAPSHOT: VaultSnapshot = Object.freeze({
   identities: EMPTY_IDENTITIES,
   proxyProfiles: EMPTY_PROXY_PROFILES,
   otpAuthenticators: EMPTY_OTP_AUTHENTICATORS,
+  dbConnections: EMPTY_DB_CONNECTIONS,
   snippets: EMPTY_SNIPPETS,
   snippetPackages: EMPTY_STRINGS,
   customGroups: EMPTY_STRINGS,

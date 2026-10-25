@@ -64,6 +64,10 @@ export const STORAGE_KEY_IDENTITIES = 'netcatty_identities_v1';
 export const STORAGE_KEY_PROXY_PROFILES = 'netcatty_proxy_profiles_v1';
 /** Reusable OTP authenticators referenced by hosts through otpAuthenticatorId. */
 export const STORAGE_KEY_OTP_AUTHENTICATORS = 'netcatty_otp_authenticators_v1';
+/** Database connections opened by the SQL workbench. */
+export const STORAGE_KEY_DB_CONNECTIONS = 'netcatty_db_connections_v1';
+/** User-registered JDBC driver jars. */
+export const STORAGE_KEY_JDBC_DRIVERS = 'netcatty_jdbc_drivers_v1';
 export const STORAGE_KEY_VAULT_HOSTS_VIEW_MODE = 'netcatty_vault_hosts_view_mode_v1';
 export const STORAGE_KEY_VAULT_HOSTS_SORT_MODE = 'netcatty_vault_hosts_sort_mode_v1';
 export const STORAGE_KEY_VAULT_HOSTS_TREE_EXPANDED = 'netcatty_vault_hosts_tree_expanded_v1';

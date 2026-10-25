@@ -548,6 +548,7 @@ export const enTerminalMessages: Messages = {
   'cloudSync.conflict.entity.identities': 'Identities',
   'cloudSync.conflict.entity.proxyProfiles': 'Proxy profiles',
   'cloudSync.conflict.entity.otpAuthenticators': 'OTP authenticators',
+  'cloudSync.conflict.entity.dbConnections': 'Database connections',
   'cloudSync.conflict.entity.snippets': 'Snippets',
   'cloudSync.conflict.entity.notes': 'Notes',
   'cloudSync.conflict.entity.noteGroups': 'Note groups',

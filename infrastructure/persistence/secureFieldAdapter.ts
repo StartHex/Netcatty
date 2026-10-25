@@ -11,7 +11,7 @@
  * plaintext, and never persist empty over recoverable ciphertext.
  */
 
-import type { GroupConfig, Host, Identity, OtpAuthenticator, ProxyProfile, SSHKey } from "../../domain/models";
+import type { DatabaseConnection, GroupConfig, Host, Identity, OtpAuthenticator, ProxyProfile, SSHKey } from "../../domain/models";
 import type { ProviderConnection, S3Config, WebDAVConfig } from "../../domain/sync";
 import {
   isEncryptedCredentialPlaceholder,
@@ -393,6 +393,34 @@ export function encryptGroupConfigs(configs: GroupConfig[]): Promise<GroupConfig
 
 export function decryptGroupConfigs(configs: GroupConfig[]): Promise<GroupConfig[]> {
   return Promise.all(configs.map(decryptGroupConfigSecrets));
+}
+
+// ---------------------------------------------------------------------------
+// DatabaseConnection
+// ---------------------------------------------------------------------------
+
+export async function encryptDatabaseConnectionSecrets(
+  connection: DatabaseConnection,
+): Promise<DatabaseConnection> {
+  const out = { ...connection };
+  out.password = await encryptField(out.password);
+  return out;
+}
+
+export async function decryptDatabaseConnectionSecrets(
+  connection: DatabaseConnection,
+): Promise<DatabaseConnection> {
+  const out = { ...connection };
+  out.password = persistDecryptedSecret(out.password, await decryptField(out.password)) ?? out.password;
+  return out;
+}
+
+export function encryptDatabaseConnections(connections: DatabaseConnection[]): Promise<DatabaseConnection[]> {
+  return Promise.all(connections.map(encryptDatabaseConnectionSecrets));
+}
+
+export function decryptDatabaseConnections(connections: DatabaseConnection[]): Promise<DatabaseConnection[]> {
+  return Promise.all(connections.map(decryptDatabaseConnectionSecrets));
 }
 
 // ---------------------------------------------------------------------------

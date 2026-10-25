@@ -1,5 +1,6 @@
 import { zhCNMonitorMessages } from './zh-CN/monitor';
 import type { Messages } from './types';
+import { zhCNDatabaseMessages } from './zh-CN/database';
 import { zhCNCoreMessages } from './zh-CN/core';
 import { zhCNVaultMessages } from './zh-CN/vault';
 import { zhCNTerminalMessages } from './zh-CN/terminal';
@@ -10,6 +11,7 @@ import { zhCNScriptsMessages } from './zh-CN/scripts';
 export type { Messages } from './types';
 
 const zhCN: Messages = {
+  ...zhCNDatabaseMessages,
   ...zhCNMonitorMessages,
   ...zhCNCoreMessages,
   ...zhCNVaultMessages,
