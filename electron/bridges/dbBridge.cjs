@@ -717,6 +717,153 @@ function createJdbcSession(target) {
   };
 }
 
+
+function createSqlServerSession(target) {
+  const tedious = require("tedious");
+  let connection = null;
+  let connecting = null;
+
+  function connect() {
+    return new Promise((resolve, reject) => {
+      const config = {
+        server: target.host,
+        authentication: {
+          type: "default",
+          options: { userName: target.username, password: target.password },
+        },
+        options: {
+          port: target.port || 1433,
+          database: target.database || undefined,
+          encrypt: target.sslMode !== "disable",
+          trustServerCertificate: target.sslMode !== "verify-ca" && target.sslMode !== "verify-full",
+          rowCollectionOnRequestCompletion: true,
+          useColumnNames: false,
+          connectTimeout: CONNECT_TIMEOUT_MS,
+          requestTimeout: 0,
+        },
+      };
+      const instance = new tedious.Connection(config);
+      instance.on("connect", (error) => {
+        if (error) {
+          reject(normalizeError(error));
+          return;
+        }
+        resolve(instance);
+      });
+      instance.on("error", () => {
+        connection = null;
+      });
+      instance.connect();
+    });
+  }
+
+  async function ensure() {
+    if (connection) return connection;
+    if (connecting) return connecting;
+    connecting = connect().then((instance) => {
+      connection = instance;
+      return instance;
+    });
+    try {
+      return await connecting;
+    } finally {
+      connecting = null;
+    }
+  }
+
+  function exec(instance, sql, maxRows) {
+    return new Promise((resolve, reject) => {
+      const started = Date.now();
+      const request = new tedious.Request(sql, (error, rowCount, rows) => {
+        if (error) {
+          reject(normalizeError(error));
+          return;
+        }
+        const collected = rows || [];
+        const columns = (collected[0] || []).map((cell) => ({
+          name: cell.metadata.colName,
+          type: cell.metadata.type?.name,
+        }));
+        const matrix = collected
+          .slice(0, maxRows)
+          .map((row) => row.map((cell) => toCellValue(cell.value)));
+        resolve({
+          columns,
+          rows: matrix,
+          rowCount: Number.isFinite(rowCount) ? rowCount : matrix.length,
+          truncated: matrix.length < collected.length || (rowCount || 0) > matrix.length,
+          command: /^\s*(select|show|with)/i.test(sql) ? "SELECT" : "UPDATE",
+          durationMs: Date.now() - started,
+        });
+      });
+      instance.execSql(request);
+    });
+  }
+
+  return {
+    kind: "sqlserver",
+    ensure,
+    async serverVersion() {
+      const instance = await ensure();
+      const result = await exec(instance, "select @@version as version", 1);
+      return String(result.rows?.[0]?.[0] || "");
+    },
+    async query(sql, { maxRows }) {
+      const instance = await ensure();
+      return exec(instance, sql, maxRows);
+    },
+    async tables() {
+      const instance = await ensure();
+      const result = await exec(
+        instance,
+        "select table_schema as [schema], table_name as [name], table_type as [type] " +
+          "from information_schema.tables order by table_schema, table_name",
+        HARD_MAX_ROWS,
+      );
+      return result.rows.map((row) => ({
+        schema: String(row[0] || ""),
+        name: String(row[1] || ""),
+        type: /view/i.test(String(row[2] || "")) ? "view" : "table",
+      }));
+    },
+    async columns(schema, table) {
+      const instance = await ensure();
+      const escapedSchema = String(schema || "dbo").replace(/'/g, "''");
+      const escapedTable = String(table || "").replace(/'/g, "''");
+      const result = await exec(
+        instance,
+        "select column_name as [name], data_type as [type], is_nullable as [nullable] " +
+          `from information_schema.columns where table_schema = '${escapedSchema}' and table_name = '${escapedTable}' ` +
+          "order by ordinal_position",
+        HARD_MAX_ROWS,
+      );
+      return result.rows.map((row) => ({
+        name: String(row[0] || ""),
+        type: String(row[1] || ""),
+        nullable: String(row[2] || "").toUpperCase() === "YES",
+      }));
+    },
+    async control() {
+      throw Object.assign(new Error("Transactions are managed by SQL Server itself"), {
+        code: "control-unsupported",
+      });
+    },
+    async cancel() {
+      // tedious has no per-request cancel; closing the session is the escape hatch.
+    },
+    async close() {
+      if (connection) {
+        try {
+          connection.close();
+        } catch {
+          // ignore
+        }
+        connection = null;
+      }
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Session lifecycle
 // ---------------------------------------------------------------------------
@@ -730,6 +877,8 @@ function driverFor(kind) {
       return createMysqlSession;
     case "oracle":
       return createOracleSession;
+    case "sqlserver":
+      return createSqlServerSession;
     case "sqlite":
       return createSqliteSession;
     case "jdbc":

@@ -37,7 +37,7 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
 
-const KINDS: DatabaseKind[] = ['postgresql', 'mysql', 'mariadb', 'oracle', 'sqlite'];
+const KINDS: DatabaseKind[] = ['postgresql', 'mysql', 'mariadb', 'oracle', 'sqlserver', 'sqlite', 'jdbc'];
 const SSL_MODES: DatabaseSslMode[] = ['disable', 'require', 'verify-ca', 'verify-full'];
 
 interface FormState {

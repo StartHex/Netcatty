@@ -28,6 +28,7 @@ const KIND_ACCENT: Record<DatabaseKind, string> = {
   mysql: 'text-amber-500',
   mariadb: 'text-orange-500',
   oracle: 'text-red-500',
+  sqlserver: 'text-blue-500',
   sqlite: 'text-emerald-500',
   jdbc: 'text-violet-500',
 };

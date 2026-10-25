@@ -48,6 +48,7 @@ export const ruDatabaseMessages: Messages = {
   'databases.drivers.useManualJars': 'Jar вручную',
   'databases.drivers.deleteTitle': 'Удалить драйвер?',
   'databases.drivers.deleteMessage': 'Удалить «{name}» из списка? Подключения сохранят скопированные пути jar.',
+  'databases.kind.sqlserver': 'SQL Server',
   'databases.kind.jdbc': 'JDBC',
   'databases.deleteDescription': '«{label}» и сохранённый пароль будут удалены.',
   'databases.form.titleNew': 'Новое подключение к базе данных',

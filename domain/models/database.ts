@@ -9,7 +9,7 @@
  */
 
 /** Drivers bundled with the app. `jdbc` routes through the Java sidecar. */
-export type DatabaseKind = 'postgresql' | 'mysql' | 'mariadb' | 'oracle' | 'sqlite' | 'jdbc';
+export type DatabaseKind = 'postgresql' | 'mysql' | 'mariadb' | 'oracle' | 'sqlserver' | 'sqlite' | 'jdbc';
 
 export type DatabaseSslMode = 'disable' | 'prefer' | 'require' | 'verify-ca' | 'verify-full';
 
@@ -21,6 +21,7 @@ export const DATABASE_KINDS: readonly DatabaseKind[] = [
   'mysql',
   'mariadb',
   'oracle',
+  'sqlserver',
   'sqlite',
   'jdbc',
 ] as const;
@@ -38,6 +39,7 @@ export const DATABASE_DEFAULT_PORTS: Record<Exclude<DatabaseKind, 'sqlite' | 'jd
   mysql: 3306,
   mariadb: 3306,
   oracle: 1521,
+  sqlserver: 1433,
 };
 
 /** Where a driver gets its credentials. SQLite only needs a file path. */

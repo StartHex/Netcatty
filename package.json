@@ -110,6 +110,7 @@
     "socks-proxy-agent": "^8.0.5",
     "sql-formatter": "^15.9.0",
     "ssh2-sftp-client": "^12.0.1",
+    "tedious": "^20.3.8",
     "webdav": "^5.8.0",
     "zmodem.js": "^0.1.10",
     "zod": "^4.3.6"

@@ -48,6 +48,7 @@ export const esDatabaseMessages: Messages = {
   'databases.drivers.useManualJars': 'Jars manuales',
   'databases.drivers.deleteTitle': '¿Eliminar controlador?',
   'databases.drivers.deleteMessage': '¿Quitar «{name}» de la lista? Las conexiones conservan las rutas de jar copiadas.',
+  'databases.kind.sqlserver': 'SQL Server',
   'databases.kind.jdbc': 'JDBC',
   'databases.deleteDescription': 'Se eliminarán «{label}» y su contraseña guardada.',
   'databases.form.titleNew': 'Nueva conexión de base de datos',

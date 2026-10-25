@@ -48,6 +48,7 @@ export const enDatabaseMessages: Messages = {
   'databases.drivers.useManualJars': 'Manual jars',
   'databases.drivers.deleteTitle': 'Delete driver?',
   'databases.drivers.deleteMessage': 'Remove “{name}” from the driver list? Connections that use it keep their copied jar paths.',
+  'databases.kind.sqlserver': 'SQL Server',
   'databases.kind.jdbc': 'JDBC',
   'databases.deleteDescription': '"{label}" and its saved password will be removed.',
   'databases.form.titleNew': 'New database connection',

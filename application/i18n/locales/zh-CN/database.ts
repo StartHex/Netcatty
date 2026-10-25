@@ -48,6 +48,7 @@ export const zhCNDatabaseMessages: Messages = {
   'databases.drivers.useManualJars': '手动选择 jar',
   'databases.drivers.deleteTitle': '删除驱动？',
   'databases.drivers.deleteMessage': '从驱动列表移除“{name}”？已使用它的连接会保留复制过去的 jar 路径。',
+  'databases.kind.sqlserver': 'SQL Server',
   'databases.kind.jdbc': 'JDBC',
   'databases.deleteDescription': '「{label}」及其保存的密码将被删除。',
   'databases.form.titleNew': '新建数据库连接',

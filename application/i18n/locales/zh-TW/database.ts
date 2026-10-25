@@ -48,6 +48,7 @@ export const zhTNDatabaseMessages: Messages = {
   'databases.drivers.useManualJars': '手動選擇 jar',
   'databases.drivers.deleteTitle': '刪除驅動？',
   'databases.drivers.deleteMessage': '從驅動清單移除「{name}」？已使用它的連線會保留複製過去的 jar 路徑。',
+  'databases.kind.sqlserver': 'SQL Server',
   'databases.kind.jdbc': 'JDBC',
   'databases.deleteDescription': '「{label}」及其儲存的密碼將被刪除。',
   'databases.form.titleNew': '新增資料庫連線',
