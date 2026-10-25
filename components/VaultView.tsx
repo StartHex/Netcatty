@@ -1813,6 +1813,8 @@ export const vaultViewAreEqual = (
     prev.keys === next.keys &&
     prev.identities === next.identities &&
     prev.proxyProfiles === next.proxyProfiles &&
+    prev.otpAuthenticators === next.otpAuthenticators &&
+    prev.onUpdateOtpAuthenticators === next.onUpdateOtpAuthenticators &&
     prev.snippets === next.snippets &&
     prev.snippetPackages === next.snippetPackages &&
     prev.customGroups === next.customGroups &&
