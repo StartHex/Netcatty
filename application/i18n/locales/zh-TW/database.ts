@@ -118,6 +118,7 @@ export const zhTNDatabaseMessages: Messages = {
   'databases.workbench.saveQuerySaved': '查詢已儲存',
   'databases.workbench.savedQueriesEmpty': '還沒有儲存的查詢',
   'databases.workbench.save': '儲存',
+  'databases.workbench.rowLimit': '列數上限',
   'databases.workbench.exportCsv': '匯出 CSV',
   'databases.workbench.format': '格式化 SQL',
   'databases.workbench.reconnect': '重新連線',

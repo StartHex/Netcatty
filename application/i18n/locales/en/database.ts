@@ -118,6 +118,7 @@ export const enDatabaseMessages: Messages = {
   'databases.workbench.saveQuerySaved': 'Query saved',
   'databases.workbench.savedQueriesEmpty': 'No saved queries yet',
   'databases.workbench.save': 'Save',
+  'databases.workbench.rowLimit': 'Row limit',
   'databases.workbench.exportCsv': 'Export CSV',
   'databases.workbench.format': 'Format SQL',
   'databases.workbench.reconnect': 'Reconnect',

@@ -566,6 +566,20 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
               )}
 
               <div className="flex shrink-0 items-center gap-4 border-t border-border/60 px-3 py-1 text-[11px] text-muted-foreground">
+                <label className="flex items-center gap-1">
+                  <span>{t('databases.workbench.rowLimit')}</span>
+                  <select
+                    className="rounded border border-border/60 bg-transparent px-1 py-0.5 text-[11px]"
+                    value={activeTab.maxRows}
+                    onChange={(event) => workbench.setMaxRows(activeTab.id, Number(event.target.value))}
+                  >
+                    {[100, 500, 1000, 2000, 5000].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <span>
                   {t('databases.workbench.rowCount', {
                     count: String(activeTab.result?.rowCount ?? 0),

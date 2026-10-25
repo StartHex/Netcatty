@@ -118,6 +118,7 @@ export const ruDatabaseMessages: Messages = {
   'databases.workbench.saveQuerySaved': 'Запрос сохранён',
   'databases.workbench.savedQueriesEmpty': 'Сохранённых запросов пока нет',
   'databases.workbench.save': 'Сохранить',
+  'databases.workbench.rowLimit': 'Лимит строк',
   'databases.workbench.exportCsv': 'Экспорт CSV',
   'databases.workbench.format': 'Форматировать SQL',
   'databases.workbench.reconnect': 'Переподключиться',

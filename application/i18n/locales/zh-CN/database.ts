@@ -118,6 +118,7 @@ export const zhCNDatabaseMessages: Messages = {
   'databases.workbench.saveQuerySaved': '查询已保存',
   'databases.workbench.savedQueriesEmpty': '还没有保存的查询',
   'databases.workbench.save': '保存',
+  'databases.workbench.rowLimit': '行数上限',
   'databases.workbench.exportCsv': '导出 CSV',
   'databases.workbench.format': '格式化 SQL',
   'databases.workbench.reconnect': '重新连接',

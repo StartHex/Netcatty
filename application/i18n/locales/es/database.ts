@@ -118,6 +118,7 @@ export const esDatabaseMessages: Messages = {
   'databases.workbench.saveQuerySaved': 'Consulta guardada',
   'databases.workbench.savedQueriesEmpty': 'Aún no hay consultas guardadas',
   'databases.workbench.save': 'Guardar',
+  'databases.workbench.rowLimit': 'Límite de filas',
   'databases.workbench.exportCsv': 'Exportar CSV',
   'databases.workbench.format': 'Formatear SQL',
   'databases.workbench.reconnect': 'Reconectar',

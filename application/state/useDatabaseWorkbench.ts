@@ -51,6 +51,8 @@ export interface DatabaseTab {
   tables?: DbTableRef[];
   tablesLoading?: boolean;
   tablesError?: string;
+  /** Row cap for the next run (100..5000). */
+  maxRows: number;
 }
 
 export interface UseDatabaseWorkbenchResult {
@@ -61,7 +63,8 @@ export interface UseDatabaseWorkbenchResult {
   closeTab: (tabId: string) => void;
   setActiveTabId: (tabId: string | null) => void;
   updateSql: (tabId: string, sql: string) => void;
-  runQuery: (tabId: string, sqlOverride?: string) => Promise<void>;
+  runQuery: (tabId: string, sqlOverride?: string, options?: { maxRows?: number }) => Promise<void>;
+  setMaxRows: (tabId: string, maxRows: number) => void;
   beginTransaction: (tabId: string) => Promise<void>;
   commitTransaction: (tabId: string) => Promise<void>;
   rollbackTransaction: (tabId: string) => Promise<void>;
@@ -269,6 +272,7 @@ export function useDatabaseWorkbench(
           status: 'connecting',
           connected: false,
           running: false,
+          maxRows: 1000,
         },
       ]);
       setActiveTabIdState(id);
@@ -301,8 +305,16 @@ export function useDatabaseWorkbench(
     [patchTab],
   );
 
+  const setMaxRows = useCallback(
+    (tabId: string, maxRows: number) => {
+      const clamped = Math.min(5000, Math.max(100, Math.round(maxRows)));
+      patchTab(tabId, { maxRows: clamped });
+    },
+    [patchTab],
+  );
+
   const runQuery = useCallback(
-    async (tabId: string, sqlOverride?: string) => {
+    async (tabId: string, sqlOverride?: string, options?: { maxRows?: number }) => {
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
       if (!tab || tab.running) return;
       const sql = (sqlOverride ?? tab.sql).trim();
@@ -320,7 +332,8 @@ export function useDatabaseWorkbench(
           patchTab(tabId, { running: false, error: resolved.error });
           return;
         }
-        const response = await runDatabaseQuery(resolved.target, sql);
+        const maxRows = options?.maxRows ?? tab.maxRows;
+        const response = await runDatabaseQuery(resolved.target, sql, { maxRows });
         if (response.ok === true && response.result) {
           patchTab(tabId, {
             running: false,
@@ -423,6 +436,7 @@ export function useDatabaseWorkbench(
     setActiveTabId,
     updateSql,
     runQuery,
+    setMaxRows,
     refreshTables,
     previewTable,
     beginTransaction,
