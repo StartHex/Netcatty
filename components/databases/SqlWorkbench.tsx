@@ -28,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/ScriptCodeEditor';
 import { useSqlHistory } from '../../application/state/useSqlHistory';
+import type { DatabaseTunnelDeps } from '../../application/state/useDatabaseWorkbench';
 import { resultToCsv, suggestExportFileName } from '../../domain/database/sqlResultExport';
 
 const SQL_DIALECTS: Record<string, 'postgresql' | 'mysql' | 'mariadb' | 'plsql' | 'sqlite'> = {
@@ -74,6 +75,8 @@ function StatusDot({ tab }: { tab: DatabaseTab }) {
 interface SqlWorkbenchProps {
   open: boolean;
   connections: DatabaseConnection[];
+  /** Vault lookups used to dial connections that route through an SSH host. */
+  tunnelDeps?: DatabaseTunnelDeps;
   initialConnection?: DatabaseConnection | null;
   onClose: () => void;
 }
@@ -82,10 +85,11 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
   open,
   connections,
   initialConnection,
+  tunnelDeps,
   onClose,
 }) => {
   const { t } = useI18n();
-  const workbench = useDatabaseWorkbench(connections);
+  const workbench = useDatabaseWorkbench(connections, tunnelDeps);
   const { tabs, activeTab, activeTabId } = workbench;
   const openedRef = useRef<string | null>(null);
 

@@ -17,6 +17,16 @@ import {
   testDatabaseConnection,
   type DbBridgeError,
 } from '../../infrastructure/services/databaseService';
+import {
+  applyDatabaseTunnel,
+  closeAllDatabaseTunnels,
+  closeDatabaseTunnel,
+  ensureDatabaseTunnel,
+  type DatabaseTunnelDeps,
+} from '../../infrastructure/services/databaseTunnelService';
+import type { DbConnectionTarget, DbTestConnectionResult } from '../../domain/models';
+
+export type { DatabaseTunnelDeps } from '../../infrastructure/services/databaseTunnelService';
 
 export type DatabaseTabStatus = 'connecting' | 'ready' | 'error';
 
@@ -57,13 +67,26 @@ export interface UseDatabaseWorkbenchResult {
  * Ad-hoc connection test used by the connection editor. Lives here so components
  * never import infrastructure services directly.
  */
-export function useDatabaseConnectionTester(): {
-  test: typeof testDatabaseConnection;
-} {
-  return { test: testDatabaseConnection };
+export function useDatabaseConnectionTester(
+  tunnelDeps?: DatabaseTunnelDeps,
+): { test: (connection: DatabaseConnection) => Promise<DbTestConnectionResult> } {
+  const test = useCallback(
+    async (connection: DatabaseConnection): Promise<DbTestConnectionResult> => {
+      const base = databaseConnectionTarget(connection);
+      if (!connection.sshHostId || !tunnelDeps) return testDatabaseConnection(base);
+      const tunnel = await ensureDatabaseTunnel(connection, tunnelDeps);
+      if (tunnel.ok !== true) return { ok: false, durationMs: 0, error: tunnel.error };
+      return testDatabaseConnection(applyDatabaseTunnel(base, { host: tunnel.host, port: tunnel.port }));
+    },
+    [tunnelDeps],
+  );
+  return { test };
 }
 
-export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseDatabaseWorkbenchResult {
+export function useDatabaseWorkbench(
+  connections: DatabaseConnection[],
+  tunnelDeps?: DatabaseTunnelDeps,
+): UseDatabaseWorkbenchResult {
   const [tabs, setTabs] = useState<DatabaseTab[]>([]);
   const [activeTabId, setActiveTabIdState] = useState<string | null>(null);
   const tabsRef = useRef<DatabaseTab[]>(tabs);
@@ -89,13 +112,37 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
     setActiveTabIdState(tabId);
   }, []);
 
+  const tunnelDepsRef = useRef(tunnelDeps);
+  tunnelDepsRef.current = tunnelDeps;
+
+  /** Resolve the dialable target, opening an SSH tunnel when the connection asks for one. */
+  const resolveTarget = useCallback(
+    async (
+      connection: DatabaseConnection,
+    ): Promise<{ ok: true; target: DbConnectionTarget } | { ok: false; error: string }> => {
+      const base = databaseConnectionTarget(connection);
+      const deps = tunnelDepsRef.current;
+      if (!connection.sshHostId || !deps) return { ok: true, target: base };
+      const tunnel = await ensureDatabaseTunnel(connection, deps);
+      if (tunnel.ok !== true) return { ok: false, error: tunnel.error };
+      return { ok: true, target: applyDatabaseTunnel(base, { host: tunnel.host, port: tunnel.port }) };
+    },
+    [],
+  );
+
   const connectTab = useCallback(
     async (tabId: string, connection: DatabaseConnection) => {
       const seq = (openSeqRef.current.get(tabId) ?? 0) + 1;
       openSeqRef.current.set(tabId, seq);
       patchTab(tabId, { status: 'connecting', error: undefined, errorDetail: undefined });
       try {
-        const result = await openDatabaseConnection(databaseConnectionTarget(connection));
+        const resolved = await resolveTarget(connection);
+        if (openSeqRef.current.get(tabId) !== seq) return;
+        if (resolved.ok !== true) {
+          patchTab(tabId, { status: 'error', connected: false, error: resolved.error });
+          return;
+        }
+        const result = await openDatabaseConnection(resolved.target);
         if (openSeqRef.current.get(tabId) !== seq) return;
         if (!result.ok) {
           patchTab(tabId, {
@@ -121,7 +168,7 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
         });
       }
     },
-    [patchTab],
+    [patchTab, resolveTarget],
   );
 
   const openTab = useCallback(
@@ -162,7 +209,10 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
       });
       return next;
     });
-    if (tab) void closeDatabaseConnection(tab.connectionId);
+    if (tab) {
+      void closeDatabaseConnection(tab.connectionId);
+      void closeDatabaseTunnel(tab.connectionId);
+    }
   }, []);
 
   const updateSql = useCallback(
@@ -186,7 +236,12 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
       patchTab(tabId, { running: true, error: undefined, errorDetail: undefined });
       const startedAt = Date.now();
       try {
-        const response = await runDatabaseQuery(databaseConnectionTarget(connection), sql);
+        const resolved = await resolveTarget(connection);
+        if (resolved.ok !== true) {
+          patchTab(tabId, { running: false, error: resolved.error });
+          return;
+        }
+        const response = await runDatabaseQuery(resolved.target, sql);
         if (response.ok === true && response.result) {
           patchTab(tabId, {
             running: false,
@@ -212,7 +267,7 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
         });
       }
     },
-    [patchTab],
+    [patchTab, resolveTarget],
   );
 
   const controlTransaction = useCallback(
@@ -221,7 +276,12 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
       if (!tab) return;
       const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
       if (!connection) return;
-      const response = await controlDatabaseTransaction(databaseConnectionTarget(connection), action);
+      const resolved = await resolveTarget(connection);
+      if (resolved.ok !== true) {
+        patchTab(tabId, { error: resolved.error });
+        return;
+      }
+      const response = await controlDatabaseTransaction(resolved.target, action);
       if (response.ok !== true) {
         patchTab(tabId, { error: formatDatabaseError(response.error), errorDetail: response.error });
         return;
@@ -232,7 +292,7 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
         errorDetail: undefined,
       });
     },
-    [patchTab],
+    [patchTab, resolveTarget],
   );
 
   const beginTransaction = useCallback(
@@ -270,8 +330,9 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
   useEffect(() => () => {
-    // Closing the workbench drops every pooled session.
+    // Closing the workbench drops every pooled session and ad-hoc SSH tunnel.
     for (const tab of tabsRef.current) void closeDatabaseConnection(tab.connectionId);
+    void closeAllDatabaseTunnels();
   }, []);
 
   return {

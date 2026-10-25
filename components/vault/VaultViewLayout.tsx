@@ -3,7 +3,7 @@ import { MonitorNavButton } from './MonitorNavButton';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Database, ShieldCheck } from "lucide-react";
 import { Combobox } from "../ui/combobox";
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { deleteVaultKey } from "../../application/defaultKeyPassphrases";
 import { VaultGroupDeletionConfirmationChangedError } from "../../application/state/useVaultGroupDeletion";
 import { usePluginImporterCommit } from "../../application/state/usePluginImporterCommit";
@@ -29,6 +29,7 @@ import {
   vaultHeaderSecondaryButtonClass,
 } from "./VaultPageHeader";
 import { useConnectionLogsStore } from "../../application/state/connectionLogsStore";
+import { useDatabaseConnectionTester } from "../../application/state/useDatabaseWorkbench";
 import { useNotesStore } from "../../application/state/notesStore";
 import { LazyLoadBoundary } from "../ui/lazy-load-boundary";
 import { toast } from "../ui/toast";
@@ -403,6 +404,13 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     openNoteId,
     openSnippetId,
   } = ctx;
+
+  // Vault lookups needed to dial database connections that route through SSH.
+  const dbTunnelDeps = useMemo(
+    () => ({ hosts, keys, identities, knownHosts, terminalSettings }),
+    [hosts, keys, identities, knownHosts, terminalSettings],
+  );
+  const dbConnectionTester = useDatabaseConnectionTester(dbTunnelDeps);
   const { importProgress, onCommitPluginImporterData, resetImportProgress } =
     ctx;
   // Host aside panel (SSH/new host) or the local-shell host panel occupies the
@@ -1499,6 +1507,10 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                     dbConnections={dbConnections}
                     onUpdateDbConnections={onUpdateDbConnections}
                     onOpenConnection={setDatabaseWorkbenchConnection}
+                    sshHosts={hosts
+                      .filter((host: any) => (host.protocol ?? 'ssh') === 'ssh' && host.id)
+                      .map((host: any) => ({ id: host.id, label: host.label || host.hostname }))}
+                    onTestConnection={dbConnectionTester.test}
                   />
                 </Suspense>
               </LazyLoadBoundary>
@@ -2034,6 +2046,7 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
             open={Boolean(databaseWorkbenchConnection)}
             connections={dbConnections}
             initialConnection={databaseWorkbenchConnection}
+            tunnelDeps={dbTunnelDeps}
             onClose={() => setDatabaseWorkbenchConnection(null)}
           />
         </Suspense>

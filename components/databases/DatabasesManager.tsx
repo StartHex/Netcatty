@@ -17,6 +17,7 @@ import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { VaultHeaderSearch, VaultPageHeader, vaultHeaderSecondaryButtonClass } from '../vault/VaultPageHeader';
+import type { DbTestConnectionResult } from '../../domain/models';
 import { DatabaseConnectionDialog } from './DatabaseConnectionDialog';
 
 const KIND_ACCENT: Record<DatabaseKind, string> = {
@@ -32,18 +33,25 @@ interface DatabasesManagerProps {
   dbConnections: DatabaseConnection[];
   onUpdateDbConnections: (connections: DatabaseConnection[]) => void;
   onOpenConnection: (connection: DatabaseConnection) => void;
+  /** SSH hosts offered as jump boxes for new connections. */
+  sshHosts?: { id: string; label: string }[];
+  /** Runs a test dial, opening the SSH tunnel first when the draft asks for one. */
+  onTestConnection?: (draft: DatabaseConnection) => Promise<DbTestConnectionResult>;
 }
 
 export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
   dbConnections,
   onUpdateDbConnections,
   onOpenConnection,
+  sshHosts,
+  onTestConnection,
 }) => {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<DatabaseConnection | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<DatabaseConnection | null>(null);
+
 
   const connections = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -178,6 +186,8 @@ export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
           setEditing(null);
         }}
         onSave={save}
+        sshHosts={sshHosts}
+        onTestConnection={onTestConnection}
       />
 
       <ConfirmDialog

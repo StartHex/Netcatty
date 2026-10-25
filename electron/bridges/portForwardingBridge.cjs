@@ -659,7 +659,15 @@ function bindPortForwardChannels({
           portForwardingTunnels.set(tunnelId, tunnelState);
           sendStatus?.("active");
           settled = true;
-          resolve({ tunnelId, success: true });
+          const boundPort = (() => {
+            try {
+              const address = server.address();
+              return typeof address === "object" && address ? address.port : undefined;
+            } catch {
+              return undefined;
+            }
+          })();
+          resolve({ tunnelId, success: true, localPort: boundPort });
         } catch (regErr) {
           try { server.close(); } catch { /* ignore */ }
           fail(regErr);

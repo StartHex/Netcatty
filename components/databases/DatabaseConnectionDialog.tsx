@@ -8,7 +8,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import {
   DATABASE_DEFAULT_PORTS,
-  databaseConnectionTarget,
   databaseDisplayTarget,
   databaseEffectivePort,
   sanitizeDatabaseConnection,
@@ -17,7 +16,7 @@ import {
   type DatabaseSslMode,
 } from '../../domain/models';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
-import { useDatabaseConnectionTester } from '../../application/state/useDatabaseWorkbench';
+import type { DbTestConnectionResult } from '../../domain/models';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -47,6 +46,7 @@ interface FormState {
   sslMode: DatabaseSslMode;
   sqlitePath: string;
   inMemory: boolean;
+  sshHostId: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -61,6 +61,7 @@ const EMPTY_FORM: FormState = {
   sslMode: 'disable',
   sqlitePath: '',
   inMemory: false,
+  sshHostId: '',
 };
 
 function formFromConnection(connection: DatabaseConnection): FormState {
@@ -76,6 +77,7 @@ function formFromConnection(connection: DatabaseConnection): FormState {
     sslMode: connection.sslMode ?? 'disable',
     sqlitePath: connection.sqlitePath ?? '',
     inMemory: connection.inMemory === true,
+    sshHostId: connection.sshHostId ?? '',
   };
 }
 
@@ -87,6 +89,9 @@ interface TestState {
 export interface DatabaseConnectionDialogProps {
   open: boolean;
   connection?: DatabaseConnection | null;
+  /** SSH hosts that can be used as a jump box for this connection. */
+  sshHosts?: { id: string; label: string }[];
+  onTestConnection?: (draft: DatabaseConnection) => Promise<DbTestConnectionResult>;
   onClose: () => void;
   onSave: (connection: DatabaseConnection) => void;
 }
@@ -94,13 +99,14 @@ export interface DatabaseConnectionDialogProps {
 export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> = ({
   open,
   connection,
+  sshHosts,
+  onTestConnection,
   onClose,
   onSave,
 }) => {
   const { t } = useI18n();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [test, setTest] = useState<TestState>({ status: 'idle' });
-  const { test: testConnection } = useDatabaseConnectionTester();
   const [showError, setShowError] = useState(false);
 
   useEffect(() => {
@@ -148,6 +154,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       sslMode: isSqlite ? undefined : form.sslMode,
       sqlitePath: isSqlite ? form.sqlitePath.trim() : undefined,
       inMemory: isSqlite ? form.inMemory : undefined,
+      sshHostId: isSqlite ? undefined : form.sshHostId || undefined,
     });
   }, [connection, form, isSqlite]);
 
@@ -169,7 +176,8 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       return;
     }
     setTest({ status: 'testing' });
-    const result = await testConnection(databaseConnectionTarget(draft));
+    if (!onTestConnection) return;
+    const result = await onTestConnection(draft);
     if (result.ok) {
       setTest({
         status: 'ok',
@@ -328,6 +336,27 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                   checked={form.savePassword}
                   onCheckedChange={(checked) => update('savePassword', checked)}
                 />
+              </div>
+
+              <div className="grid gap-2">
+                <Label>{t('databases.form.sshHost')}</Label>
+                <Select
+                  value={form.sshHostId || '__direct__'}
+                  onValueChange={(value) => update('sshHostId', value === '__direct__' ? '' : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__direct__">{t('databases.form.sshHostDirect')}</SelectItem>
+                    {(sshHosts ?? []).map((host) => (
+                      <SelectItem key={host.id} value={host.id}>
+                        {host.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('databases.form.sshHostHint')}</p>
               </div>
 
               <div className="grid gap-2">
