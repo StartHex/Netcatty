@@ -17,7 +17,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { format as formatSqlText } from 'sql-formatter';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { useDatabaseWorkbench, type DatabaseTab } from '../../application/state/useDatabaseWorkbench';
@@ -31,7 +31,15 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/ScriptCodeEditor';
 import { useSqlHistory } from '../../application/state/useSqlHistory';
 import type { DatabaseTunnelDeps, DbTableRef } from '../../application/state/useDatabaseWorkbench';
-import { resultToCsv, suggestExportFileName } from '../../domain/database/sqlResultExport';
+import {
+  resultToCsv,
+  resultToInsertSql,
+  resultToJson,
+  suggestExportFileName,
+} from '../../domain/database/sqlResultExport';
+import { classifySqlSafety } from '../../domain/database/sqlSafety';
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { toast } from '../ui/toast';
 
 const SQL_DIALECTS: Record<string, 'postgresql' | 'mysql' | 'mariadb' | 'plsql' | 'sqlite'> = {
   postgresql: 'postgresql',
@@ -108,29 +116,67 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
 
   const editorRef = useRef<ScriptCodeEditorHandle | null>(null);
   const sqlHistory = useSqlHistory();
+  const activeConnection = useMemo(
+    () => connections.find((connection) => connection.id === activeTab?.connectionId),
+    [connections, activeTab?.connectionId],
+  );
+  const [pendingRun, setPendingRun] = useState<{ tabId: string; sql: string; reasons: string[] } | null>(null);
+
+  const executeSql = useCallback(
+    (tabId: string, sqlOverride: string | undefined) => {
+      const tab = tabs.find((entry) => entry.id === tabId);
+      if (!tab) return;
+      sqlHistory.record(tab.connectionId, sqlOverride ?? tab.sql);
+      void workbench.runQuery(tabId, sqlOverride);
+    },
+    [sqlHistory, tabs, workbench],
+  );
 
   const runActiveQuery = useCallback(() => {
     if (!activeTab) return;
     const selection = editorRef.current?.getSelectionText()?.trim();
-    const sql = selection && selection.length > 0 ? selection : activeTab.sql;
+    const hasSelection = Boolean(selection && selection.length > 0);
+    const sql = hasSelection ? selection! : activeTab.sql;
     const trimmed = sql.trim();
     if (!trimmed) return;
-    sqlHistory.record(activeTab.connectionId, trimmed);
-    void workbench.runQuery(activeTab.id, selection && selection.length > 0 ? selection : undefined);
-  }, [activeTab, sqlHistory, workbench]);
+    const safety = classifySqlSafety(trimmed);
+    if (activeConnection?.readOnly && safety.risk !== 'read') {
+      toast.error(t('databases.workbench.readOnlyBlocked'));
+      return;
+    }
+    if (safety.risk === 'destructive') {
+      setPendingRun({ tabId: activeTab.id, sql: trimmed, reasons: safety.reasons });
+      return;
+    }
+    executeSql(activeTab.id, hasSelection ? selection : undefined);
+  }, [activeConnection?.readOnly, activeTab, executeSql, t]);
 
-  const exportCsv = useCallback(() => {
-    if (!activeTab?.result) return;
-    const csv = resultToCsv(activeTab.result);
-    if (!csv) return;
-    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = suggestExportFileName(activeTab.title, 'csv', Date.now());
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }, [activeTab?.result, activeTab?.title]);
+  const downloadResult = useCallback(
+    (format: 'csv' | 'json' | 'sql') => {
+      const result = activeTab?.result;
+      if (!result) return;
+      const dialect = SQL_DIALECTS[activeTab!.kind] ?? 'postgresql';
+      const tableMatch = /\bfrom\s+([\w."`]+)/i.exec(activeTab!.sql);
+      const tableName = tableMatch ? tableMatch[1].replace(/["`]/g, '') : 'result';
+      const payload =
+        format === 'csv'
+          ? resultToCsv(result)
+          : format === 'json'
+            ? resultToJson(result)
+            : resultToInsertSql(result, tableName, dialect);
+      if (!payload) return;
+      const mime = format === 'csv' ? 'text/csv' : format === 'json' ? 'application/json' : 'application/sql';
+      const prefix = format === 'csv' ? '\ufeff' : '';
+      const blob = new Blob([`${prefix}${payload}`], { type: `${mime};charset=utf-8;` });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = suggestExportFileName(activeTab!.title, format === 'sql' ? 'sql' : format, Date.now());
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+    [activeTab],
+  );
 
   const activeHistory = sqlHistory.entriesFor(activeTab?.connectionId);
 
@@ -284,20 +330,34 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                   </div>
                 </PopoverContent>
               </Popover>
-              <Tooltip>
-                <TooltipTrigger asChild>
+              <Popover>
+                <PopoverTrigger asChild>
                   <Button
                     size="sm"
                     variant="ghost"
                     className="h-7 w-7 p-0"
                     disabled={!activeTab.result}
-                    onClick={exportCsv}
+                    title={t('databases.workbench.exportCsv')}
                   >
                     <Download className="h-3.5 w-3.5" />
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('databases.workbench.exportCsv')}</TooltipContent>
-              </Tooltip>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-40 p-1">
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground px-2 py-1">
+                    {t('databases.workbench.exportTitle')}
+                  </div>
+                  {(['csv', 'json', 'sql'] as const).map((format) => (
+                    <button
+                      key={format}
+                      type="button"
+                      className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-secondary"
+                      onClick={() => downloadResult(format)}
+                    >
+                      {t(`databases.workbench.export.${format}`)}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
               {activeTab.status === 'error' ? (
                 <Button
                   size="sm"
@@ -396,6 +456,21 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
           </div>
         )}
       </DialogContent>
+      <ConfirmDialog
+        open={pendingRun !== null}
+        title={t('databases.workbench.confirmDangerTitle')}
+        message={t('databases.workbench.confirmDangerMessage')}
+        confirmLabel={t('databases.workbench.confirmDangerRun')}
+        destructive
+        onOpenChange={(next) => {
+          if (!next) setPendingRun(null);
+        }}
+        onConfirm={() => {
+          if (!pendingRun) return;
+          executeSql(pendingRun.tabId, pendingRun.sql);
+          setPendingRun(null);
+        }}
+      />
     </Dialog>
   );
 };
@@ -529,10 +604,17 @@ const ResultGrid: React.FC<ResultGridProps> = ({ result, gridTemplate, t }) => {
                   key={cellIndex}
                   className={cn(
                     'truncate px-3 font-mono',
+                    value !== null && 'cursor-pointer hover:bg-secondary/40',
                     value === null && 'italic text-muted-foreground/70',
                     typeof value === 'number' && 'text-right tabular-nums',
                   )}
                   title={cellText(value)}
+                  onClick={() => {
+                    if (value === null) return;
+                    void navigator.clipboard?.writeText(String(value)).then(() => {
+                      toast.success(t('databases.workbench.cellCopied'));
+                    });
+                  }}
                 >
                   {cellText(value)}
                 </div>

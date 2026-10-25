@@ -49,6 +49,7 @@ interface FormState {
   username: string;
   password: string;
   savePassword: boolean;
+  readOnly: boolean;
   sslMode: DatabaseSslMode;
   initSql: string;
   sqlitePath: string;
@@ -71,6 +72,7 @@ const EMPTY_FORM: FormState = {
   username: '',
   password: '',
   savePassword: true,
+  readOnly: false,
   sslMode: 'disable',
   initSql: '',
   sqlitePath: '',
@@ -94,6 +96,7 @@ function formFromConnection(connection: DatabaseConnection): FormState {
     username: connection.username ?? '',
     password: connection.password ?? '',
     savePassword: connection.savePassword !== false,
+    readOnly: connection.readOnly === true,
     sslMode: connection.sslMode ?? 'disable',
     initSql: connection.initSql ?? '',
     sqlitePath: connection.sqlitePath ?? '',
@@ -186,6 +189,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       username: isSqlite ? undefined : form.username.trim() || undefined,
       password: form.savePassword ? form.password : undefined,
       savePassword: form.savePassword,
+      readOnly: form.readOnly,
       sslMode: isSqlite ? undefined : form.sslMode,
       initSql: form.initSql.trim() || undefined,
       sqlitePath: isSqlite ? form.sqlitePath.trim() : undefined,
@@ -551,6 +555,17 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                 <Switch
                   checked={form.savePassword}
                   onCheckedChange={(checked) => update('savePassword', checked)}
+                />
+              </div>
+
+              <div className="flex items-start justify-between gap-3 rounded-md border border-border/50 px-3 py-2">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">{t('databases.form.readOnly')}</p>
+                  <p className="text-xs text-muted-foreground">{t('databases.form.readOnlyHint')}</p>
+                </div>
+                <Switch
+                  checked={form.readOnly}
+                  onCheckedChange={(checked) => update('readOnly', checked)}
                 />
               </div>
 

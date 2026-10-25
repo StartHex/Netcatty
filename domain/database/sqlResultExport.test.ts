@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resultToCsv, suggestExportFileName } from "./sqlResultExport.ts";
+import {
+  resultToCsv,
+  resultToInsertSql,
+  resultToJson,
+  suggestExportFileName,
+} from "./sqlResultExport.ts";
 import type { DbQueryResult } from "../models/database";
 
 const result = (values: DbQueryResult["rows"]): DbQueryResult => ({
@@ -38,4 +43,42 @@ test("suggestExportFileName strips unsafe characters and stamps the time", () =>
   const name = suggestExportFileName("Prod / PG: main", "csv", Date.UTC(2026, 0, 2, 3, 4, 5));
   assert.equal(name, "Prod-PG-main-2026-01-02-03-04-05.csv");
   assert.equal(suggestExportFileName("", "csv", 0), "query-1970-01-01-00-00-00.csv");
+});
+
+const sample = {
+  columns: [{ name: 'id' }, { name: 'name' }, { name: 'active' }],
+  rows: [
+    [1, "O'Hara", true],
+    [2, null, false],
+  ],
+  rowCount: 2,
+  durationMs: 3,
+};
+
+test('resultToJson keys rows by column name', () => {
+  assert.equal(
+    resultToJson(sample),
+    JSON.stringify(
+      [
+        { id: 1, name: "O'Hara", active: true },
+        { id: 2, name: null, active: false },
+      ],
+      null,
+      2,
+    ),
+  );
+  assert.equal(resultToJson(undefined), '');
+});
+
+test('resultToInsertSql escapes quotes and NULL', () => {
+  assert.equal(
+    resultToInsertSql(sample, 'public.users', 'postgresql'),
+    'INSERT INTO "public"."users" ("id", "name", "active") VALUES (1, \'O\'\'Hara\', TRUE);\n' +
+      'INSERT INTO "public"."users" ("id", "name", "active") VALUES (2, NULL, FALSE);',
+  );
+  assert.equal(
+    resultToInsertSql(sample, 'users', 'mysql').split('\n')[0],
+    'INSERT INTO `users` (`id`, `name`, `active`) VALUES (1, \'O\'\'Hara\', TRUE);',
+  );
+  assert.equal(resultToInsertSql(undefined, 't'), '');
 });

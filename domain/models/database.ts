@@ -92,6 +92,8 @@ export interface DatabaseConnection {
   password?: string;
   /** Mirrors host password policy: when false the password is never persisted. */
   savePassword?: boolean;
+  /** Blocks non-read statements in the workbench for this connection. */
+  readOnly?: boolean;
   sslMode?: DatabaseSslMode;
   /** SQLite database file; `:memory:` opens a private in-memory database. */
   sqlitePath?: string;
@@ -256,6 +258,7 @@ export function sanitizeDatabaseConnection(
     username: NON_EMPTY(input.username),
     password: typeof input.password === 'string' ? input.password : undefined,
     savePassword: input.savePassword === false ? false : true,
+    ...(input.readOnly === true ? { readOnly: true } : {}),
     sslMode: DATABASE_SSL_MODES.includes(input.sslMode as DatabaseSslMode)
       ? (input.sslMode as DatabaseSslMode)
       : undefined,
