@@ -159,6 +159,16 @@ export async function readSqlFile(
   return { ok: true, text: response.text };
 }
 
+/** Driver classes declared by a JDBC jar (META-INF/services/java.sql.Driver). */
+export async function readJdbcDriverClasses(jarPath: string): Promise<string[]> {
+  try {
+    const response = await bridge()?.dbDriverClasses?.({ jarPath });
+    return response?.ok && Array.isArray(response.classes) ? response.classes : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function disposeDatabaseConnections(): Promise<void> {
   await bridge()?.dbDispose?.();
 }

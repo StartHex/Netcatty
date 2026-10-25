@@ -162,6 +162,7 @@ declare global {
     // Database workbench (SQL editor). Targets carry resolved credentials per call.
     dbTestConnection?(target: unknown): Promise<{ ok: boolean; durationMs: number; serverVersion?: string; error?: { message: string; code?: string; sqlState?: string } }>;
     dbConnect?(target: unknown): Promise<{ ok: boolean; durationMs: number; serverVersion?: string; error?: { message: string; code?: string; sqlState?: string } }>;
+    dbDriverClasses?(payload: { jarPath: string }): Promise<{ ok: boolean; classes: string[]; error?: { message: string } }>;
     dbQuery?(payload: { target: unknown; sql: string; maxRows?: number; timeoutMs?: number }): Promise<{
       ok: boolean;
       result?: {

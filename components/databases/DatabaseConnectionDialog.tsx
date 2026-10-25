@@ -17,6 +17,7 @@ import {
   type DatabaseSslMode,
 } from '../../domain/models';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
+import { readJdbcDriverClasses } from '@/infrastructure/services/databaseService';
 import type { DbTestConnectionResult } from '../../domain/models';
 import {
   JDBC_PRESETS,
@@ -138,6 +139,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
 }) => {
   const { t } = useI18n();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [detectedClasses, setDetectedClasses] = useState<string[]>([]);
   const [test, setTest] = useState<TestState>({ status: 'idle' });
   const [showError, setShowError] = useState(false);
 
@@ -274,8 +276,14 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       [{ name: 'JAR', extensions: ['jar'] }],
     );
     if (!selected) return;
+    if (form.jdbcDriverPaths.includes(selected)) setDetectedClasses([]);
     if (form.jdbcDriverPaths.includes(selected)) return;
     update('jdbcDriverPaths', [...form.jdbcDriverPaths, selected]);
+    const classes = await readJdbcDriverClasses(selected);
+    setDetectedClasses(classes);
+    if (!form.jdbcDriverClass.trim() && classes.length === 1) {
+      update('jdbcDriverClass', classes[0]);
+    }
   };
 
   const browse = async () => {
@@ -411,6 +419,25 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                   placeholder={t('databases.form.jdbcDriverClassPlaceholder')}
                   onChange={(event) => update('jdbcDriverClass', event.target.value)}
                 />
+                {detectedClasses.length ? (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="text-xs text-muted-foreground">
+                      {t('databases.form.jdbcDetectedClasses')}
+                    </span>
+                    {detectedClasses.map((entry) => (
+                      <Button
+                        key={entry}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 font-mono text-[11px]"
+                        onClick={() => update('jdbcDriverClass', entry)}
+                      >
+                        {entry}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid gap-2">

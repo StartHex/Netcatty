@@ -1,5 +1,7 @@
 "use strict";
 
+const { readDriverClassesFromJar } = require("./jdbcJar.cjs");
+
 /**
  * Database bridge — main-process side of the SQL workbench.
  *
@@ -1135,6 +1137,17 @@ const handlers = {
 
 const MAX_SQL_FILE_BYTES = 5 * 1024 * 1024;
 
+/** Lists the JDBC driver classes declared by a driver jar. */
+function driverClassesFromJar(payload) {
+  const jarPath = payload?.jarPath;
+  if (typeof jarPath !== "string" || !jarPath) return { ok: true, classes: [] };
+  try {
+    return { ok: true, classes: readDriverClassesFromJar(jarPath) };
+  } catch (error) {
+    return { ok: false, classes: [], error: { message: error?.message || String(error) } };
+  }
+}
+
 /** Reads a .sql script picked by the renderer; bounded so a huge file can't block. */
 async function readSqlFile(rawPath) {
   const filePath = typeof rawPath === "string" ? rawPath : rawPath?.path;
@@ -1161,6 +1174,7 @@ function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:disconnect", (_event, payload) => handlers.disconnect(payload || {}));
   ipcMain.handle("netcatty:db:dispose", () => handlers.dispose());
   ipcMain.handle("netcatty:db:read-sql-file", (_event, payload) => readSqlFile(payload));
+  ipcMain.handle("netcatty:db:driver-classes", (_event, payload) => driverClassesFromJar(payload));
 }
 
 module.exports = {

@@ -599,3 +599,11 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
 `fork-package.yml` 里先 `actions/setup-java` 再构建。运行时探测顺序：
 `NETCATTY_JAVA_HOME` → `JAVA_HOME` → PATH → 三平台默认安装位置；找不到时给出
 安装引导而不是静默失败。
+
+### 12.6 驱动类自动识别（2026-10）
+
+自研/厂商驱动往往只给一个 jar，用户不知道驱动类名。新增 `electron/bridges/jdbcJar.cjs`：
+纯 Node 解析 zip 中央目录，读取 `META-INF/services/java.sql.Driver`，通过
+`netcatty:db:driver-classes` 暴露给渲染层；连接编辑器添加 jar 后自动探测，
+单个结果直接回填驱动类，多个结果以按钮形式给出候选。测试见
+`electron/bridges/jdbcJar.test.cjs`（自建 stored zip，不依赖真实 jar）。
