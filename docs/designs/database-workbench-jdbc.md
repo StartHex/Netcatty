@@ -607,3 +607,12 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
 `netcatty:db:driver-classes` 暴露给渲染层；连接编辑器添加 jar 后自动探测，
 单个结果直接回填驱动类，多个结果以按钮形式给出候选。测试见
 `electron/bridges/jdbcJar.test.cjs`（自建 stored zip，不依赖真实 jar）。
+
+### 12.7 Java 运行时探测增强（2026-10）
+
+`electron/bridges/javaRuntime.cjs` 重写：除显式路径、`NETCATTY_JAVA_HOME`、`JAVA_HOME`、
+PATH、三平台常见安装目录外，还会借用已安装工具自带的 JRE（DBeaver 的 `jre/bin/java`、
+JetBrains Toolbox 的 `jbr`、Android Studio 的 jbr）。探测会解析 `java -version`
+并要求 17+；只找到旧版本时给出「检测到 Java 8，需要 17+」的明确提示，而不是笼统的未找到。
+连接编辑器新增「检测 Java」按钮，命中时回填 java 路径并显示版本。测试见
+`electron/bridges/javaRuntime.test.cjs`。

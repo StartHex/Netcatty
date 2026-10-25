@@ -169,6 +169,26 @@ export async function readJdbcDriverClasses(jarPath: string): Promise<string[]> 
   }
 }
 
+export type JavaRuntimeInfo = {
+  ok: boolean;
+  path?: string;
+  version?: string;
+  error?: string;
+};
+
+/** Asks the main process which Java runtime the JDBC sidecar would launch. */
+export async function detectJavaRuntime(javaPath?: string): Promise<JavaRuntimeInfo> {
+  try {
+    const response = await bridge()?.dbJavaRuntime?.({ javaPath });
+    if (response?.ok && response.path) {
+      return { ok: true, path: response.path, version: response.version ?? 'java' };
+    }
+    return { ok: false, error: response?.error ?? 'Java runtime not found' };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export async function disposeDatabaseConnections(): Promise<void> {
   await bridge()?.dbDispose?.();
 }

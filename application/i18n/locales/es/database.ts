@@ -77,6 +77,8 @@ export const esDatabaseMessages: Messages = {
   'databases.form.jdbcAddJar': 'Añadir jar',
   'databases.form.jdbcJarHint': 'Elige el jar JDBC del fabricante; añade también los jars de dependencias si hacen falta.',
   'databases.form.jdbcDetectedClasses': 'Clase de controlador detectada en el jar:',
+  'databases.form.javaDetect': 'Detectar',
+  'databases.form.javaFound': 'Java {version} encontrada',
   'databases.form.javaPath': 'Ejecutable de Java (opcional)',
   'databases.form.javaPathPlaceholder': 'Detectar automáticamente',
   'databases.form.readOnly': 'Conexión de solo lectura',

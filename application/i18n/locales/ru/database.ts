@@ -77,6 +77,8 @@ export const ruDatabaseMessages: Messages = {
   'databases.form.jdbcAddJar': 'Добавить jar',
   'databases.form.jdbcJarHint': 'Выберите JDBC-драйвер вендора; при необходимости добавьте jar-файлы зависимостей.',
   'databases.form.jdbcDetectedClasses': 'Класс драйвера найден в jar:',
+  'databases.form.javaDetect': 'Найти Java',
+  'databases.form.javaFound': 'Найдена Java {version}',
   'databases.form.javaPath': 'Исполняемый файл Java (необязательно)',
   'databases.form.javaPathPlaceholder': 'Определять автоматически',
   'databases.form.readOnly': 'Соединение только для чтения',

@@ -77,6 +77,8 @@ export const zhCNDatabaseMessages: Messages = {
   'databases.form.jdbcAddJar': '添加 jar',
   'databases.form.jdbcJarHint': '选择厂商提供的 JDBC 驱动 jar；驱动有依赖时把依赖 jar 一并加入。',
   'databases.form.jdbcDetectedClasses': '从 jar 中识别到驱动类：',
+  'databases.form.javaDetect': '检测 Java',
+  'databases.form.javaFound': '已找到 Java {version}',
   'databases.form.javaPath': 'Java 可执行文件（可选）',
   'databases.form.javaPathPlaceholder': '自动检测',
   'databases.form.readOnly': '只读连接',

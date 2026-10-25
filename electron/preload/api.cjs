@@ -1878,6 +1878,7 @@ function createPreloadApi(ctx) {
   dbTestConnection: (target) => ipcRenderer.invoke("netcatty:db:test", target),
   dbConnect: (target) => ipcRenderer.invoke("netcatty:db:connect", target),
   dbDriverClasses: (payload) => ipcRenderer.invoke("netcatty:db:driver-classes", payload),
+  dbJavaRuntime: (payload) => ipcRenderer.invoke("netcatty:db:java-runtime", payload),
   dbQuery: (payload) => ipcRenderer.invoke("netcatty:db:query", payload),
   dbControl: (payload) => ipcRenderer.invoke("netcatty:db:control", payload),
   dbTables: (payload) => ipcRenderer.invoke("netcatty:db:tables", payload),

@@ -77,6 +77,8 @@ export const zhTNDatabaseMessages: Messages = {
   'databases.form.jdbcAddJar': '加入 jar',
   'databases.form.jdbcJarHint': '選擇廠商提供的 JDBC 驅動 jar；驅動有相依套件時一併加入。',
   'databases.form.jdbcDetectedClasses': '從 jar 中識別到驅動類：',
+  'databases.form.javaDetect': '檢測 Java',
+  'databases.form.javaFound': '已找到 Java {version}',
   'databases.form.javaPath': 'Java 執行檔（選填）',
   'databases.form.javaPathPlaceholder': '自動偵測',
   'databases.form.readOnly': '唯讀連線',

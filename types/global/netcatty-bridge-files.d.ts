@@ -163,6 +163,7 @@ declare global {
     dbTestConnection?(target: unknown): Promise<{ ok: boolean; durationMs: number; serverVersion?: string; error?: { message: string; code?: string; sqlState?: string } }>;
     dbConnect?(target: unknown): Promise<{ ok: boolean; durationMs: number; serverVersion?: string; error?: { message: string; code?: string; sqlState?: string } }>;
     dbDriverClasses?(payload: { jarPath: string }): Promise<{ ok: boolean; classes: string[]; error?: { message: string } }>;
+    dbJavaRuntime?(payload?: { javaPath?: string; javaHome?: string }): Promise<{ ok: boolean; path?: string; version?: string; error?: string }>;
     dbQuery?(payload: { target: unknown; sql: string; maxRows?: number; timeoutMs?: number }): Promise<{
       ok: boolean;
       result?: {

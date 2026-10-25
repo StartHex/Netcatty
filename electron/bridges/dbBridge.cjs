@@ -1,6 +1,7 @@
 "use strict";
 
 const { readDriverClassesFromJar } = require("./jdbcJar.cjs");
+const { resolveJava } = require("./javaRuntime.cjs");
 
 /**
  * Database bridge — main-process side of the SQL workbench.
@@ -1137,6 +1138,11 @@ const handlers = {
 
 const MAX_SQL_FILE_BYTES = 5 * 1024 * 1024;
 
+/** Reports the Java runtime the JDBC sidecar would use, for the editor hint. */
+function javaRuntimeInfo(payload) {
+  return resolveJava({ javaPath: payload?.javaPath, javaHome: payload?.javaHome });
+}
+
 /** Lists the JDBC driver classes declared by a driver jar. */
 function driverClassesFromJar(payload) {
   const jarPath = payload?.jarPath;
@@ -1175,6 +1181,7 @@ function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:dispose", () => handlers.dispose());
   ipcMain.handle("netcatty:db:read-sql-file", (_event, payload) => readSqlFile(payload));
   ipcMain.handle("netcatty:db:driver-classes", (_event, payload) => driverClassesFromJar(payload));
+  ipcMain.handle("netcatty:db:java-runtime", (_event, payload) => javaRuntimeInfo(payload));
 }
 
 module.exports = {

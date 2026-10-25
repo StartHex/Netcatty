@@ -77,6 +77,8 @@ export const enDatabaseMessages: Messages = {
   'databases.form.jdbcAddJar': 'Add jar',
   'databases.form.jdbcJarHint': 'Pick the vendor JDBC driver jar; add dependency jars too when the driver needs them.',
   'databases.form.jdbcDetectedClasses': 'Driver class detected in the jar:',
+  'databases.form.javaDetect': 'Detect',
+  'databases.form.javaFound': 'Found Java {version}',
   'databases.form.javaPath': 'Java executable (optional)',
   'databases.form.javaPathPlaceholder': 'Auto-detect',
   'databases.form.readOnly': 'Read-only connection',

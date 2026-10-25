@@ -17,7 +17,7 @@ import {
   type DatabaseSslMode,
 } from '../../domain/models';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
-import { readJdbcDriverClasses } from '@/infrastructure/services/databaseService';
+import { detectJavaRuntime, readJdbcDriverClasses } from '@/infrastructure/services/databaseService';
 import type { DbTestConnectionResult } from '../../domain/models';
 import {
   JDBC_PRESETS,
@@ -140,6 +140,8 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
   const { t } = useI18n();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [detectedClasses, setDetectedClasses] = useState<string[]>([]);
+  const [javaInfo, setJavaInfo] = useState<{ ok: boolean; text: string } | null>(null);
+  const [javaChecking, setJavaChecking] = useState(false);
   const [test, setTest] = useState<TestState>({ status: 'idle' });
   const [showError, setShowError] = useState(false);
 
@@ -283,6 +285,21 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
     setDetectedClasses(classes);
     if (!form.jdbcDriverClass.trim() && classes.length === 1) {
       update('jdbcDriverClass', classes[0]);
+    }
+  };
+
+  const detectJava = async () => {
+    setJavaChecking(true);
+    try {
+      const result = await detectJavaRuntime(form.javaPath.trim() || undefined);
+      if (result.ok && result.path) {
+        setJavaInfo({ ok: true, text: result.version ?? result.path });
+        if (!form.javaPath.trim()) update('javaPath', result.path);
+      } else {
+        setJavaInfo({ ok: false, text: result.error ?? 'java-not-found' });
+      }
+    } finally {
+      setJavaChecking(false);
     }
   };
 
@@ -479,12 +496,30 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
 
               <div className="grid gap-2">
                 <Label htmlFor="db-java-path">{t('databases.form.javaPath')}</Label>
-                <Input
-                  id="db-java-path"
-                  value={form.javaPath}
-                  placeholder={t('databases.form.javaPathPlaceholder')}
-                  onChange={(event) => update('javaPath', event.target.value)}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="db-java-path"
+                    value={form.javaPath}
+                    placeholder={t('databases.form.javaPathPlaceholder')}
+                    onChange={(event) => update('javaPath', event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 text-xs"
+                    disabled={javaChecking}
+                    onClick={() => void detectJava()}
+                  >
+                    {javaChecking ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                    {t('databases.form.javaDetect')}
+                  </Button>
+                </div>
+                {javaInfo ? (
+                  <p className={javaInfo.ok ? 'text-xs text-emerald-500' : 'text-xs text-destructive'}>
+                    {javaInfo.ok ? t('databases.form.javaFound').replace('{version}', javaInfo.text) : javaInfo.text}
+                  </p>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
