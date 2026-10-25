@@ -157,7 +157,7 @@ import {
   TooltipProvider,
 } from "./ui/tooltip";
 import { Badge } from "./ui/badge";
-import { HotkeyScheme, KeyBinding } from "../domain/models";
+import { HotkeyScheme, KeyBinding, OtpAuthenticator } from "../domain/models";
 import { VaultViewLayout } from "./vault/VaultViewLayout";
 import { useVaultHostCollections } from "./vault/useVaultHostCollections";
 import { useVaultImportHandlers } from "../application/state/useVaultImportHandlers";
@@ -168,6 +168,7 @@ const LazyConnectionLogsManager = lazy(() => import("./ConnectionLogsManager"));
 const KeychainManager = lazy(() => import("./KeychainManager"));
 const PortForwarding = lazy(() => import("./PortForwardingNew"));
 const ProxyProfilesManager = lazy(() => import("./ProxyProfilesManager"));
+const OtpAuthenticatorsManager = lazy(() => import("./OtpAuthenticatorsManager"));
 const SnippetsManager = lazy(() => import("./SnippetsManager"));
 
 export type VaultSection =
@@ -175,6 +176,7 @@ export type VaultSection =
   | "monitor"
   | "keys"
   | "proxies"
+  | "authenticators"
   | "snippets"
   | "notes"
   | "port"
@@ -223,6 +225,7 @@ interface VaultViewProps {
   keys: SSHKey[];
   identities: Identity[];
   proxyProfiles: ProxyProfile[];
+  otpAuthenticators: OtpAuthenticator[];
   snippets: Snippet[];
   snippetPackages: string[];
   customGroups: string[];
@@ -251,6 +254,7 @@ interface VaultViewProps {
   onImportOrReuseKey: (draft: Partial<SSHKey>) => SSHKey;
   onUpdateIdentities: (identities: Identity[]) => void;
   onUpdateProxyProfiles: (profiles: ProxyProfile[]) => void;
+  onUpdateOtpAuthenticators: (authenticators: OtpAuthenticator[]) => void;
   onUpdateSnippets: (snippets: Snippet[]) => void;
   onUpdateSnippetPackages: (pkgs: string[]) => void;
   onUpdateCustomGroups: (
@@ -315,6 +319,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   keys,
   identities,
   proxyProfiles,
+  otpAuthenticators,
   snippets,
   snippetPackages,
   customGroups,
@@ -338,6 +343,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   onImportOrReuseKey,
   onUpdateIdentities,
   onUpdateProxyProfiles,
+  onUpdateOtpAuthenticators,
   onUpdateSnippets,
   onUpdateSnippetPackages,
   onUpdateCustomGroups,
@@ -1682,6 +1688,9 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           PortForwarding,
           protocolSelectHost,
           proxyProfiles,
+          otpAuthenticators,
+          onUpdateOtpAuthenticators,
+          OtpAuthenticatorsManager,
           ProxyProfilesManager,
           quickConnectTarget,
           quickConnectWarnings,

@@ -6,6 +6,7 @@ import type {
   Identity,
   KnownHost,
   ManagedSource,
+  OtpAuthenticator,
   ProxyProfile,
   Snippet,
   SSHKey,
@@ -28,6 +29,7 @@ export type VaultSnapshot = {
   keys: readonly SSHKey[];
   identities: readonly Identity[];
   proxyProfiles: readonly ProxyProfile[];
+  otpAuthenticators: readonly OtpAuthenticator[];
   snippets: readonly Snippet[];
   snippetPackages: readonly string[];
   customGroups: readonly string[];
@@ -47,6 +49,7 @@ export type VaultSnapshotActions = Pick<
   | 'importOrReuseKey'
   | 'updateIdentities'
   | 'updateProxyProfiles'
+  | 'updateOtpAuthenticators'
   | 'updateSnippets'
   | 'updateSnippetPackages'
   | 'updateCustomGroups'
@@ -70,6 +73,7 @@ const EMPTY_HOSTS: readonly Host[] = Object.freeze([]);
 const EMPTY_KEYS: readonly SSHKey[] = Object.freeze([]);
 const EMPTY_IDENTITIES: readonly Identity[] = Object.freeze([]);
 const EMPTY_PROXY_PROFILES: readonly ProxyProfile[] = Object.freeze([]);
+const EMPTY_OTP_AUTHENTICATORS: readonly OtpAuthenticator[] = Object.freeze([]);
 const EMPTY_SNIPPETS: readonly Snippet[] = Object.freeze([]);
 const EMPTY_STRINGS: readonly string[] = Object.freeze([]);
 const EMPTY_KNOWN_HOSTS: readonly KnownHost[] = Object.freeze([]);
@@ -82,6 +86,7 @@ export const EMPTY_VAULT_SNAPSHOT: VaultSnapshot = Object.freeze({
   keys: EMPTY_KEYS,
   identities: EMPTY_IDENTITIES,
   proxyProfiles: EMPTY_PROXY_PROFILES,
+  otpAuthenticators: EMPTY_OTP_AUTHENTICATORS,
   snippets: EMPTY_SNIPPETS,
   snippetPackages: EMPTY_STRINGS,
   customGroups: EMPTY_STRINGS,

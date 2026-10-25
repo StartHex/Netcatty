@@ -70,6 +70,7 @@ test('vault actions register and unregister', () => {
     importOrReuseKey: noop,
     updateIdentities: noop,
     updateProxyProfiles: noop,
+    updateOtpAuthenticators: noop,
     updateSnippets: noop,
     updateSnippetPackages: noop,
     updateCustomGroups: noop,

@@ -99,6 +99,7 @@ interface HostDetailsPanelProps {
   availableKeys: SSHKey[];
   identities: Identity[];
   proxyProfiles?: ProxyProfile[];
+  otpAuthenticators?: import('../domain/models').OtpAuthenticator[];
   groups: string[];
   managedSources?: ManagedSource[];
   allTags?: string[]; // All available tags for autocomplete
@@ -130,6 +131,7 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
   availableKeys,
   identities,
   proxyProfiles = [],
+  otpAuthenticators = [],
   groups,
   managedSources = [],
   allTags = [],
@@ -1153,6 +1155,7 @@ const HostDetailsPanel: React.FC<HostDetailsPanelPropsWithResize> = ({
           form={form}
           setForm={setForm}
           totpFlushRef={totpFlushRef}
+          otpAuthenticators={otpAuthenticators}
           update={update}
           groupDefaults={effectiveGroupDefaults}
           effectiveAuthMethod={effectiveAuthMethod}

@@ -88,6 +88,7 @@ export const HostDetailsConnectionSections: React.FC<HostDetailsConnectionSectio
   availableKeys,
   applyIdentity,
   showPassword,
+  otpAuthenticators = [],
   setShowPassword,
   pendingReferenceKeyPath,
   setPendingReferenceKeyPath,
@@ -747,6 +748,7 @@ export const HostDetailsConnectionSections: React.FC<HostDetailsConnectionSectio
               setForm={setForm}
               effectiveProtocol={effectiveProtocol}
               flushRef={totpFlushRef}
+              authenticators={otpAuthenticators}
             />
           </div>
         </HostDetailsSection>

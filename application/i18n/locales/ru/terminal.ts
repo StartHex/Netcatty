@@ -565,6 +565,7 @@ export const ruTerminalMessages: Messages = {
   'cloudSync.conflict.entity.keys': 'Ключи',
   'cloudSync.conflict.entity.identities': 'Идентификаторы',
   'cloudSync.conflict.entity.proxyProfiles': 'Профили прокси',
+  'cloudSync.conflict.entity.otpAuthenticators': 'OTP-аутентификаторы',
   'cloudSync.conflict.entity.snippets': 'Сниппеты',
   'cloudSync.conflict.entity.notes': 'Заметки',
   'cloudSync.conflict.entity.noteGroups': 'Группы заметок',

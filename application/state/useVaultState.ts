@@ -10,6 +10,13 @@ import {
 import { isEncryptedCredentialPlaceholder } from "../../domain/credentials";
 import { retainLocalHostLastConnectedAt } from "../../domain/sync";
 import { sanitizeGroupConfig } from "../../domain/groupConfig";
+import {
+  clearOtpAuthenticatorReferences,
+  rematerializeHostsForAuthenticator,
+  sanitizeOtpAuthenticators,
+  sortOtpAuthenticators,
+  upsertOtpAuthenticator,
+} from "../../domain/otpAuthenticator";
 import { normalizeKnownHosts } from "../../domain/knownHosts";
 import { normalizeNoteGroups, normalizeVaultNotes } from "../../domain/notes";
 import {
@@ -24,6 +31,7 @@ import {
   KeyCategory,
   KnownHost,
   ManagedSource,
+  OtpAuthenticator,
   ProxyProfile,
   ShellHistoryEntry,
   Snippet,
@@ -48,6 +56,7 @@ import {
   STORAGE_KEY_MANAGED_SOURCES,
   STORAGE_KEY_NOTE_GROUPS,
   STORAGE_KEY_NOTES,
+  STORAGE_KEY_OTP_AUTHENTICATORS,
   STORAGE_KEY_PROXY_PROFILES,
   STORAGE_KEY_SHELL_HISTORY,
   STORAGE_KEY_SNIPPET_PACKAGES,
@@ -108,11 +117,13 @@ import {
   decryptHosts,
   decryptIdentities,
   decryptKeys,
+  decryptOtpAuthenticators,
   decryptProxyProfiles,
   encryptGroupConfigs,
   encryptHosts,
   encryptIdentities,
   encryptKeys,
+  encryptOtpAuthenticators,
   encryptProxyProfiles,
   notifyKeysEncryptedWritePending,
 } from "../../infrastructure/persistence/secureFieldAdapter";
@@ -144,6 +155,7 @@ type ExportableVaultData = {
   keys: SSHKey[];
   identities?: Identity[];
   proxyProfiles?: ProxyProfile[];
+  otpAuthenticators?: OtpAuthenticator[];
   snippets: Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -310,6 +322,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const [keys, setKeys] = useState<SSHKey[]>([]);
   const [identities, setIdentities] = useState<Identity[]>([]);
   const [proxyProfiles, setProxyProfiles] = useState<ProxyProfile[]>([]);
+  const [otpAuthenticators, setOtpAuthenticators] = useState<OtpAuthenticator[]>([]);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [customGroups, setCustomGroups] = useState<string[]>([]);
   const [snippetPackages, setSnippetPackages] = useState<string[]>([]);
@@ -325,6 +338,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const hostsRef = useRef<Host[]>([]);
   const snippetsRef = useRef<Snippet[]>([]);
   const groupConfigsRef = useRef<GroupConfig[]>([]);
+  const otpAuthenticatorsRef = useRef<OtpAuthenticator[]>([]);
   const notesRef = useRef<VaultNote[]>([]);
   const notesStorageRef = useRef<VaultNote[]>([]);
   // An optimistic React echo is not a persistence acknowledgement. Keep this
@@ -339,6 +353,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   hostsRef.current = hosts;
   snippetsRef.current = snippets;
   groupConfigsRef.current = groupConfigs;
+  otpAuthenticatorsRef.current = otpAuthenticators;
   notesRef.current = notes;
   noteGroupsRef.current = noteGroups;
 
@@ -349,6 +364,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const keysWriteVersion = useRef(0);
   const identitiesWriteVersion = useRef(0);
   const proxyProfilesWriteVersion = useRef(0);
+  const otpAuthenticatorsWriteVersion = useRef(0);
   const snippetsWriteVersion = useRef(0);
   const managedSourcesWriteVersion = useRef(0);
   // Tracks the latest local updateSnippets schedule. Storage events also bump
@@ -429,6 +445,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const keysReadSeq = useRef(0);
   const identitiesReadSeq = useRef(0);
   const proxyProfilesReadSeq = useRef(0);
+  const otpAuthenticatorsReadSeq = useRef(0);
   const groupConfigsReadSeq = useRef(0);
   const connectionLogsRef = useRef<ConnectionLog[]>([]);
   const connectionLogWriteGenerationRef = useRef(0);
@@ -866,6 +883,29 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
         localStorageAdapter.write(STORAGE_KEY_PROXY_PROFILES, enc);
     });
   }, []);
+
+  const updateOtpAuthenticators = useCallback((data: OtpAuthenticator[]) => {
+    const cleaned = sortOtpAuthenticators(sanitizeOtpAuthenticators(data));
+    setOtpAuthenticators(cleaned);
+    const ver = ++otpAuthenticatorsWriteVersion.current;
+    return encryptOtpAuthenticators(cleaned).then((enc) => {
+      if (ver === otpAuthenticatorsWriteVersion.current)
+        localStorageAdapter.write(STORAGE_KEY_OTP_AUTHENTICATORS, enc);
+    });
+  }, []);
+
+  // Editing an authenticator re-materializes every host that references it;
+  // deleting one clears those hosts' materialized TOTP config.
+  const saveOtpAuthenticator = useCallback((next: OtpAuthenticator) => {
+    const saved = { ...next, updatedAt: Date.now() };
+    updateOtpAuthenticators(upsertOtpAuthenticator(otpAuthenticatorsRef.current, saved));
+    updateHosts(rematerializeHostsForAuthenticator(hostsRef.current, saved));
+  }, [updateHosts, updateOtpAuthenticators]);
+
+  const deleteOtpAuthenticator = useCallback((id: string) => {
+    updateOtpAuthenticators(otpAuthenticatorsRef.current.filter((entry) => entry.id !== id));
+    updateHosts(clearOtpAuthenticatorReferences(hostsRef.current, id));
+  }, [updateHosts, updateOtpAuthenticators]);
 
   const updateSnippets = useCallback((
     data: Snippet[] | ((current: Snippet[]) => Snippet[]),
@@ -1389,6 +1429,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateKeys([]);
     updateIdentities([]);
     updateProxyProfiles([]);
+    updateOtpAuthenticators([]);
     updateSnippets([], { replace: true });
     updateSnippetPackages([]);
     updateNotes([], { replace: true });
@@ -1402,6 +1443,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateHosts,
     updateKeys,
     updateIdentities,
+    updateOtpAuthenticators,
     updateProxyProfiles,
     updateSnippets,
     updateSnippetPackages,
@@ -1717,6 +1759,22 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
             encryptProxyProfiles(orderedProfiles).then((enc) => {
               if (proxyVer === proxyProfilesWriteVersion.current)
                 localStorageAdapter.write(STORAGE_KEY_PROXY_PROFILES, enc);
+            });
+          }
+        }
+
+        const savedOtpAuthenticators =
+          localStorageAdapter.read<OtpAuthenticator[]>(STORAGE_KEY_OTP_AUTHENTICATORS);
+        if (savedOtpAuthenticators) {
+          const otpVer = ++otpAuthenticatorsWriteVersion.current;
+          const decryptedAuthenticators = await decryptOtpAuthenticators(savedOtpAuthenticators);
+          if (cancelled) return;
+          if (otpVer === otpAuthenticatorsWriteVersion.current) {
+            const orderedAuthenticators = sortOtpAuthenticators(decryptedAuthenticators);
+            setOtpAuthenticators(orderedAuthenticators);
+            encryptOtpAuthenticators(orderedAuthenticators).then((enc) => {
+              if (otpVer === otpAuthenticatorsWriteVersion.current)
+                localStorageAdapter.write(STORAGE_KEY_OTP_AUTHENTICATORS, enc);
             });
           }
         }
@@ -2053,6 +2111,18 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
         return;
       }
 
+      if (key === STORAGE_KEY_OTP_AUTHENTICATORS) {
+        const next = safeParse<OtpAuthenticator[]>(event.newValue) ?? [];
+        ++otpAuthenticatorsWriteVersion.current;
+        const seq = ++otpAuthenticatorsReadSeq.current;
+        const writeAtStart = otpAuthenticatorsWriteVersion.current;
+        decryptOtpAuthenticators(next).then((dec) => {
+          if (seq === otpAuthenticatorsReadSeq.current && writeAtStart === otpAuthenticatorsWriteVersion.current)
+            setOtpAuthenticators(sortOtpAuthenticators(dec));
+        });
+        return;
+      }
+
       if (key === STORAGE_KEY_SNIPPETS) {
         // StorageEvent.newValue is the value at fire time. A peer write can be
         // delivered only after this window's replace already committed and
@@ -2290,6 +2360,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       keys,
       identities,
       proxyProfiles,
+      otpAuthenticators,
       snippets,
       customGroups,
       snippetPackages,
@@ -2298,13 +2369,16 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       knownHosts,
       groupConfigs,
     }),
-    [hosts, keys, identities, proxyProfiles, snippets, customGroups, snippetPackages, notes, noteGroups, knownHosts, groupConfigs],
+    [hosts, keys, identities, proxyProfiles, otpAuthenticators, snippets, customGroups, snippetPackages, notes, noteGroups, knownHosts, groupConfigs],
   );
 
   const importData = useCallback(
     (payload: Partial<ExportableVaultData>): Promise<void> => {
       const encryptedWrites: Promise<void>[] = [];
       if (payload.monitorPanels !== undefined) encryptedWrites.push(withVaultImportLock('vault', async () => writeMonitorPanels(payload.monitorPanels)));
+      // Write authenticators before hosts so host references resolve as soon
+      // as the restored hosts land.
+      if (Array.isArray(payload.otpAuthenticators)) encryptedWrites.push(updateOtpAuthenticators(payload.otpAuthenticators));
       if (payload.hosts) {
         // Cloud payloads no longer carry `lastConnectedAt` (#2629), but any
         // remote reconciliation replaces the whole local host array. Re-attach
@@ -2340,6 +2414,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       updateHosts,
       updateKeys,
       updateIdentities,
+      updateOtpAuthenticators,
       updateProxyProfiles,
       updateSnippets,
       updateCustomGroups,
@@ -2507,6 +2582,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     keys,
     identities,
     proxyProfiles,
+    otpAuthenticators,
     snippets,
     customGroups,
     snippetPackages,
@@ -2523,6 +2599,9 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     importOrReuseKey,
     updateIdentities,
     updateProxyProfiles,
+    updateOtpAuthenticators,
+    saveOtpAuthenticator,
+    deleteOtpAuthenticator,
     updateSnippets,
     deleteSelectedSnippets,
     updateSnippetPackages,

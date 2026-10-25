@@ -166,6 +166,36 @@ export interface HostTotpConfig {
   promptPattern?: string;
 }
 
+/** OTP variant. Only TOTP is generated today; HOTP stays reserved. */
+export type OtpAuthenticatorType = 'totp' | 'hotp';
+export type OtpAuthenticatorAlgorithm = 'SHA1' | 'SHA256' | 'SHA512';
+
+/**
+ * Reusable OTP authenticator stored in the Vault. Hosts reference it by
+ * `Host.otpAuthenticatorId`; the shared secret is encrypted at rest and
+ * stripped from cloud-sync payloads like every other credential.
+ */
+export interface OtpAuthenticator {
+  id: string;
+  label: string;
+  type: OtpAuthenticatorType;
+  /**
+   * Base32 shared secret (no spaces). Optional because cloud-sync payloads
+   * strip device-bound credentials while keeping the entry and its host refs.
+   */
+  secret?: string;
+  algorithm: OtpAuthenticatorAlgorithm;
+  digits: 6 | 7 | 8;
+  period: number;
+  /** HOTP only: moving counter. */
+  counter?: number;
+  issuer?: string;
+  account?: string;
+  order?: number;
+  createdAt: number;
+  updatedAt?: number;
+}
+
 export type HostOperatingSystem = 'linux' | 'windows' | 'macos' | 'freebsd' | 'unknown';
 export type HostOsSelection = 'auto' | HostOperatingSystem;
 
@@ -210,6 +240,12 @@ export interface Host {
   // Optional per-host TOTP authenticator. The secret lives in `uri` and is
   // encrypted and synced with the same path as `password`.
   totp?: HostTotpConfig;
+  /**
+   * Reusable OTP authenticator selected for this host. On selection the
+   * authenticator is materialized into `totp.uri`, so connection code keeps
+   * reading `totp` and this id only drives re-materialization on edits.
+   */
+  otpAuthenticatorId?: string;
   // Use the local SSH agent for login. This is separate from agentForwarding,
   // which exposes the local agent to the remote host after login.
   useSshAgent?: boolean;
