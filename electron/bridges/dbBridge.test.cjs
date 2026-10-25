@@ -247,3 +247,17 @@ test("a failing initSql surfaces on connect", async () => {
   assert.ok(connected.error.message);
   await handlers.disconnect({ id: "sqlite-init-bad", kind: "sqlite" });
 });
+
+test("readSqlFile reads utf8 scripts and rejects missing paths", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const file = path.join(os.tmpdir(), `netcatty-sql-${Date.now()}.sql`);
+  fs.writeFileSync(file, "select 1;\nselect '中文';", "utf8");
+  const ok = await bridge.readSqlFile(file);
+  assert.equal(ok.ok, true);
+  assert.match(ok.text, /select 1/);
+  const missing = await bridge.readSqlFile(path.join(os.tmpdir(), "does-not-exist.sql"));
+  assert.equal(missing.ok, false);
+  fs.unlinkSync(file);
+});

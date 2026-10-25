@@ -14,6 +14,7 @@ import {
   Square,
   Table2,
   Eye,
+  FileCode2,
   Wand2,
   X,
 } from 'lucide-react';
@@ -38,6 +39,8 @@ import {
   suggestExportFileName,
 } from '../../domain/database/sqlResultExport';
 import { classifySqlSafety } from '../../domain/database/sqlSafety';
+import { readSqlFile } from '@/infrastructure/services/databaseService.ts';
+import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { toast } from '../ui/toast';
 
@@ -178,6 +181,24 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
     [activeTab],
   );
 
+  const openSqlFile = useCallback(async () => {
+    if (!activeTab) return;
+    const bridge = netcattyBridge.get();
+    if (!bridge?.selectFile) return;
+    const filePath = await bridge.selectFile(t('databases.workbench.openSqlFileTitle'), undefined, [
+      { name: 'SQL', extensions: ['sql', 'txt'] },
+    ]);
+    if (!filePath) return;
+    const loaded = await readSqlFile(filePath);
+    if (!loaded.ok) {
+      toast.error(t('databases.workbench.openSqlFileFailed', { error: (loaded as { error?: string }).error ?? 'read-failed' }));
+      return;
+    }
+    workbench.updateSql(activeTab.id, loaded.text);
+    sqlHistory.record(activeTab.connectionId, loaded.text);
+    toast.success(t('databases.workbench.openSqlFileLoaded'));
+  }, [activeTab, sqlHistory, t, workbench]);
+
   const activeHistory = sqlHistory.entriesFor(activeTab?.connectionId);
 
   const widths = useMemo(() => columnWidths(activeTab?.result), [activeTab?.result]);
@@ -260,6 +281,19 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                   {t('databases.workbench.cancel')}
                 </Button>
               ) : null}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    onClick={() => void openSqlFile()}
+                  >
+                    <FileCode2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('databases.workbench.openSqlFile')}</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={formatSql}>

@@ -1884,6 +1884,7 @@ function createPreloadApi(ctx) {
   dbCancel: (payload) => ipcRenderer.invoke("netcatty:db:cancel", payload),
   dbDisconnect: (payload) => ipcRenderer.invoke("netcatty:db:disconnect", payload),
   dbDispose: () => ipcRenderer.invoke("netcatty:db:dispose"),
+  dbReadSqlFile: (path) => ipcRenderer.invoke("netcatty:db:read-sql-file", path),
 
   previewTotp: (payload) => ipcRenderer.invoke("netcatty:totp:preview", payload),
   scanTotpQrFromScreen: () => ipcRenderer.invoke("netcatty:totp:scan-screen"),

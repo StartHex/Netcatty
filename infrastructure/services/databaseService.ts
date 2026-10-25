@@ -147,6 +147,18 @@ export async function closeDatabaseConnection(connectionId: string): Promise<voi
   await bridge()?.dbDisconnect?.({ id: connectionId });
 }
 
+/** Loads a .sql script the user picked; the main process enforces a 5 MB cap. */
+export async function readSqlFile(
+  path: string,
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const response = await bridge()?.dbReadSqlFile?.(path);
+  if (!response) return { ok: false, error: 'No response from database bridge' };
+  if (!response.ok || typeof response.text !== 'string') {
+    return { ok: false, error: response.error ?? 'read-failed' };
+  }
+  return { ok: true, text: response.text };
+}
+
 export async function disposeDatabaseConnections(): Promise<void> {
   await bridge()?.dbDispose?.();
 }

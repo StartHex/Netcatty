@@ -12,6 +12,7 @@
  * passes them per call. Nothing is persisted here.
  */
 
+const fs = require("fs");
 const net = require("net");
 const path = require("path");
 
@@ -1132,6 +1133,23 @@ const handlers = {
   },
 };
 
+const MAX_SQL_FILE_BYTES = 5 * 1024 * 1024;
+
+/** Reads a .sql script picked by the renderer; bounded so a huge file can't block. */
+async function readSqlFile(rawPath) {
+  const filePath = typeof rawPath === "string" ? rawPath : rawPath?.path;
+  if (!filePath) return { ok: false, error: "missing-path" };
+  try {
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile()) return { ok: false, error: "not-a-file" };
+    if (stat.size > MAX_SQL_FILE_BYTES) return { ok: false, error: "too-large" };
+    const text = await fs.promises.readFile(filePath, "utf8");
+    return { ok: true, text, path: filePath };
+  } catch (error) {
+    return { ok: false, error: error?.code || error?.message || "read-failed" };
+  }
+}
+
 function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:test", (_event, target) => handlers.test(target));
   ipcMain.handle("netcatty:db:connect", (_event, target) => handlers.connect(target));
@@ -1142,11 +1160,13 @@ function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:cancel", (_event, payload) => handlers.cancel(payload || {}));
   ipcMain.handle("netcatty:db:disconnect", (_event, payload) => handlers.disconnect(payload || {}));
   ipcMain.handle("netcatty:db:dispose", () => handlers.dispose());
+  ipcMain.handle("netcatty:db:read-sql-file", (_event, payload) => readSqlFile(payload));
 }
 
 module.exports = {
   registerDbHandlers,
   handlers,
+  readSqlFile,
   __test: {
     clampMaxRows,
     clampTimeout,
