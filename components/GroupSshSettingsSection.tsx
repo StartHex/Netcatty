@@ -55,12 +55,6 @@ export const GroupSshSettingsSection: React.FC<GroupSshSettingsSectionProps> = (
   proxySummaryLabel,
   setActiveSubPanel,
   chainedHosts,
-  unifiedPasswordEnabled,
-  unifiedPasswordTargetCount,
-  unifiedPasswordDonorLabel,
-  onEnableUnifiedPassword,
-  onDisableUnifiedPassword,
-  onPickUnifiedPasswordDonor,
 }) => {
   if (!sshEnabled) return null;
   const startupCommandRunModeFallback = inheritedStartupCommandRunMode ?? "paste";
@@ -147,34 +141,6 @@ export const GroupSshSettingsSection: React.FC<GroupSshSettingsSectionProps> = (
                 </button>
               </div>
             </>)}
-
-            <ToggleRow
-              label={t("vault.groups.details.unifiedPassword.label")}
-              hint={t("vault.groups.details.unifiedPassword.hint")}
-              enabled={unifiedPasswordEnabled === true}
-              onToggle={() => (
-                unifiedPasswordEnabled === true
-                  ? onDisableUnifiedPassword?.()
-                  : onEnableUnifiedPassword?.()
-              )}
-            />
-            {unifiedPasswordEnabled === true && (
-              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span className="truncate">
-                  {t("vault.groups.details.unifiedPassword.scope")
-                    .replace("{count}", String(unifiedPasswordTargetCount ?? 0))}
-                </span>
-                <button
-                  type="button"
-                  className="shrink-0 text-primary hover:underline"
-                  onClick={() => onPickUnifiedPasswordDonor?.()}
-                >
-                  {unifiedPasswordDonorLabel
-                    ? `${t("vault.groups.details.unifiedPassword.source")}: ${unifiedPasswordDonorLabel}`
-                    : t("vault.groups.details.unifiedPassword.pickSource")}
-                </button>
-              </div>
-            )}
 
             {/* Selected credential display */}
             {!effectiveSshIdentityId && form.identityFileId && (

@@ -1146,6 +1146,7 @@ export const ruCoreMessages: Messages = {
   'vault.groups.details.parentGroup': 'Родительская группа',
   'vault.groups.details.none': 'Нет',
   'vault.groups.details.inherited': 'Унаследовано от группы',
+  'vault.groups.details.unifiedPassword.sectionTitle': 'Единый пароль',
   'vault.groups.details.unifiedPassword.label': 'Единый пароль',
   'vault.groups.details.unifiedPassword.hint': 'Если включено, изменение пароля любого хоста в этой группе (включая подгруппы) обновляет все хосты в ней. Подгруппа со своим единым паролем остаётся независимой.',
   'vault.groups.details.unifiedPassword.scope': 'Применяется к хостам: {count}',

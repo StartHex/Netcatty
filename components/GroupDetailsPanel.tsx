@@ -4,6 +4,7 @@ import {
   Eye,
   EyeOff,
   Globe,
+  Lock,
   MoreHorizontal,
   Palette,
   Plus,
@@ -301,6 +302,9 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
     : undefined;
 
   const enableUnifiedPassword = () => {
+    // Unified password only makes sense together with the group's SSH
+    // defaults, so turn that section on the first time the toggle flips.
+    setSshEnabled(true);
     if (unifiedPasswordDonorHosts.length === 0) {
       update("unifiedPassword", true);
       return;
@@ -334,10 +338,12 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
   // Remove SSH protocol section
   const removeSsh = () => {
     setSshEnabled(false);
+    setUnifiedDonorHostId(null);
     setSelectedCredentialType(null);
     setNewKeyFilePath('');
     setForm((prev) => {
       const next = { ...prev };
+      delete next.unifiedPassword;
       delete next.port;
       delete next.username;
       delete next.password;
@@ -639,7 +645,7 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
     const normalizedProxyConfig = proxySave?.normalizedProxyConfig;
     setNameError(null);
 
-    if (sshEnabled && form.unifiedPassword === true && !form.password) {
+    if (form.unifiedPassword === true && !form.password) {
       toast.error(t("vault.groups.details.unifiedPassword.passwordRequired"));
       return;
     }
@@ -857,6 +863,45 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
           />
         </HostDetailsSection>
 
+        <HostDetailsSection
+          icon={<Lock size={14} className="text-muted-foreground" />}
+          title={t("vault.groups.details.unifiedPassword.sectionTitle")}
+        >
+          <HostDetailsSettingRow
+            label={t("vault.groups.details.unifiedPassword.label")}
+            hint={t("vault.groups.details.unifiedPassword.hint")}
+          >
+            <Switch
+              checked={form.unifiedPassword === true}
+              onCheckedChange={() => (
+                form.unifiedPassword === true
+                  ? disableUnifiedPassword()
+                  : enableUnifiedPassword()
+              )}
+            />
+          </HostDetailsSettingRow>
+          {form.unifiedPassword === true && (
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span className="truncate">
+                {t("vault.groups.details.unifiedPassword.scope")
+                  .replace("{count}", String(unifiedPasswordTargetCount))}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 text-primary hover:underline"
+                onClick={() => {
+                  setUnifiedDonorQuery("");
+                  setUnifiedDonorPickerOpen(true);
+                }}
+              >
+                {unifiedDonorHost?.label
+                  ? `${t("vault.groups.details.unifiedPassword.source")}: ${unifiedDonorHost.label}`
+                  : t("vault.groups.details.unifiedPassword.pickSource")}
+              </button>
+            </div>
+          )}
+        </HostDetailsSection>
+
         <GroupSshSettingsSection
           sshEnabled={sshEnabled}
           t={t}
@@ -887,15 +932,6 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
           proxySummaryLabel={proxySummaryLabel}
           setActiveSubPanel={setActiveSubPanel}
           chainedHosts={chainedHosts}
-          unifiedPasswordEnabled={form.unifiedPassword === true}
-          unifiedPasswordTargetCount={unifiedPasswordTargetCount}
-          unifiedPasswordDonorLabel={unifiedDonorHost?.label}
-          onEnableUnifiedPassword={enableUnifiedPassword}
-          onDisableUnifiedPassword={disableUnifiedPassword}
-          onPickUnifiedPasswordDonor={() => {
-            setUnifiedDonorQuery("");
-            setUnifiedDonorPickerOpen(true);
-          }}
         />
 
         {sshEnabled && (!form.protocol || form.protocol === "ssh") && !form.moshEnabled && !form.etEnabled && (

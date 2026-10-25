@@ -769,6 +769,7 @@ Vaults 分頁維持扁平，不使用這塊背景。
   'vault.groups.details.parentGroup': '父群組',
   'vault.groups.details.none': '無',
   'vault.groups.details.inherited': '繼承自群組',
+  'vault.groups.details.unifiedPassword.sectionTitle': '統一密碼',
   'vault.groups.details.unifiedPassword.label': '統一密碼',
   'vault.groups.details.unifiedPassword.hint': '開啟後，修改本群組（含子群組）內任一台主機的密碼會同步到群組下的每台主機；子群組若開啟了自己的統一密碼，則不受影響。',
   'vault.groups.details.unifiedPassword.scope': '作用於 {count} 台主機',

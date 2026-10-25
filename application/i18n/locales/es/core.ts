@@ -1207,6 +1207,7 @@ Resalta el panel dividido enfocado:
   'vault.groups.details.parentGroup': 'Grupo padre',
   'vault.groups.details.none': 'Ninguno',
   'vault.groups.details.inherited': 'Heredado del grupo',
+  'vault.groups.details.unifiedPassword.sectionTitle': 'Contraseña unificada',
   'vault.groups.details.unifiedPassword.label': 'Contraseña unificada',
   'vault.groups.details.unifiedPassword.hint': 'Al activarlo, cambiar la contraseña de cualquier host de este grupo (incluidos los subgrupos) actualiza todos los hosts del grupo. Un subgrupo con su propia contraseña unificada permanece independiente.',
   'vault.groups.details.unifiedPassword.scope': 'Se aplica a {count} hosts',

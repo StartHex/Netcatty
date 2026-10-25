@@ -1207,6 +1207,7 @@ Highlight the focused split pane:
   'vault.groups.details.parentGroup': 'Parent Group',
   'vault.groups.details.none': 'None',
   'vault.groups.details.inherited': 'Inherited from group',
+  'vault.groups.details.unifiedPassword.sectionTitle': 'Unified password',
   'vault.groups.details.unifiedPassword.label': 'Unified password',
   'vault.groups.details.unifiedPassword.hint': 'When enabled, editing the password of any host in this group (including subgroups) updates every host inside it. A subgroup with its own unified password stays independent.',
   'vault.groups.details.unifiedPassword.scope': 'Applies to {count} hosts',

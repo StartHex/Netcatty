@@ -767,6 +767,7 @@ Vaults 标签保持扁平，不使用这块背景。
   'vault.groups.details.parentGroup': '父分组',
   'vault.groups.details.none': '无',
   'vault.groups.details.inherited': '继承自分组',
+  'vault.groups.details.unifiedPassword.sectionTitle': '统一密码',
   'vault.groups.details.unifiedPassword.label': '统一密码',
   'vault.groups.details.unifiedPassword.hint': '开启后，修改本分组（含子分组）内任意主机的密码会同步到分组下的每台主机；子分组若开启了自己的统一密码，则不受影响。',
   'vault.groups.details.unifiedPassword.scope': '作用于 {count} 台主机',
