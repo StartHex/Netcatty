@@ -544,7 +544,14 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
 4. **事务**：新增主进程 `netcatty:db:control`（begin/commit/rollback），
    PG/MySQL/SQLite 显式事务，Oracle 依赖隐式事务 + commit/rollback。
 
-### 12.3 仍在阶段一范围内、尚未实现
+### 12.3 阶段一已完成（2026-10 补充）
+
+- 经 SSH 主机访问数据库（`databaseTunnelService`，localPort=0 自动分配）
+- 连接克隆、最近使用时间
+- 表结构树（左侧按 schema 分组，点击表名生成 `select * limit 100` 并执行）
+- 查询历史、事务 begin/commit/rollback、CSV 导出、执行选中 SQL
+
+### 12.6 尚未实现（原 12.3 的剩余项）
 
 - 连接克隆、分组/排序 UI、收藏与最近连接
 - 编辑器自动补全（表/列名）、结果分页与列宽拖拽持久化
@@ -564,7 +571,9 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
   打包进 asar 后，运行时首次使用会把 jar 解到 `userData/jdbc-sidecar/` 再启动。
 - CI：`fork-package.yml` 增加 `actions/setup-java@v4`（temurin 21）。
 - 驱动 jar 由用户自备：连接编辑器可选多个 jar，驱动类可留空（走 ServiceLoader 发现）。
-- 待补：驱动预设库（MySQL/Oracle/达梦等一键填类名与下载链接）、驱动管理器独立页面、
+- 驱动预设：`domain/database/jdbcPresets.ts` 覆盖 MySQL / MariaDB / PostgreSQL / Oracle /
+  SQL Server / H2 / ClickHouse / 达梦 / 人大金仓，选中即填驱动类与 URL 模板，并给出官方下载页。
+- 待补：驱动管理器独立页面（把 jar 注册为可复用实体 `JdbcDriver`）、
   `jdbcProperties` 高级表格、内存库 `initSql` 重放与导出 SQL。
 
 ### 12.5 原始设计要点（保留）
