@@ -205,3 +205,17 @@ test("columns rejects a missing table name", async () => {
   assert.equal(failed.ok, false);
   assert.match(failed.error.message, /table name is required/i);
 });
+
+test("jdbc: reports a clear error when Java is missing", async () => {
+  const target = {
+    id: "jdbc-no-java",
+    kind: "jdbc",
+    jdbcUrl: "jdbc:h2:mem:nope",
+    jdbcDriverPaths: [],
+    javaPath: "/nonexistent/bin/java",
+  };
+  const result = await handlers.connect(target);
+  assert.equal(result.ok, false);
+  assert.match(result.error.message, /Java|java|sidecar/i);
+  await handlers.disconnect({ id: "jdbc-no-java", kind: "jdbc" });
+});
