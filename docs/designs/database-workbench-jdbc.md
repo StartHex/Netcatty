@@ -514,3 +514,48 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
 并有 SSH/SFTP/监控/AI 一体化。NetCatty 的差异化优势是**已有的 SSH 主机链、端口转发、
 终端与 AI Agent 集成**，因此数据库功能应优先做"经 SSH 访问内网库"和"AI 直接查库"，
 而不是堆驱动数量——这也是不在 P1 支持 Oracle/达梦的原因。
+
+---
+
+## 12. 实施记录（2026-10）
+
+### 12.1 已完成（MVP 主体，分支 `feat/database-workbench`）
+
+| 模块 | 状态 | 落点 |
+| --- | --- | --- |
+| A 基础管道 | ✅ | `domain/models/database.ts`、`infrastructure/config/storageKeys.ts`（`netcatty_db_connections_v1`、`netcatty_db_query_history_v1`）、`secureFieldAdapter` 加密、`useVaultState` 实体、sync/syncMerge/convergent sync/导出导入 |
+| B 连接管理 | ✅（分组排序/克隆见 12.3） | `components/databases/DatabasesManager.tsx`、`DatabaseConnectionDialog.tsx` |
+| C 查询工作台 | ✅（补全、分页见 12.3） | `components/databases/SqlWorkbench.tsx`、`application/state/useDatabaseWorkbench.ts`、`useSqlHistory.ts` |
+| D 内置驱动 | ✅ PG/MySQL/MariaDB/Oracle Thin/SQLite | `electron/bridges/dbBridge.cjs`（会话复用、超时、取消、行数上限） |
+| E JDBC | ⏳ 阶段二 | `databaseTunnelService` 之外的部分未开始 |
+| F 增强 | ⏳ 阶段三 | 已提前完成 CSV 导出 |
+| 附加 | ✅ 经 SSH 主机访问数据库 | `infrastructure/services/databaseTunnelService.ts` + `sshHostId` |
+
+### 12.2 与设计的偏差
+
+1. **SSH 隧道实现位置**：设计写的是主进程内建隧道，实际复用渲染层既有的
+   `portForwardingService.startPortForward`（临时规则 `db-tunnel-<connectionId>`，
+   `localPort: 0` 由主进程分配后回传），这样跳板机链、代理、Known Hosts、
+   TOTP 全部复用现有能力，不必在主进程重写 SSH 认证。
+2. **SQL 编辑器**：设计提到 CodeMirror，实际复用仓库已有的 Monaco
+   （`components/scripts/ScriptCodeEditor.tsx`，新增 `sql` 语言与选区读取）。
+3. **查询历史**：存放在 localStorage（`netcatty_db_query_history_v1`），不进加密
+   vault、不同步——历史里可能含敏感字面量，先保持本机。
+4. **事务**：新增主进程 `netcatty:db:control`（begin/commit/rollback），
+   PG/MySQL/SQLite 显式事务，Oracle 依赖隐式事务 + commit/rollback。
+
+### 12.3 仍在阶段一范围内、尚未实现
+
+- 连接克隆、分组/排序 UI、收藏与最近连接
+- 编辑器自动补全（表/列名）、结果分页与列宽拖拽持久化
+- 驱动冒烟矩阵（对真实 PG/MySQL/Oracle 实例的 CI 任务）
+- 设置项开关 `experimental.databaseWorkbench`
+
+### 12.4 阶段二（JDBC）实施要点（下一步）
+
+由于构建机与本机都没有 JDK，sidecar 采用「源码 + 构建时编译」：
+`electron/jdbc-sidecar/src/NetcattyJdbcSidecar.java` 提交源码，`npm run build:jdbc-sidecar`
+用 `javac` 产出 `netcatty-jdbc-sidecar.jar`，打包时作为 `extraResources`；CI 在
+`fork-package.yml` 里先 `actions/setup-java` 再构建。运行时探测顺序：
+`NETCATTY_JAVA_HOME` → `JAVA_HOME` → PATH → 三平台默认安装位置；找不到时给出
+安装引导而不是静默失败。
