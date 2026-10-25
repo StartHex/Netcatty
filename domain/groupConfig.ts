@@ -23,17 +23,20 @@ export function sanitizeGroupConfig(config: GroupConfig): GroupConfig {
     ? { ...migrated, authMethod: 'password' as const }
     : migrated;
   // Unified password is opt-in: only a real boolean `true` enables it, and
-  // anything else must not survive a load/save round-trip.
+  // anything else must not survive a load/save round-trip. The recorded source
+  // host is informational, so it only survives while the toggle stays on.
+  const cleaned: GroupConfig = { ...next };
+  const mutable = cleaned as { unifiedPassword?: unknown; unifiedPasswordSourceHostId?: unknown };
   if (next.unifiedPassword !== true) {
-    const cleaned = { ...next };
-    delete (cleaned as { unifiedPassword?: unknown }).unifiedPassword;
-    if (!Object.prototype.hasOwnProperty.call(cleaned, 'singleChannelSsh')) return cleaned;
-    delete (cleaned as { singleChannelSsh?: unknown }).singleChannelSsh;
-    return cleaned;
+    delete mutable.unifiedPassword;
+    delete mutable.unifiedPasswordSourceHostId;
+  } else if (typeof mutable.unifiedPasswordSourceHostId !== 'string'
+    || mutable.unifiedPasswordSourceHostId.length === 0) {
+    delete mutable.unifiedPasswordSourceHostId;
   }
-  if (!Object.prototype.hasOwnProperty.call(next, 'singleChannelSsh')) return next;
-  const cleaned = { ...next };
-  delete (cleaned as { singleChannelSsh?: unknown }).singleChannelSsh;
+  if (Object.prototype.hasOwnProperty.call(cleaned, 'singleChannelSsh')) {
+    delete (cleaned as { singleChannelSsh?: unknown }).singleChannelSsh;
+  }
   return cleaned;
 }
 

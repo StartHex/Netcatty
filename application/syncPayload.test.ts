@@ -112,6 +112,24 @@ test("buildSyncPayload carries OTP authenticators into the cloud payload", () =>
   assert.deepEqual(payload.otpAuthenticators, [authenticator]);
 });
 
+test("buildSyncPayload carries unified group passwords into the cloud payload", () => {
+  const groupConfig = {
+    path: "AliYun",
+    protocol: "ssh" as const,
+    unifiedPassword: true,
+    unifiedPasswordSourceHostId: "host-1",
+    password: "s3cret",
+    savePassword: true,
+  };
+
+  const payload = buildSyncPayload({ ...vault([]), groupConfigs: [groupConfig] });
+  const synced = payload.groupConfigs?.find((config) => config.path === "AliYun");
+
+  assert.equal(synced?.unifiedPassword, true);
+  assert.equal(synced?.unifiedPasswordSourceHostId, "host-1");
+  assert.equal(synced?.password, "s3cret");
+});
+
 test("buildSyncPayload treats known hosts as local-only data", () => {
   const payload = buildSyncPayload(vault([knownHost("kh-cloud")]));
 

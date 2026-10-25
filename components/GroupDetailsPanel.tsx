@@ -248,7 +248,9 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
 
   // Unified password state
   const [unifiedDonorPickerOpen, setUnifiedDonorPickerOpen] = useState(false);
-  const [unifiedDonorHostId, setUnifiedDonorHostId] = useState<string | null>(null);
+  const [unifiedDonorHostId, setUnifiedDonorHostId] = useState<string | null>(
+    () => config?.unifiedPasswordSourceHostId ?? null,
+  );
   const [unifiedDonorQuery, setUnifiedDonorQuery] = useState("");
 
   // Environment variables state
@@ -303,14 +305,12 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
 
   const enableUnifiedPassword = () => {
     // Unified password only makes sense together with the group's SSH
-    // defaults, so turn that section on the first time the toggle flips.
+    // defaults, so turn that section on the first time the toggle flips. The
+    // password itself is edited inline below the switch: opening a picker here
+    // used to leave the switch off whenever that dialog was dismissed, which
+    // made the saved config look like it forgot the toggle.
     setSshEnabled(true);
-    if (unifiedPasswordDonorHosts.length === 0) {
-      update("unifiedPassword", true);
-      return;
-    }
-    setUnifiedDonorQuery("");
-    setUnifiedDonorPickerOpen(true);
+    update("unifiedPassword", true);
   };
 
   const disableUnifiedPassword = () => {
@@ -660,6 +660,9 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
       ...(config?.order !== undefined && { order: config.order }),
       notes: form.notes?.trim() || undefined,
       ...(form.unifiedPassword === true && { unifiedPassword: true }),
+      ...(form.unifiedPassword === true && unifiedDonorHostId && {
+        unifiedPasswordSourceHostId: unifiedDonorHostId,
+      }),
       // Only include SSH fields if SSH section is enabled
       ...(sshEnabled && {
         protocol: 'ssh' as const,
@@ -881,23 +884,48 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
             />
           </HostDetailsSettingRow>
           {form.unifiedPassword === true && (
-            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span className="truncate">
-                {t("vault.groups.details.unifiedPassword.scope")
-                  .replace("{count}", String(unifiedPasswordTargetCount))}
-              </span>
-              <button
-                type="button"
-                className="shrink-0 text-primary hover:underline"
-                onClick={() => {
-                  setUnifiedDonorQuery("");
-                  setUnifiedDonorPickerOpen(true);
-                }}
-              >
-                {unifiedDonorHost?.label
-                  ? `${t("vault.groups.details.unifiedPassword.source")}: ${unifiedDonorHost.label}`
-                  : t("vault.groups.details.unifiedPassword.pickSource")}
-              </button>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={form.password || ""}
+                  placeholder={t("hostDetails.password.placeholder")}
+                  onChange={(e) => update("password", e.target.value || undefined)}
+                  className="h-9"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    setUnifiedDonorQuery("");
+                    setUnifiedDonorPickerOpen(true);
+                  }}
+                >
+                  {t("vault.groups.details.unifiedPassword.importFromHost")}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span className="truncate">
+                  {t("vault.groups.details.unifiedPassword.scope")
+                    .replace("{count}", String(unifiedPasswordTargetCount))}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 text-primary hover:underline"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  {showPassword
+                    ? t("hostDetails.password.hide")
+                    : t("hostDetails.password.show")}
+                </button>
+              </div>
+              {unifiedDonorHost && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {`${t("vault.groups.details.unifiedPassword.source")}: ${unifiedDonorHost.label}`}
+                </p>
+              )}
             </div>
           )}
         </HostDetailsSection>

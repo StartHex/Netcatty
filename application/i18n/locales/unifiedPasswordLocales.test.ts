@@ -22,6 +22,9 @@ const KEYS = [
   'vault.groups.details.unifiedPassword.pickInGroup',
   'vault.groups.details.unifiedPassword.pickScope',
   'vault.groups.details.unifiedPassword.useManual',
+  'vault.groups.details.unifiedPassword.importFromHost',
+  'vault.groups.details.unifiedPassword.applied',
+  'vault.groups.details.unifiedPassword.skipped',
 ] as const;
 
 test('unified password copy exists in every locale', () => {
