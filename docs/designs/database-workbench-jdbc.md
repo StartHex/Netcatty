@@ -560,6 +560,10 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
   取消/关闭；事务由其自身管理。
 - 修正连接编辑器驱动类型列表遗漏 JDBC 的问题。
 - 初始化 SQL 重放：会话首次使用前按分号拆分执行 `initSql`（内存库重建结构），失败在连接阶段报错。
+- 安全：`domain/database/sqlSafety.ts` 语句级风险分类（read / write / destructive），
+  只读连接阻止写入，DROP / TRUNCATE / 无 WHERE 的 UPDATE·DELETE 二次确认。
+- 结果导出 CSV / JSON / INSERT（按方言转义），单元格点击复制。
+- “打开 .sql 文件”直接载入工作台（主进程读文件，5 MB 上限）。
 
 ### 12.7 尚未实现（原 12.3 的剩余项）
 
