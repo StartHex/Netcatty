@@ -564,6 +564,7 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
   只读连接阻止写入，DROP / TRUNCATE / 无 WHERE 的 UPDATE·DELETE 二次确认。
 - 结果导出 CSV / JSON / INSERT（按方言转义），单元格点击复制。
 - “打开 .sql 文件”直接载入工作台（主进程读文件，5 MB 上限）。
+- 保存查询：按连接保存命名 SQL（上限 100 条 / 每条 2 万字符），可从书签菜单加载与删除。
 
 ### 12.7 尚未实现（原 12.3 的剩余项）
 
