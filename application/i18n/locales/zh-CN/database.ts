@@ -5,6 +5,8 @@ export const zhCNDatabaseMessages: Messages = {
   'databases.new': '新建连接',
   'databases.edit': '编辑',
   'databases.delete': '删除',
+  'databases.clone': '克隆',
+  'databases.copySuffix': '副本',
   'databases.open': '打开',
   'databases.save': '保存',
   'databases.cancel': '取消',

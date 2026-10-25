@@ -109,6 +109,8 @@ export interface DatabaseConnection {
   order?: number;
   createdAt?: number;
   updatedAt?: number;
+  /** Last time the workbench opened this connection (display only). */
+  lastUsedAt?: number;
 }
 
 /** A user-registered JDBC driver jar (requires a system Java 17+). */

@@ -5,6 +5,8 @@ export const esDatabaseMessages: Messages = {
   'databases.new': 'Nueva conexión',
   'databases.edit': 'Editar',
   'databases.delete': 'Eliminar',
+  'databases.clone': 'Clonar',
+  'databases.copySuffix': 'copia',
   'databases.open': 'Abrir',
   'databases.save': 'Guardar',
   'databases.cancel': 'Cancelar',

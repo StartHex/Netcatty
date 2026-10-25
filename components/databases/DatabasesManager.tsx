@@ -4,7 +4,7 @@
  * entity to the workbench layer.
  */
 
-import { Database, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { Copy, Database, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import {
@@ -84,6 +84,27 @@ export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
     setEditing(null);
   };
 
+  const clone = (connection: DatabaseConnection) => {
+    const copy = sanitizeDatabaseConnection({
+      ...connection,
+      id: crypto.randomUUID(),
+      label: `${connection.label} (${t('databases.copySuffix')})`,
+      createdAt: Date.now(),
+      updatedAt: undefined,
+      lastUsedAt: undefined,
+    });
+    onUpdateDbConnections([...dbConnections, copy]);
+  };
+
+  const open = (connection: DatabaseConnection) => {
+    onUpdateDbConnections(
+      dbConnections.map((entry) =>
+        entry.id === connection.id ? { ...entry, lastUsedAt: Date.now() } : entry,
+      ),
+    );
+    onOpenConnection(connection);
+  };
+
   const remove = (connection: DatabaseConnection) => {
     onUpdateDbConnections(dbConnections.filter((entry) => entry.id !== connection.id));
     setPendingDelete(null);
@@ -149,7 +170,7 @@ export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Button size="sm" className="h-7 flex-1 text-xs" onClick={() => onOpenConnection(connection)}>
+                  <Button size="sm" className="h-7 flex-1 text-xs" onClick={() => open(connection)}>
                     <Play className="mr-1 h-3 w-3" />
                     {t('databases.open')}
                   </Button>
@@ -161,6 +182,15 @@ export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
                     onClick={() => openEdit(connection)}
                   >
                     <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 w-7 p-0"
+                    title={t('databases.clone')}
+                    onClick={() => clone(connection)}
+                  >
+                    <Copy className="h-3 w-3" />
                   </Button>
                   <Button
                     size="sm"

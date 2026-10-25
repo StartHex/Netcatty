@@ -5,6 +5,8 @@ export const zhTNDatabaseMessages: Messages = {
   'databases.new': '新增連線',
   'databases.edit': '編輯',
   'databases.delete': '刪除',
+  'databases.clone': '複製',
+  'databases.copySuffix': '副本',
   'databases.open': '開啟',
   'databases.save': '儲存',
   'databases.cancel': '取消',

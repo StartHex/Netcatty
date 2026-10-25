@@ -5,6 +5,8 @@ export const ruDatabaseMessages: Messages = {
   'databases.new': 'Новое подключение',
   'databases.edit': 'Изменить',
   'databases.delete': 'Удалить',
+  'databases.clone': 'Клонировать',
+  'databases.copySuffix': 'копия',
   'databases.open': 'Открыть',
   'databases.save': 'Сохранить',
   'databases.cancel': 'Отмена',
