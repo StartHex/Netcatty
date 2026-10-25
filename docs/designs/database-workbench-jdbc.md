@@ -559,6 +559,7 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
 - SQL Server 内置驱动（`tedious`，纯 JS）：默认端口 1433，支持加密开关、表结构树、
   取消/关闭；事务由其自身管理。
 - 修正连接编辑器驱动类型列表遗漏 JDBC 的问题。
+- 初始化 SQL 重放：会话首次使用前按分号拆分执行 `initSql`（内存库重建结构），失败在连接阶段报错。
 
 ### 12.7 尚未实现（原 12.3 的剩余项）
 
