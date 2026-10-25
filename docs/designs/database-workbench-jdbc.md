@@ -527,7 +527,7 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
 | B 连接管理 | ✅（分组排序/克隆见 12.3） | `components/databases/DatabasesManager.tsx`、`DatabaseConnectionDialog.tsx` |
 | C 查询工作台 | ✅（补全、分页见 12.3） | `components/databases/SqlWorkbench.tsx`、`application/state/useDatabaseWorkbench.ts`、`useSqlHistory.ts` |
 | D 内置驱动 | ✅ PG/MySQL/MariaDB/Oracle Thin/SQLite | `electron/bridges/dbBridge.cjs`（会话复用、超时、取消、行数上限） |
-| E JDBC | ⏳ 阶段二 | `databaseTunnelService` 之外的部分未开始 |
+| E JDBC | ✅ 阶段二（驱动管理 UI 待补） | `electron/jdbc-sidecar/`、`electron/bridges/jdbcSidecar.cjs`、`javaRuntime.cjs` |
 | F 增强 | ⏳ 阶段三 | 已提前完成 CSV 导出 |
 | 附加 | ✅ 经 SSH 主机访问数据库 | `infrastructure/services/databaseTunnelService.ts` + `sshHostId` |
 
@@ -551,7 +551,23 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
 - 驱动冒烟矩阵（对真实 PG/MySQL/Oracle 实例的 CI 任务）
 - 设置项开关 `experimental.databaseWorkbench`
 
-### 12.4 阶段二（JDBC）实施要点（下一步）
+### 12.4 阶段二（JDBC）实施结果
+
+已按「源码提交 + 构建时用 javac 编译」落地，实测 H2 内存库跑通建表/插入/查询/
+元数据（`NetcattyJdbcSidecar` 类，7.3 KB jar）：
+
+- 协议：一行一个请求 `<id>\t<METHOD>\tkey=base64(value)...`；响应 `OK/ERR/COLS/ROW`，
+  主进程侧 `jdbcSidecar.cjs` 负责关联与流式收集，`javaRuntime.cjs` 负责探测 Java
+  （设置项 → JAVA_HOME → PATH → 平台默认目录，并用 `java -version` 验证）。
+- 构建：`scripts/build-jdbc-sidecar.cjs` 由 `prebuild` 自动调用，产出
+  `dist/jdbc-sidecar/netcatty-jdbc-sidecar.jar`；无 JDK 时只警告不失败。
+  打包进 asar 后，运行时首次使用会把 jar 解到 `userData/jdbc-sidecar/` 再启动。
+- CI：`fork-package.yml` 增加 `actions/setup-java@v4`（temurin 21）。
+- 驱动 jar 由用户自备：连接编辑器可选多个 jar，驱动类可留空（走 ServiceLoader 发现）。
+- 待补：驱动预设库（MySQL/Oracle/达梦等一键填类名与下载链接）、驱动管理器独立页面、
+  `jdbcProperties` 高级表格、内存库 `initSql` 重放与导出 SQL。
+
+### 12.5 原始设计要点（保留）
 
 由于构建机与本机都没有 JDK，sidecar 采用「源码 + 构建时编译」：
 `electron/jdbc-sidecar/src/NetcattyJdbcSidecar.java` 提交源码，`npm run build:jdbc-sidecar`
