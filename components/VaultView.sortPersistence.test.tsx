@@ -73,6 +73,8 @@ const renderVault = (sortMode: string | null, hosts: Host[]) => {
             otpAuthenticators: [],
             dbConnections: [],
             onUpdateDbConnections: () => {},
+            jdbcDrivers: [],
+            onUpdateJdbcDrivers: () => {},
             snippets: [],
             snippetPackages: [],
             customGroups: [],

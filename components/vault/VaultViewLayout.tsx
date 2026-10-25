@@ -286,6 +286,8 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     onUpdateOtpAuthenticators,
     OtpAuthenticatorsManager,
     dbConnections,
+    jdbcDrivers,
+    onUpdateJdbcDrivers,
     onUpdateDbConnections,
     DatabasesManager,
     SqlWorkbench,
@@ -1511,6 +1513,8 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                       .filter((host: any) => (host.protocol ?? 'ssh') === 'ssh' && host.id)
                       .map((host: any) => ({ id: host.id, label: host.label || host.hostname }))}
                     onTestConnection={dbConnectionTester.test}
+                    jdbcDrivers={jdbcDrivers}
+                    onUpdateJdbcDrivers={onUpdateJdbcDrivers}
                   />
                 </Suspense>
               </LazyLoadBoundary>

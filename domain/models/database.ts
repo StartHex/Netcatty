@@ -123,7 +123,10 @@ export interface DatabaseConnection {
 export interface JdbcDriver {
   id: string;
   name: string;
+  /** First jar path kept for older payloads; prefer `jarPaths`. */
   jarPath: string;
+  /** All jars the driver needs, dependencies included. */
+  jarPaths?: string[];
   driverClass?: string;
   /** Preset this driver was created from (postgres, mysql, oracle, …). */
   presetId?: string;

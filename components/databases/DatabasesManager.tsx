@@ -4,11 +4,12 @@
  * entity to the workbench layer.
  */
 
-import { Copy, Database, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { Copy, Database, Pencil, Play, PlugZap, Plus, Trash2 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import {
   databaseDisplayTarget,
+  sanitizeDatabaseConnection,
   sortDatabaseConnections,
   type DatabaseConnection,
   type DatabaseKind,
@@ -19,6 +20,8 @@ import { ConfirmDialog } from '../ui/confirm-dialog';
 import { VaultHeaderSearch, VaultPageHeader, vaultHeaderSecondaryButtonClass } from '../vault/VaultPageHeader';
 import type { DbTestConnectionResult } from '../../domain/models';
 import { DatabaseConnectionDialog } from './DatabaseConnectionDialog';
+import { JdbcDriversDialog } from './JdbcDriversDialog';
+import type { JdbcDriver } from '../../domain/models';
 
 const KIND_ACCENT: Record<DatabaseKind, string> = {
   postgresql: 'text-sky-500',
@@ -37,6 +40,9 @@ interface DatabasesManagerProps {
   sshHosts?: { id: string; label: string }[];
   /** Runs a test dial, opening the SSH tunnel first when the draft asks for one. */
   onTestConnection?: (draft: DatabaseConnection) => Promise<DbTestConnectionResult>;
+  /** Registered JDBC drivers, shared by every JDBC connection. */
+  jdbcDrivers?: JdbcDriver[];
+  onUpdateJdbcDrivers?: (drivers: JdbcDriver[]) => void;
 }
 
 export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
@@ -45,12 +51,15 @@ export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
   onOpenConnection,
   sshHosts,
   onTestConnection,
+  jdbcDrivers = [],
+  onUpdateJdbcDrivers,
 }) => {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<DatabaseConnection | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<DatabaseConnection | null>(null);
+  const [driversOpen, setDriversOpen] = useState(false);
 
 
   const connections = useMemo(() => {
@@ -125,6 +134,15 @@ export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
           placeholder={t('databases.search.placeholder')}
           className="w-[240px]"
         />
+        {onUpdateJdbcDrivers ? (
+          <Button
+            className={cn(vaultHeaderSecondaryButtonClass, 'h-9')}
+            onClick={() => setDriversOpen(true)}
+          >
+            <PlugZap className="mr-1.5 h-3.5 w-3.5" />
+            {t('databases.drivers.open')}
+          </Button>
+        ) : null}
         <Button className={cn(vaultHeaderSecondaryButtonClass, 'h-9')} onClick={openCreate}>
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           {t('databases.new')}
@@ -218,7 +236,17 @@ export const DatabasesManager: React.FC<DatabasesManagerProps> = ({
         onSave={save}
         sshHosts={sshHosts}
         onTestConnection={onTestConnection}
+        jdbcDrivers={jdbcDrivers}
       />
+
+      {onUpdateJdbcDrivers ? (
+        <JdbcDriversDialog
+          open={driversOpen}
+          onOpenChange={setDriversOpen}
+          drivers={jdbcDrivers}
+          onUpdateDrivers={onUpdateJdbcDrivers}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(pendingDelete)}

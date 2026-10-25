@@ -157,7 +157,7 @@ import {
   TooltipProvider,
 } from "./ui/tooltip";
 import { Badge } from "./ui/badge";
-import { DatabaseConnection, HotkeyScheme, KeyBinding, OtpAuthenticator } from "../domain/models";
+import { DatabaseConnection, HotkeyScheme, JdbcDriver, KeyBinding, OtpAuthenticator } from "../domain/models";
 import { VaultViewLayout } from "./vault/VaultViewLayout";
 import { useVaultHostCollections } from "./vault/useVaultHostCollections";
 import { useVaultImportHandlers } from "../application/state/useVaultImportHandlers";
@@ -234,6 +234,8 @@ interface VaultViewProps {
   proxyProfiles: ProxyProfile[];
   otpAuthenticators: OtpAuthenticator[];
   dbConnections: DatabaseConnection[];
+  jdbcDrivers: JdbcDriver[];
+  onUpdateJdbcDrivers: (drivers: JdbcDriver[]) => void;
   snippets: Snippet[];
   snippetPackages: string[];
   customGroups: string[];
@@ -330,6 +332,8 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   proxyProfiles,
   otpAuthenticators,
   dbConnections,
+  jdbcDrivers,
+  onUpdateJdbcDrivers,
   snippets,
   snippetPackages,
   customGroups,
@@ -1711,6 +1715,8 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           otpAuthenticators,
           onUpdateOtpAuthenticators,
           dbConnections,
+          jdbcDrivers,
+          onUpdateJdbcDrivers,
           onUpdateDbConnections,
           DatabasesManager,
           SqlWorkbench,
@@ -1840,6 +1846,8 @@ export const vaultViewAreEqual = (
     prev.otpAuthenticators === next.otpAuthenticators &&
     prev.onUpdateOtpAuthenticators === next.onUpdateOtpAuthenticators &&
     prev.dbConnections === next.dbConnections &&
+    prev.jdbcDrivers === next.jdbcDrivers &&
+    prev.onUpdateJdbcDrivers === next.onUpdateJdbcDrivers &&
     prev.onUpdateDbConnections === next.onUpdateDbConnections &&
     prev.snippets === next.snippets &&
     prev.snippetPackages === next.snippetPackages &&

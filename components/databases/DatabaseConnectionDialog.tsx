@@ -13,6 +13,7 @@ import {
   sanitizeDatabaseConnection,
   type DatabaseConnection,
   type DatabaseKind,
+  type JdbcDriver,
   type DatabaseSslMode,
 } from '../../domain/models';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
@@ -55,6 +56,7 @@ interface FormState {
   jdbcUrl: string;
   jdbcDriverClass: string;
   jdbcDriverPaths: string[];
+  jdbcDriverId: string;
   javaPath: string;
   jdbcPresetId: string;
 }
@@ -75,6 +77,7 @@ const EMPTY_FORM: FormState = {
   jdbcUrl: '',
   jdbcDriverClass: '',
   jdbcDriverPaths: [],
+  jdbcDriverId: '',
   javaPath: '',
   jdbcPresetId: '',
 };
@@ -96,6 +99,7 @@ function formFromConnection(connection: DatabaseConnection): FormState {
     jdbcUrl: connection.jdbcUrl ?? '',
     jdbcDriverClass: connection.jdbcDriverClass ?? '',
     jdbcDriverPaths: connection.jdbcDriverPaths ?? [],
+    jdbcDriverId: connection.jdbcDriverId ?? '',
     javaPath: connection.javaPath ?? '',
     jdbcPresetId: '',
   };
@@ -111,6 +115,7 @@ export interface DatabaseConnectionDialogProps {
   connection?: DatabaseConnection | null;
   /** SSH hosts that can be used as a jump box for this connection. */
   sshHosts?: { id: string; label: string }[];
+  jdbcDrivers?: JdbcDriver[];
   onTestConnection?: (draft: DatabaseConnection) => Promise<DbTestConnectionResult>;
   onClose: () => void;
   onSave: (connection: DatabaseConnection) => void;
@@ -120,6 +125,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
   open,
   connection,
   sshHosts,
+  jdbcDrivers = [],
   onTestConnection,
   onClose,
   onSave,
@@ -160,6 +166,11 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
   const isSqlite = form.kind === 'sqlite';
   const isJdbc = form.kind === 'jdbc';
 
+  const registeredDriver = useMemo(
+    () => jdbcDrivers.find((driver) => driver.id === form.jdbcDriverId),
+    [jdbcDrivers, form.jdbcDriverId],
+  );
+
   const draft = useMemo<DatabaseConnection>(() => {
     const base = connection ?? { id: crypto.randomUUID(), createdAt: Date.now() };
     return sanitizeDatabaseConnection({
@@ -177,11 +188,22 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       inMemory: isSqlite ? form.inMemory : undefined,
       sshHostId: isSqlite ? undefined : form.sshHostId || undefined,
       jdbcUrl: isJdbc ? form.jdbcUrl.trim() : undefined,
-      jdbcDriverClass: isJdbc ? form.jdbcDriverClass.trim() || undefined : undefined,
-      jdbcDriverPaths: isJdbc && form.jdbcDriverPaths.length > 0 ? form.jdbcDriverPaths : undefined,
+      jdbcDriverId: isJdbc ? form.jdbcDriverId || undefined : undefined,
+      jdbcDriverClass: isJdbc
+        ? form.jdbcDriverClass.trim() || registeredDriver?.driverClass
+        : undefined,
+      jdbcDriverPaths: isJdbc
+        ? form.jdbcDriverPaths.length > 0
+          ? form.jdbcDriverPaths
+          : registeredDriver
+            ? registeredDriver.jarPaths?.length
+              ? registeredDriver.jarPaths
+              : [registeredDriver.jarPath]
+            : undefined
+        : undefined,
       javaPath: isJdbc ? form.javaPath.trim() || undefined : undefined,
     });
-  }, [connection, form, isJdbc, isSqlite]);
+  }, [connection, form, isJdbc, isSqlite, registeredDriver]);
 
   const labelError = !draft.label;
   const targetError = isSqlite
@@ -299,6 +321,37 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
 
           {isJdbc ? (
             <>
+              <div className="grid gap-2">
+                <Label>{t('databases.drivers.useRegistered')}</Label>
+                <Select
+                  value={form.jdbcDriverId || '__none__'}
+                  onValueChange={(value) => {
+                    const driver = jdbcDrivers.find((entry) => entry.id === value);
+                    setForm((prev) => ({
+                      ...prev,
+                      jdbcDriverId: driver ? driver.id : '',
+                      jdbcDriverClass: driver?.driverClass ?? prev.jdbcDriverClass,
+                      jdbcDriverPaths: driver
+                        ? (driver.jarPaths?.length ? driver.jarPaths : [driver.jarPath])
+                        : prev.jdbcDriverPaths,
+                    }));
+                    setTest({ status: 'idle' });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t('databases.drivers.useManualJars')}</SelectItem>
+                    {jdbcDrivers.map((driver) => (
+                      <SelectItem key={driver.id} value={driver.id}>
+                        {driver.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="grid gap-2">
                 <Label>{t('databases.form.jdbcPreset')}</Label>
                 <Select
