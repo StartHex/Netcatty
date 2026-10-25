@@ -6,6 +6,8 @@
 import {
   AlertTriangle,
   ArrowUpDown,
+  Bookmark,
+  BookmarkPlus,
   Download,
   History,
   Loader2,
@@ -25,7 +27,8 @@ import { useDatabaseWorkbench, type DatabaseTab } from '../../application/state/
 import type { DatabaseConnection, DbCellValue, DbQueryResult } from '../../domain/models';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Input } from '../ui/input';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { FixedSizeVirtualList } from '../ui/FixedSizeVirtualList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
@@ -91,6 +94,7 @@ interface SqlWorkbenchProps {
   /** Vault lookups used to dial connections that route through an SSH host. */
   tunnelDeps?: DatabaseTunnelDeps;
   initialConnection?: DatabaseConnection | null;
+  onUpdateConnections?: (connections: DatabaseConnection[] | ((prev: DatabaseConnection[]) => DatabaseConnection[])) => void;
   onClose: () => void;
 }
 
@@ -98,6 +102,7 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
   open,
   connections,
   initialConnection,
+  onUpdateConnections,
   tunnelDeps,
   onClose,
 }) => {
@@ -124,6 +129,8 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
     [connections, activeTab?.connectionId],
   );
   const [pendingRun, setPendingRun] = useState<{ tabId: string; sql: string; reasons: string[] } | null>(null);
+  const [saveQueryOpen, setSaveQueryOpen] = useState(false);
+  const [saveQueryName, setSaveQueryName] = useState('');
 
   const executeSql = useCallback(
     (tabId: string, sqlOverride: string | undefined) => {
@@ -198,6 +205,48 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
     sqlHistory.record(activeTab.connectionId, loaded.text);
     toast.success(t('databases.workbench.openSqlFileLoaded'));
   }, [activeTab, sqlHistory, t, workbench]);
+
+  const saveCurrentQuery = useCallback(() => {
+    if (!activeTab || !onUpdateConnections) return;
+    const name = saveQueryName.trim();
+    const sql = editorRef.current?.getSelectionText()?.trim() || activeTab.sql.trim();
+    if (!name || !sql) return;
+    const connectionId = activeTab.connectionId;
+    const query = { id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name, sql, createdAt: Date.now() };
+    onUpdateConnections((prev) =>
+      prev.map((entry) =>
+        entry.id === connectionId
+          ? { ...entry, savedQueries: [...(entry.savedQueries ?? []), query] }
+          : entry,
+      ),
+    );
+    setSaveQueryOpen(false);
+    setSaveQueryName('');
+    toast.success(t('databases.workbench.saveQuerySaved'));
+  }, [activeTab, onUpdateConnections, saveQueryName, t]);
+
+  const loadSavedQuery = useCallback(
+    (sql: string) => {
+      if (!activeTab) return;
+      workbench.updateSql(activeTab.id, sql);
+    },
+    [activeTab, workbench],
+  );
+
+  const deleteSavedQuery = useCallback(
+    (queryId: string) => {
+      if (!activeTab || !onUpdateConnections) return;
+      const connectionId = activeTab.connectionId;
+      onUpdateConnections((prev) =>
+        prev.map((entry) =>
+          entry.id === connectionId
+            ? { ...entry, savedQueries: (entry.savedQueries ?? []).filter((q) => q.id !== queryId) }
+            : entry,
+        ),
+      );
+    },
+    [activeTab, onUpdateConnections],
+  );
 
   const activeHistory = sqlHistory.entriesFor(activeTab?.connectionId);
 
@@ -281,6 +330,60 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                   {t('databases.workbench.cancel')}
                 </Button>
               ) : null}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                    <Bookmark className="h-3.5 w-3.5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-72 p-1">
+                  {(activeConnection?.savedQueries ?? []).length === 0 ? (
+                    <p className="px-2 py-3 text-xs text-muted-foreground">
+                      {t('databases.workbench.savedQueriesEmpty')}
+                    </p>
+                  ) : (
+                    <div className="max-h-64 overflow-auto">
+                      {(activeConnection?.savedQueries ?? []).map((query) => (
+                        <div key={query.id} className="group flex items-center gap-1 rounded px-1">
+                          <button
+                            type="button"
+                            className="flex-1 truncate px-1 py-1 text-left text-xs hover:text-foreground"
+                            title={query.sql}
+                            onClick={() => loadSavedQuery(query.sql)}
+                          >
+                            {query.name}
+                          </button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                            onClick={() => deleteSavedQuery(query.id)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    disabled={!activeTab || !onUpdateConnections}
+                    onClick={() => {
+                      setSaveQueryName('');
+                      setSaveQueryOpen(true);
+                    }}
+                  >
+                    <BookmarkPlus className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('databases.workbench.saveQuery')}</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -490,6 +593,30 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
           </div>
         )}
       </DialogContent>
+      <Dialog open={saveQueryOpen} onOpenChange={setSaveQueryOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('databases.workbench.saveQueryTitle')}</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={saveQueryName}
+            placeholder={t('databases.workbench.saveQueryPlaceholder')}
+            onChange={(event) => setSaveQueryName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') saveCurrentQuery();
+            }}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSaveQueryOpen(false)}>
+              {t('databases.form.cancel')}
+            </Button>
+            <Button disabled={!saveQueryName.trim()} onClick={saveCurrentQuery}>
+              {t('databases.form.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={pendingRun !== null}
         title={t('databases.workbench.confirmDangerTitle')}

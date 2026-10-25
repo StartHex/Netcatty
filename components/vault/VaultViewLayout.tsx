@@ -2051,6 +2051,7 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
             connections={dbConnections}
             initialConnection={databaseWorkbenchConnection}
             tunnelDeps={dbTunnelDeps}
+            onUpdateConnections={onUpdateDbConnections}
             onClose={() => setDatabaseWorkbenchConnection(null)}
           />
         </Suspense>

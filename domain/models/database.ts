@@ -121,6 +121,15 @@ export interface DatabaseConnection {
   updatedAt?: number;
   /** Last time the workbench opened this connection (display only). */
   lastUsedAt?: number;
+  savedQueries?: DatabaseSavedQuery[];
+}
+
+/** Named query saved with a connection (workbench "save query"). */
+export interface DatabaseSavedQuery {
+  id: string;
+  name: string;
+  sql: string;
+  createdAt?: number;
 }
 
 /** A user-registered JDBC driver jar (requires a system Java 17+). */
@@ -280,9 +289,36 @@ export function sanitizeDatabaseConnection(
     tags: Array.isArray(input.tags) ? input.tags.map(NON_EMPTY).filter((tag): tag is string => Boolean(tag)) : undefined,
     colorTag,
     order: typeof input.order === 'number' && Number.isFinite(input.order) ? input.order : undefined,
+    savedQueries: sanitizeSavedQueries(input.savedQueries),
     createdAt: typeof input.createdAt === 'number' ? input.createdAt : undefined,
     updatedAt: typeof input.updatedAt === 'number' ? input.updatedAt : undefined,
   };
+}
+
+const MAX_SAVED_QUERIES = 100;
+const MAX_SAVED_QUERY_LENGTH = 20000;
+
+function sanitizeSavedQueries(value: unknown): DatabaseSavedQuery[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<string>();
+  const out: DatabaseSavedQuery[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Partial<DatabaseSavedQuery>;
+    const id = typeof record.id === 'string' ? record.id.trim() : '';
+    const name = typeof record.name === 'string' ? record.name.trim() : '';
+    const sql = typeof record.sql === 'string' ? record.sql : '';
+    if (!id || !name || !sql.trim() || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name: name.slice(0, 120),
+      sql: sql.slice(0, MAX_SAVED_QUERY_LENGTH),
+      ...(typeof record.createdAt === 'number' ? { createdAt: record.createdAt } : {}),
+    });
+    if (out.length >= MAX_SAVED_QUERIES) break;
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 export function sanitizeDatabaseConnections(input: unknown): DatabaseConnection[] {
