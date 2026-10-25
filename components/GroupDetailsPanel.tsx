@@ -25,6 +25,11 @@ import {
   formatProxyConfigType,
   updateProxyConfigField,
 } from "../domain/proxyProfiles";
+import {
+  collectUnifiedPasswordSubtreeHosts,
+  hostInGroupSubtree,
+  isUnifiedPasswordCapableHost,
+} from "../domain/unifiedPassword";
 import { canServeAsSshJumpHost } from "../domain/terminalProtocol";
 import {
   EnvVar,
@@ -52,6 +57,14 @@ import {
 } from "./ui/aside-panel";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { Dropdown, DropdownContent, DropdownTrigger } from "./ui/dropdown";
 import { Input } from "./ui/input";
 import { Switch } from "./ui/switch";
@@ -84,7 +97,12 @@ interface GroupDetailsPanelProps {
   terminalThemeId: string;
   groupConfigs?: GroupConfig[];
   terminalFontSize: number;
-  onSave: (config: GroupConfig, newName?: string, newParent?: string | null) => void;
+  onSave: (
+    config: GroupConfig,
+    newName?: string,
+    newParent?: string | null,
+    unifiedSourceHostId?: string,
+  ) => void;
   onCancel: () => void;
   layout?: AsidePanelLayout;
 }
@@ -99,7 +117,7 @@ export const hasGroupTelnetFields = (c: Partial<GroupConfig>): boolean =>
   c.telnetEnabled === true;
 
 export const hasGroupSshFields = (c: Partial<GroupConfig>): boolean =>
-  c.protocol === 'ssh' ||
+  c.protocol === 'ssh' || c.unifiedPassword === true ||
   c.port !== undefined || !!c.username || !!c.password || !!c.identityFileId ||
   c.deviceType !== undefined ||
   c.agentForwarding !== undefined || c.x11Forwarding !== undefined || c.authMethod !== undefined || c.identityId !== undefined ||
@@ -227,6 +245,11 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
     useState<'key' | 'certificate' | 'localKeyFile' | null>(null);
   const [newKeyFilePath, setNewKeyFilePath] = useState('');
 
+  // Unified password state
+  const [unifiedDonorPickerOpen, setUnifiedDonorPickerOpen] = useState(false);
+  const [unifiedDonorHostId, setUnifiedDonorHostId] = useState<string | null>(null);
+  const [unifiedDonorQuery, setUnifiedDonorQuery] = useState("");
+
   // Environment variables state
   const [newEnvName, setNewEnvName] = useState("");
   const [newEnvValue, setNewEnvValue] = useState("");
@@ -243,6 +266,69 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
 
   const update = <K extends keyof GroupConfig>(key: K, value: GroupConfig[K] | undefined) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  // Unified password: enabling asks for a donor host; the group password (and
+  // every owned host) then follows that host's saved password.
+  const unifiedPasswordDonorHosts = useMemo(() => {
+    const capable = allHosts.filter((h) => isUnifiedPasswordCapableHost(h)
+      && typeof h.password === "string" && h.password.length > 0);
+    return [...capable].sort((a, b) => {
+      const aOwned = hostInGroupSubtree(a, groupPath) ? 0 : 1;
+      const bOwned = hostInGroupSubtree(b, groupPath) ? 0 : 1;
+      if (aOwned !== bOwned) return aOwned - bOwned;
+      return a.label.localeCompare(b.label);
+    });
+  }, [allHosts, groupPath]);
+
+  const unifiedPasswordTargetCount = useMemo(
+    () => collectUnifiedPasswordSubtreeHosts(allHosts, groupPath)
+      .filter((h) => isUnifiedPasswordCapableHost(h)).length,
+    [allHosts, groupPath],
+  );
+
+  const filteredUnifiedDonorHosts = useMemo(() => {
+    const query = unifiedDonorQuery.trim().toLowerCase();
+    if (!query) return unifiedPasswordDonorHosts;
+    return unifiedPasswordDonorHosts.filter((h) =>
+      h.label.toLowerCase().includes(query)
+      || h.hostname.toLowerCase().includes(query)
+      || (h.group ?? "").toLowerCase().includes(query));
+  }, [unifiedPasswordDonorHosts, unifiedDonorQuery]);
+
+  const unifiedDonorHost = unifiedDonorHostId
+    ? allHosts.find((h) => h.id === unifiedDonorHostId)
+    : undefined;
+
+  const enableUnifiedPassword = () => {
+    if (unifiedPasswordDonorHosts.length === 0) {
+      update("unifiedPassword", true);
+      return;
+    }
+    setUnifiedDonorQuery("");
+    setUnifiedDonorPickerOpen(true);
+  };
+
+  const disableUnifiedPassword = () => {
+    setUnifiedDonorHostId(null);
+    update("unifiedPassword", undefined);
+  };
+
+  const chooseUnifiedPasswordDonor = (donor: Host) => {
+    setForm((prev) => ({
+      ...prev,
+      unifiedPassword: true,
+      password: donor.password,
+      savePassword: true,
+    }));
+    setUnifiedDonorHostId(donor.id);
+    setUnifiedDonorPickerOpen(false);
+  };
+
+  const keepManualUnifiedPassword = () => {
+    setUnifiedDonorHostId(null);
+    update("unifiedPassword", true);
+    setUnifiedDonorPickerOpen(false);
   };
 
   // Remove SSH protocol section
@@ -553,6 +639,11 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
     const normalizedProxyConfig = proxySave?.normalizedProxyConfig;
     setNameError(null);
 
+    if (sshEnabled && form.unifiedPassword === true && !form.password) {
+      toast.error(t("vault.groups.details.unifiedPassword.passwordRequired"));
+      return;
+    }
+
     const newPath = parentGroup
       ? `${parentGroup}/${trimmedName}`
       : trimmedName;
@@ -562,6 +653,7 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
       // Editing defaults or notes must not change the group's manual position.
       ...(config?.order !== undefined && { order: config.order }),
       notes: form.notes?.trim() || undefined,
+      ...(form.unifiedPassword === true && { unifiedPassword: true }),
       // Only include SSH fields if SSH section is enabled
       ...(sshEnabled && {
         protocol: 'ssh' as const,
@@ -617,6 +709,7 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
       result,
       nameChanged ? trimmedName : undefined,
       parentChanged ? (parentGroup || null) : undefined,
+      form.unifiedPassword === true ? (unifiedDonorHostId ?? undefined) : undefined,
     );
   };
 
@@ -794,6 +887,15 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
           proxySummaryLabel={proxySummaryLabel}
           setActiveSubPanel={setActiveSubPanel}
           chainedHosts={chainedHosts}
+          unifiedPasswordEnabled={form.unifiedPassword === true}
+          unifiedPasswordTargetCount={unifiedPasswordTargetCount}
+          unifiedPasswordDonorLabel={unifiedDonorHost?.label}
+          onEnableUnifiedPassword={enableUnifiedPassword}
+          onDisableUnifiedPassword={disableUnifiedPassword}
+          onPickUnifiedPasswordDonor={() => {
+            setUnifiedDonorQuery("");
+            setUnifiedDonorPickerOpen(true);
+          }}
         />
 
         {sshEnabled && (!form.protocol || form.protocol === "ssh") && !form.moshEnabled && !form.etEnabled && (
@@ -1047,6 +1149,64 @@ const GroupDetailsPanel: React.FC<GroupDetailsPanelPropsWithResize> = ({
           </Dropdown>
         )}
       </AsidePanelContent>
+
+      <Dialog open={unifiedDonorPickerOpen} onOpenChange={setUnifiedDonorPickerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("vault.groups.details.unifiedPassword.pickTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("vault.groups.details.unifiedPassword.pickDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            placeholder={t("vault.groups.details.unifiedPassword.pickSearch")}
+            value={unifiedDonorQuery}
+            onChange={(e) => setUnifiedDonorQuery(e.target.value)}
+            className="h-9"
+          />
+          <div className="max-h-72 overflow-y-auto -mx-1 px-1 space-y-1">
+            {filteredUnifiedDonorHosts.length === 0 && (
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                {t("vault.groups.details.unifiedPassword.pickEmpty")}
+              </p>
+            )}
+            {filteredUnifiedDonorHosts.slice(0, 100).map((donor) => (
+              <button
+                key={donor.id}
+                type="button"
+                onClick={() => chooseUnifiedPasswordDonor(donor)}
+                className="w-full text-left rounded-md px-3 py-2 hover:bg-secondary transition-colors"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium truncate">{donor.label}</span>
+                  {hostInGroupSubtree(donor, groupPath) && (
+                    <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                      {t("vault.groups.details.unifiedPassword.pickInGroup")}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {donor.username || donor.label}@{donor.hostname || donor.label}
+                  {donor.group ? ` · ${donor.group}` : ""}
+                </div>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("vault.groups.details.unifiedPassword.pickScope")
+              .replace("{count}", String(unifiedPasswordTargetCount))}
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUnifiedDonorPickerOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="outline" onClick={keepManualUnifiedPassword}>
+              {t("vault.groups.details.unifiedPassword.useManual")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AsidePanel>
   );
 };

@@ -8,6 +8,10 @@ import { VaultGroupDeletionConfirmationChangedError } from "../../application/st
 import { usePluginImporterCommit } from "../../application/state/usePluginImporterCommit";
 import { preserveConcurrentHostLineTimestampUpdate } from "../../domain/host";
 import {
+  planUnifiedPasswordForScope,
+  resolveUnifiedPasswordScope,
+} from "../../domain/unifiedPassword";
+import {
   collectVaultGroupPathsForSelectAll,
   collectVisibleVaultGroupPaths,
   collectVisibleVaultHostIds,
@@ -1532,6 +1536,30 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                     latestHost,
                   });
                   onUpdateHosts((prevHosts) => upsertHostById(prevHosts, nextHost));
+
+                  // Unified password: a password edit on a host owned by a
+                  // unified group is the group's source of truth, so cascade it
+                  // to the group default and every sibling host under it.
+                  const previousHost = latestHost ?? editingHost;
+                  const passwordChanged = Boolean(nextHost.password)
+                    && previousHost?.password !== nextHost.password;
+                  const unifiedScope = passwordChanged
+                    ? resolveUnifiedPasswordScope(nextHost, groupConfigs)
+                    : null;
+                  if (unifiedScope && nextHost.password) {
+                    onUpdateHosts((prevHosts) => planUnifiedPasswordForScope({
+                      hosts: prevHosts,
+                      groupConfigs,
+                      scopePath: unifiedScope.groupPath,
+                      password: nextHost.password as string,
+                    }).hosts);
+                    onUpdateGroupConfigs(groupConfigs.map((config) => (
+                      config.path === unifiedScope.groupPath
+                        ? { ...config, password: nextHost.password, savePassword: true }
+                        : config
+                    )));
+                  }
+
                   setIsHostPanelOpen(false);
                   setEditingHost(null);
                   setNewHostGroupPath(null);

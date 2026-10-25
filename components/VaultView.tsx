@@ -75,6 +75,7 @@ import {
   upsertHostById,
 } from "../domain/host";
 import { exportHostsToCsvWithStats } from "../domain/vaultImport";
+import { planUnifiedPasswordForScope } from "../domain/unifiedPassword";
 import { saveWorkSurfaceHostDraft, type WorkSurfaceHostEditorTarget } from "../application/state/useWorkSurfaceHostEditor";
 import { upsertKnownHost } from "../domain/knownHosts";
 import {
@@ -1186,9 +1187,15 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   }, []);
 
   const handleSaveGroupConfig = useCallback(
-    async (config: GroupConfig, _newName?: string, _newParent?: string | null) => {
+    async (
+      config: GroupConfig,
+      _newName?: string,
+      _newParent?: string | null,
+      unifiedSourceHostId?: string,
+    ) => {
       const oldPath = editingGroupPath!;
       const newPath = config.path; // Panel already computed the correct path
+      const previousConfig = groupConfigs.find((c) => c.path === oldPath);
 
       // Validate no duplicate path on rename/reparent
       if (newPath !== oldPath && customGroups.includes(newPath)) {
@@ -1201,6 +1208,28 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
         ...groupConfigs.filter((c) => c.path !== oldPath),
         config,
       ];
+
+      // Unified password: enabling the toggle picks a donor host, and editing
+      // the password of an already-unified group must cascade to every owned
+      // host. Apply before a rename moves hosts to the new group path.
+      const shouldPropagateUnifiedPassword = config.unifiedPassword === true
+        && typeof config.password === 'string'
+        && config.password.length > 0
+        && (Boolean(unifiedSourceHostId)
+          || previousConfig?.unifiedPassword !== true
+          || previousConfig?.password !== config.password);
+      if (shouldPropagateUnifiedPassword) {
+        const propagationPath = newPath === oldPath ? newPath : oldPath;
+        const propagationConfigs = newPath === oldPath
+          ? updatedConfigs
+          : [...groupConfigs.filter((c) => c.path !== oldPath), { ...config, path: oldPath }];
+        onUpdateHosts((prevHosts) => planUnifiedPasswordForScope({
+          hosts: prevHosts,
+          groupConfigs: propagationConfigs,
+          scopePath: propagationPath,
+          password: config.password as string,
+        }).hosts);
+      }
 
       // Handle path change (rename or parent change)
       if (newPath !== oldPath) {
@@ -1229,6 +1258,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
       selectedGroupPath,
       commitGroupPathChange,
       onUpdateGroupConfigs,
+      onUpdateHosts,
       t,
     ],
   );
