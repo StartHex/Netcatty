@@ -459,6 +459,27 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                   onChange={(event) => update('javaPath', event.target.value)}
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="db-user">{t('databases.form.username')}</Label>
+                  <Input
+                    id="db-user"
+                    value={form.username}
+                    autoComplete="off"
+                    onChange={(event) => update('username', event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="db-password">{t('databases.form.password')}</Label>
+                  <Input
+                    id="db-password"
+                    type="password"
+                    value={form.password}
+                    autoComplete="new-password"
+                    onChange={(event) => update('password', event.target.value)}
+                  />
+                </div>
+              </div>
             </>
           ) : isSqlite ? (
             <>
@@ -525,27 +546,6 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="db-user">{t('databases.form.username')}</Label>
-                  <Input
-                    id="db-user"
-                    value={form.username}
-                    autoComplete="off"
-                    onChange={(event) => update('username', event.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="db-password">{t('databases.form.password')}</Label>
-                  <Input
-                    id="db-password"
-                    type="password"
-                    value={form.password}
-                    autoComplete="new-password"
-                    onChange={(event) => update('password', event.target.value)}
-                  />
-                </div>
-              </div>
 
               <div className="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-2">
                 <div>
