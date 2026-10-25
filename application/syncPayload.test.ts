@@ -95,6 +95,23 @@ test.beforeEach(() => {
   });
 });
 
+test("buildSyncPayload carries OTP authenticators into the cloud payload", () => {
+  const authenticator = {
+    id: "otp-1",
+    label: "Bastion",
+    type: "totp" as const,
+    secret: "JBSWY3DPEHPK3PXP",
+    algorithm: "SHA1" as const,
+    digits: 6 as const,
+    period: 30,
+    createdAt: 1,
+  };
+
+  const payload = buildSyncPayload({ ...vault([]), otpAuthenticators: [authenticator] });
+
+  assert.deepEqual(payload.otpAuthenticators, [authenticator]);
+});
+
 test("buildSyncPayload treats known hosts as local-only data", () => {
   const payload = buildSyncPayload(vault([knownHost("kh-cloud")]));
 

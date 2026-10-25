@@ -13,6 +13,7 @@ import {
   buildOtpAuthenticatorUri,
   clearOtpAuthenticatorReferences,
   countOtpAuthenticatorReferences,
+  parseOtpAuthenticatorUri,
   rematerializeHostsForAuthenticator,
   sanitizeOtpAuthenticators,
   sortOtpAuthenticators,
@@ -42,6 +43,19 @@ import {
   vaultSectionTitleClass,
 } from "./vault/VaultPageHeader";
 import { SystemPanelConfirmDialog } from "./systemManager/SystemPanelConfirmDialog";
+
+function LocalClock() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span className="font-mono tabular-nums">
+      {new Date(now).toLocaleTimeString(undefined, { hour12: false })}
+    </span>
+  );
+}
 
 interface OtpAuthenticatorsManagerProps {
   authenticators: OtpAuthenticator[];
@@ -126,6 +140,7 @@ export const OtpAuthenticatorsManager: React.FC<OtpAuthenticatorsManagerProps> =
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState<OtpAuthenticator | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OtpAuthenticator | null>(null);
+  const [importUri, setImportUri] = useState("");
 
   const ordered = useMemo(
     () => sortOtpAuthenticators(sanitizeOtpAuthenticators(authenticators)),
@@ -152,7 +167,36 @@ export const OtpAuthenticatorsManager: React.FC<OtpAuthenticatorsManagerProps> =
 
   const openCreate = () => setDraft(createDraft());
   const openEdit = (entry: OtpAuthenticator) => setDraft({ ...entry });
-  const closeDraft = () => setDraft(null);
+  const closeDraft = () => {
+    setDraft(null);
+    setImportUri("");
+  };
+
+  const importFromUri = (raw?: string) => {
+    const text = (raw ?? importUri).trim();
+    if (!text) return;
+    const parsed = parseOtpAuthenticatorUri(text);
+    if (!parsed.ok || !parsed.draft) {
+      toast.error(t(DRAFT_ERROR_KEYS[parsed.error ?? ""] ?? "hostDetails.totp.error.invalid"));
+      return;
+    }
+    const imported = parsed.draft;
+    setDraft((current) => {
+      const base = current ?? createDraft();
+      return {
+        ...base,
+        ...(base.label.trim() ? {} : { label: imported.label }),
+        secret: imported.secret,
+        algorithm: imported.algorithm ?? "SHA1",
+        digits: imported.digits ?? 6,
+        period: imported.period ?? 30,
+        issuer: imported.issuer ?? base.issuer,
+        account: imported.account ?? base.account,
+      };
+    });
+    setImportUri("");
+    toast.success(t("otpAuthenticators.import.success"));
+  };
 
   const saveDraft = () => {
     if (!draft) return;
@@ -331,6 +375,29 @@ export const OtpAuthenticatorsManager: React.FC<OtpAuthenticatorsManagerProps> =
           title={draft.label || t("otpAuthenticators.panel.newTitle")}
         >
           <AsidePanelContent>
+            <Card className="p-3 space-y-2 bg-card border-border/80">
+              <Label htmlFor="otp-auth-import">{t("otpAuthenticators.import.title")}</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="otp-auth-import"
+                  value={importUri}
+                  onChange={(event) => setImportUri(event.target.value)}
+                  placeholder={t("otpAuthenticators.import.placeholder")}
+                  className="h-9 font-mono text-xs"
+                  spellCheck={false}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      importFromUri();
+                    }
+                  }}
+                />
+                <Button variant="secondary" onClick={() => importFromUri()} className="h-9 shrink-0">
+                  {t("otpAuthenticators.import.action")}
+                </Button>
+              </div>
+            </Card>
+
             <Card className="p-3 space-y-3 bg-card border-border/80">
               <div className="space-y-2">
                 <Label htmlFor="otp-auth-label">{t("otpAuthenticators.field.label")}</Label>
@@ -347,7 +414,14 @@ export const OtpAuthenticatorsManager: React.FC<OtpAuthenticatorsManagerProps> =
                 <Input
                   id="otp-auth-secret"
                   value={draft.secret ?? ""}
-                  onChange={(event) => setDraft({ ...draft, secret: event.target.value })}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (/^otpauth:/i.test(value.trim())) {
+                      importFromUri(value);
+                      return;
+                    }
+                    setDraft({ ...draft, secret: value });
+                  }}
                   placeholder={draftMissingSecret ? t("otpAuthenticators.field.secretMissing") : t("hostDetails.totp.secretPlaceholder")}
                   className="h-9 font-mono text-xs"
                   spellCheck={false}
@@ -431,6 +505,15 @@ export const OtpAuthenticatorsManager: React.FC<OtpAuthenticatorsManagerProps> =
               ) : (
                 <p className="text-xs text-muted-foreground">{t("otpAuthenticators.previewEmpty")}</p>
               )}
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>
+                  {t("otpAuthenticators.preview.localTime")} <LocalClock />
+                </span>
+                <span>
+                  {draft.algorithm} · {draft.digits} · {draft.period}s
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{t("otpAuthenticators.preview.hint")}</p>
             </Card>
           </AsidePanelContent>
           <AsidePanelFooter className="flex gap-2">

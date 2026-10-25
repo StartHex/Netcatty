@@ -31,9 +31,11 @@ export interface OtpAuthenticatorValidation {
   errors: string[];
 }
 
-export type ParseOtpAuthenticatorUriResult =
-  | { ok: true; draft: OtpAuthenticatorDraft }
-  | { ok: false; error: string };
+export interface ParseOtpAuthenticatorUriResult {
+  ok: boolean;
+  draft?: OtpAuthenticatorDraft;
+  error?: string;
+}
 
 export function normalizeOtpSecret(input: string | undefined | null): string {
   return String(input ?? '')

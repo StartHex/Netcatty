@@ -18,6 +18,7 @@ const baseProps = {
   keys: [],
   identities: [],
   proxyProfiles: [],
+  otpAuthenticators: [],
   snippets: [],
   snippetPackages: [],
   customGroups: [],
@@ -47,6 +48,40 @@ test("VaultView memo does not depend on shellHistory prop identity", () => {
   );
   assert.equal(
     Object.prototype.hasOwnProperty.call(baseProps, "shellHistory"),
+    false,
+  );
+});
+
+test("VaultView re-renders when OTP authenticators change", () => {
+  assert.equal(
+    vaultViewAreEqual(
+      baseProps as never,
+      {
+        ...baseProps,
+        otpAuthenticators: [
+          {
+            id: "otp-1",
+            label: "Bastion",
+            type: "totp",
+            secret: "JBSWY3DPEHPK3PXP",
+            algorithm: "SHA1",
+            digits: 6,
+            period: 30,
+            createdAt: 1,
+          },
+        ],
+      } as never,
+    ),
+    false,
+  );
+});
+
+test("VaultView re-renders when the authenticator update handler changes", () => {
+  assert.equal(
+    vaultViewAreEqual(
+      baseProps as never,
+      { ...baseProps, onUpdateOtpAuthenticators: () => {} } as never,
+    ),
     false,
   );
 });
