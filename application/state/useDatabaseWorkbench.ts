@@ -12,6 +12,7 @@ import {
   databaseConnectionTarget,
   formatDatabaseError,
   openDatabaseConnection,
+  controlDatabaseTransaction,
   runDatabaseQuery,
   testDatabaseConnection,
   type DbBridgeError,
@@ -33,6 +34,7 @@ export interface DatabaseTab {
   error?: string;
   errorDetail?: DbBridgeError;
   durationMs?: number;
+  transactionOpen?: boolean;
 }
 
 export interface UseDatabaseWorkbenchResult {
@@ -43,7 +45,10 @@ export interface UseDatabaseWorkbenchResult {
   closeTab: (tabId: string) => void;
   setActiveTabId: (tabId: string | null) => void;
   updateSql: (tabId: string, sql: string) => void;
-  runQuery: (tabId: string) => Promise<void>;
+  runQuery: (tabId: string, sqlOverride?: string) => Promise<void>;
+  beginTransaction: (tabId: string) => Promise<void>;
+  commitTransaction: (tabId: string) => Promise<void>;
+  rollbackTransaction: (tabId: string) => Promise<void>;
   cancelQuery: (tabId: string) => void;
   reconnect: (tabId: string) => Promise<void>;
 }
@@ -168,10 +173,10 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
   );
 
   const runQuery = useCallback(
-    async (tabId: string) => {
+    async (tabId: string, sqlOverride?: string) => {
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
       if (!tab || tab.running) return;
-      const sql = tab.sql.trim();
+      const sql = (sqlOverride ?? tab.sql).trim();
       if (!sql) return;
       const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
       if (!connection) {
@@ -210,6 +215,39 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
     [patchTab],
   );
 
+  const controlTransaction = useCallback(
+    async (tabId: string, action: 'begin' | 'commit' | 'rollback') => {
+      const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!tab) return;
+      const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
+      if (!connection) return;
+      const response = await controlDatabaseTransaction(databaseConnectionTarget(connection), action);
+      if (response.ok !== true) {
+        patchTab(tabId, { error: formatDatabaseError(response.error), errorDetail: response.error });
+        return;
+      }
+      patchTab(tabId, {
+        transactionOpen: action === 'begin' ? true : false,
+        error: undefined,
+        errorDetail: undefined,
+      });
+    },
+    [patchTab],
+  );
+
+  const beginTransaction = useCallback(
+    (tabId: string) => controlTransaction(tabId, 'begin'),
+    [controlTransaction],
+  );
+  const commitTransaction = useCallback(
+    (tabId: string) => controlTransaction(tabId, 'commit'),
+    [controlTransaction],
+  );
+  const rollbackTransaction = useCallback(
+    (tabId: string) => controlTransaction(tabId, 'rollback'),
+    [controlTransaction],
+  );
+
   const cancelQuery = useCallback((tabId: string) => {
     const tab = tabsRef.current.find((entry) => entry.id === tabId);
     if (!tab) return;
@@ -245,6 +283,9 @@ export function useDatabaseWorkbench(connections: DatabaseConnection[]): UseData
     setActiveTabId,
     updateSql,
     runQuery,
+    beginTransaction,
+    commitTransaction,
+    rollbackTransaction,
     cancelQuery,
     reconnect,
   };

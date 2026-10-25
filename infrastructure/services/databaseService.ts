@@ -88,6 +88,19 @@ export async function runDatabaseQuery(
   return { ok: true, result: response.result };
 }
 
+export type DbTransactionAction = 'begin' | 'commit' | 'rollback';
+
+export async function controlDatabaseTransaction(
+  target: DbConnectionTarget,
+  action: DbTransactionAction,
+): Promise<{ ok: true } | { ok: false; error: DbBridgeError }> {
+  const api = requireDbBridge();
+  const response = await api.dbControl?.({ target, action });
+  if (!response) return { ok: false, error: { message: 'No response from database bridge' } };
+  if (!response.ok) return { ok: false, error: response.error ?? { message: 'Transaction failed' } };
+  return { ok: true };
+}
+
 export async function cancelDatabaseQuery(connectionId: string): Promise<void> {
   await bridge()?.dbCancel?.({ id: connectionId });
 }

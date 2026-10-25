@@ -142,3 +142,34 @@ test("unknown database kind fails with a clear error", async () => {
   assert.equal(failed.ok, false);
   assert.match(failed.error.message, /unsupported database kind/i);
 });
+
+test("sqlite: transaction control commits and rolls back", async () => {
+  const target = { id: "sqlite-tx-test", kind: "sqlite" };
+  try {
+    await handlers.query({ target, sql: "create table tx (n integer)" });
+    const begun = await handlers.control({ target, action: "begin" });
+    assert.equal(begun.ok, true, JSON.stringify(begun));
+    await handlers.query({ target, sql: "insert into tx values (1)" });
+    const rolled = await handlers.control({ target, action: "rollback" });
+    assert.equal(rolled.ok, true, JSON.stringify(rolled));
+    const afterRollback = await handlers.query({ target, sql: "select count(*) as c from tx" });
+    assert.equal(afterRollback.result.rows[0][0], 0);
+
+    await handlers.control({ target, action: "begin" });
+    await handlers.query({ target, sql: "insert into tx values (2)" });
+    await handlers.control({ target, action: "commit" });
+    const afterCommit = await handlers.query({ target, sql: "select count(*) as c from tx" });
+    assert.equal(afterCommit.result.rows[0][0], 1);
+  } finally {
+    await handlers.disconnect({ id: "sqlite-tx-test", kind: "sqlite" });
+  }
+});
+
+test("transaction control rejects unknown actions", async () => {
+  const failed = await handlers.control({
+    target: { id: "sqlite-tx-invalid", kind: "sqlite" },
+    action: "explode",
+  });
+  assert.equal(failed.ok, false);
+  assert.match(failed.error.message, /unsupported transaction action/i);
+});

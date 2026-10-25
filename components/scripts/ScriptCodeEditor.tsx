@@ -41,6 +41,8 @@ export interface ScriptCodeEditorProps {
 
 export interface ScriptCodeEditorHandle {
   focus: () => void;
+  /** Return the selected text, or an empty string when nothing is selected. */
+  getSelectionText: () => string;
 }
 
 export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptCodeEditorProps>(({
@@ -69,6 +71,13 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
 
   useImperativeHandle(forwardedRef, () => ({
     focus: () => editorRef.current?.focus(),
+    getSelectionText: () => {
+      const editor = editorRef.current;
+      const selection = editor?.getSelection();
+      const model = editor?.getModel();
+      if (!editor || !selection || !model || selection.isEmpty()) return '';
+      return model.getValueInRange(selection);
+    },
   }), []);
 
   useEffect(() => () => {

@@ -191,6 +191,12 @@ function createPgSession(target) {
         durationMs: Date.now() - started,
       };
     },
+    async control(action) {
+      const instance = await ensure();
+      const statement =
+        action === "begin" ? "BEGIN" : action === "commit" ? "COMMIT" : "ROLLBACK";
+      await instance.query(statement);
+    },
     cancel() {
       try {
         client?.connection?.stream?.destroy();
@@ -300,6 +306,12 @@ function createMysqlSession(target) {
       }
       connection = null;
     },
+    async control(action) {
+      const instance = await ensure();
+      if (action === "begin") await instance.beginTransaction();
+      else if (action === "commit") await instance.commit();
+      else await instance.rollback();
+    },
     async close() {
       const instance = connection;
       connection = null;
@@ -377,6 +389,12 @@ function createOracleSession(target) {
         durationMs: Date.now() - started,
       };
     },
+    async control(action) {
+      const instance = await ensure();
+      if (action === "commit") await instance.commit();
+      else if (action === "rollback") await instance.rollback();
+      // Oracle starts a transaction implicitly on the first DML statement.
+    },
     cancel() {
       try {
         connection?.break?.(() => {});
@@ -441,6 +459,11 @@ function createSqliteSession(target) {
         command: "SELECT",
         durationMs: Date.now() - started,
       };
+    },
+    async control(action) {
+      const statement =
+        action === "begin" ? "BEGIN" : action === "commit" ? "COMMIT" : "ROLLBACK";
+      db.exec(statement);
     },
     cancel() {
       /* synchronous driver: nothing to cancel */
@@ -600,6 +623,24 @@ const handlers = {
     }
   },
 
+  async control({ target, action }) {
+    if (!["begin", "commit", "rollback"].includes(action)) {
+      return failure(new Error(`Unsupported transaction action: ${action}`));
+    }
+    let entry;
+    try {
+      entry = getSession(target);
+    } catch (error) {
+      return failure(error);
+    }
+    try {
+      await entry.run(() => entry.session.control(action));
+      return { ok: true, action };
+    } catch (error) {
+      return failure(error);
+    }
+  },
+
   async cancel({ id }) {
     const entry = sessions.get(id);
     if (!entry) return { ok: true };
@@ -626,6 +667,7 @@ function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:test", (_event, target) => handlers.test(target));
   ipcMain.handle("netcatty:db:connect", (_event, target) => handlers.connect(target));
   ipcMain.handle("netcatty:db:query", (_event, payload) => handlers.query(payload || {}));
+  ipcMain.handle("netcatty:db:control", (_event, payload) => handlers.control(payload || {}));
   ipcMain.handle("netcatty:db:cancel", (_event, payload) => handlers.cancel(payload || {}));
   ipcMain.handle("netcatty:db:disconnect", (_event, payload) => handlers.disconnect(payload || {}));
   ipcMain.handle("netcatty:db:dispose", () => handlers.dispose());

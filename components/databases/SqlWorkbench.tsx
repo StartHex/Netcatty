@@ -3,8 +3,19 @@
  * grid. All query orchestration lives in useDatabaseWorkbench.
  */
 
-import { AlertTriangle, ArrowUpDown, Loader2, Play, RotateCw, Square, Wand2, X } from 'lucide-react';
-import React, { useEffect, useMemo, useRef } from 'react';
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  Download,
+  History,
+  Loader2,
+  Play,
+  RotateCw,
+  Square,
+  Wand2,
+  X,
+} from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { format as formatSqlText } from 'sql-formatter';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { useDatabaseWorkbench, type DatabaseTab } from '../../application/state/useDatabaseWorkbench';
@@ -14,7 +25,10 @@ import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { FixedSizeVirtualList } from '../ui/FixedSizeVirtualList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import { ScriptCodeEditor } from '../scripts/ScriptCodeEditor';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/ScriptCodeEditor';
+import { useSqlHistory } from '../../application/state/useSqlHistory';
+import { resultToCsv, suggestExportFileName } from '../../domain/database/sqlResultExport';
 
 const SQL_DIALECTS: Record<string, 'postgresql' | 'mysql' | 'mariadb' | 'plsql' | 'sqlite'> = {
   postgresql: 'postgresql',
@@ -86,9 +100,33 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
     void workbench.openTab(initialConnection);
   }, [open, initialConnection, workbench]);
 
-  useEffect(() => {
-    if (!open) openedRef.current = null;
-  }, [open]);
+  const editorRef = useRef<ScriptCodeEditorHandle | null>(null);
+  const sqlHistory = useSqlHistory();
+
+  const runActiveQuery = useCallback(() => {
+    if (!activeTab) return;
+    const selection = editorRef.current?.getSelectionText()?.trim();
+    const sql = selection && selection.length > 0 ? selection : activeTab.sql;
+    const trimmed = sql.trim();
+    if (!trimmed) return;
+    sqlHistory.record(activeTab.connectionId, trimmed);
+    void workbench.runQuery(activeTab.id, selection && selection.length > 0 ? selection : undefined);
+  }, [activeTab, sqlHistory, workbench]);
+
+  const exportCsv = useCallback(() => {
+    if (!activeTab?.result) return;
+    const csv = resultToCsv(activeTab.result);
+    if (!csv) return;
+    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = suggestExportFileName(activeTab.title, 'csv', Date.now());
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [activeTab?.result, activeTab?.title]);
+
+  const activeHistory = sqlHistory.entriesFor(activeTab?.connectionId);
 
   const widths = useMemo(() => columnWidths(activeTab?.result), [activeTab?.result]);
   const gridTemplate = useMemo(
@@ -150,7 +188,7 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                 size="sm"
                 className="h-7 text-xs"
                 disabled={activeTab.running || !activeTab.connected || !activeTab.sql.trim()}
-                onClick={() => void workbench.runQuery(activeTab.id)}
+                onClick={runActiveQuery}
               >
                 {activeTab.running ? (
                   <Loader2 className="mr-1 h-3 w-3 animate-spin" />
@@ -178,6 +216,82 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                 </TooltipTrigger>
                 <TooltipContent>{t('databases.workbench.format')}</TooltipContent>
               </Tooltip>
+              {activeTab.transactionOpen ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={activeTab.running}
+                    onClick={() => void workbench.commitTransaction(activeTab.id)}
+                  >
+                    {t('databases.workbench.commit')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    disabled={activeTab.running}
+                    onClick={() => void workbench.rollbackTransaction(activeTab.id)}
+                  >
+                    {t('databases.workbench.rollback')}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  disabled={activeTab.running || !activeTab.connected}
+                  onClick={() => void workbench.beginTransaction(activeTab.id)}
+                >
+                  {t('databases.workbench.beginTransaction')}
+                </Button>
+              )}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    disabled={activeHistory.length === 0}
+                    aria-label={t('databases.workbench.history')}
+                  >
+                    <History className="h-3.5 w-3.5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[420px] p-1">
+                  <div className="max-h-[320px] overflow-y-auto">
+                    {activeHistory.slice(0, 20).map((entry) => (
+                      <button
+                        key={`${entry.at}-${entry.sql.slice(0, 40)}`}
+                        type="button"
+                        className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-[11px] hover:bg-secondary"
+                        title={entry.sql}
+                        onClick={() => {
+                          workbench.updateSql(activeTab.id, entry.sql);
+                        }}
+                      >
+                        {entry.sql.replace(/\s+/g, ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    disabled={!activeTab.result}
+                    onClick={exportCsv}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('databases.workbench.exportCsv')}</TooltipContent>
+              </Tooltip>
               {activeTab.status === 'error' ? (
                 <Button
                   size="sm"
@@ -204,7 +318,8 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                 autoFocus
                 ariaLabel={t('databases.workbench.editorLabel')}
                 placeholder={t('databases.workbench.placeholder')}
-                onSubmitShortcut={() => void workbench.runQuery(activeTab.id)}
+                ref={editorRef}
+                onSubmitShortcut={runActiveQuery}
               />
             </div>
 
