@@ -551,7 +551,16 @@ navop 覆盖 MySQL/PostgreSQL/SQLite/MSSQL/Oracle/DuckDB/ClickHouse/达梦/人�
 - 表结构树（左侧按 schema 分组，点击表名生成 `select * limit 100` 并执行）
 - 查询历史、事务 begin/commit/rollback、CSV 导出、执行选中 SQL
 
-### 12.6 尚未实现（原 12.3 的剩余项）
+### 12.6 阶段三：驱动与内置库扩展（2026-10）
+
+- JDBC 驱动管理器：`domain/database/jdbcDrivers.ts` + `components/databases/JdbcDriversDialog.tsx`，
+  驱动（名称/厂商预设/驱动类/多 jar）注册一次即可被所有 JDBC 连接复用；驱动注册表存在
+  `netcatty_jdbc_drivers_v1`，随 vault 导出导入，但**不进云同步**（jar 路径是设备本地）。
+- SQL Server 内置驱动（`tedious`，纯 JS）：默认端口 1433，支持加密开关、表结构树、
+  取消/关闭；事务由其自身管理。
+- 修正连接编辑器驱动类型列表遗漏 JDBC 的问题。
+
+### 12.7 尚未实现（原 12.3 的剩余项）
 
 - 连接克隆、分组/排序 UI、收藏与最近连接
 - 编辑器自动补全（表/列名）、结果分页与列宽拖拽持久化
