@@ -17,6 +17,11 @@ import {
 } from '../../domain/models';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
 import type { DbTestConnectionResult } from '../../domain/models';
+import {
+  JDBC_PRESETS,
+  applyJdbcPresetTemplate,
+  findJdbcPreset,
+} from '../../domain/database/jdbcPresets';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -51,6 +56,7 @@ interface FormState {
   jdbcDriverClass: string;
   jdbcDriverPaths: string[];
   javaPath: string;
+  jdbcPresetId: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -70,6 +76,7 @@ const EMPTY_FORM: FormState = {
   jdbcDriverClass: '',
   jdbcDriverPaths: [],
   javaPath: '',
+  jdbcPresetId: '',
 };
 
 function formFromConnection(connection: DatabaseConnection): FormState {
@@ -90,6 +97,7 @@ function formFromConnection(connection: DatabaseConnection): FormState {
     jdbcDriverClass: connection.jdbcDriverClass ?? '',
     jdbcDriverPaths: connection.jdbcDriverPaths ?? [],
     javaPath: connection.javaPath ?? '',
+    jdbcPresetId: '',
   };
 }
 
@@ -210,6 +218,25 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
     }
   };
 
+  const applyPreset = (presetId: string) => {
+    const preset = findJdbcPreset(presetId);
+    if (!preset) {
+      update('jdbcPresetId', presetId);
+      return;
+    }
+    setForm((prev) => ({
+      ...prev,
+      jdbcPresetId: presetId,
+      jdbcDriverClass: preset.driverClass,
+      jdbcUrl: applyJdbcPresetTemplate(preset, {
+        host: prev.host || '127.0.0.1',
+        port: Number(prev.port) || preset.defaultPort,
+        database: prev.database,
+      }),
+    }));
+    setTest({ status: 'idle' });
+  };
+
   const addDriverJar = async () => {
     const selected = await netcattyBridge.get()?.selectFile?.(
       t('databases.form.jdbcDriverJars'),
@@ -272,6 +299,36 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
 
           {isJdbc ? (
             <>
+              <div className="grid gap-2">
+                <Label>{t('databases.form.jdbcPreset')}</Label>
+                <Select
+                  value={form.jdbcPresetId || '__custom__'}
+                  onValueChange={(value) => applyPreset(value === '__custom__' ? '' : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__custom__">{t('databases.form.jdbcPresetCustom')}</SelectItem>
+                    {JDBC_PRESETS.map((preset) => (
+                      <SelectItem key={preset.id} value={preset.id}>
+                        {preset.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {findJdbcPreset(form.jdbcPresetId) ? (
+                  <a
+                    className="text-xs text-muted-foreground underline hover:text-foreground"
+                    href={findJdbcPreset(form.jdbcPresetId)!.downloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t('databases.form.jdbcPresetDownload')}
+                  </a>
+                ) : null}
+              </div>
+
               <div className="grid gap-2">
                 <Label htmlFor="db-jdbc-url">{t('databases.form.jdbcUrl')}</Label>
                 <Input
