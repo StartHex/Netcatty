@@ -902,6 +902,39 @@ function targetKey(target) {
   ].join("|");
 }
 
+/** Very small SQL splitter: enough for init scripts, not a full parser. */
+function splitSqlStatements(script) {
+  const statements = [];
+  let current = "";
+  let quote = null;
+  for (let index = 0; index < script.length; index += 1) {
+    const char = script[index];
+    if (quote) {
+      current += char;
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === "-" && script[index + 1] === "-") {
+      const end = script.indexOf("\n", index);
+      index = end === -1 ? script.length : end;
+      continue;
+    }
+    if (char === ";") {
+      if (current.trim()) statements.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) statements.push(current.trim());
+  return statements;
+}
+
 function getSession(target) {
   const key = targetKey(target);
   let entry = sessions.get(key);
@@ -917,11 +950,24 @@ function getSession(target) {
         chain = next.catch(() => {});
         return next;
       },
+      ready: Promise.resolve(),
+      initError: null,
       async close() {
         await session.close();
         sessions.delete(key);
       },
     };
+    if (typeof target.initSql === "string" && target.initSql.trim()) {
+      entry.ready = entry
+        .run(async () => {
+          for (const statement of splitSqlStatements(target.initSql)) {
+            await session.query(statement, { maxRows: 1 });
+          }
+        })
+        .catch((error) => {
+          entry.initError = normalizeError(error);
+        });
+    }
     sessions.set(key, entry);
   }
   return entry;
@@ -956,6 +1002,8 @@ const handlers = {
       return failure(error);
     }
     try {
+      await entry.ready;
+      if (entry.initError) throw entry.initError;
       const serverVersion = await entry.run(() => entry.session.serverVersion());
       return { ok: true, durationMs: Date.now() - started, serverVersion };
     } catch (error) {
@@ -974,6 +1022,8 @@ const handlers = {
       return failure(error);
     }
     try {
+      await entry.ready;
+      if (entry.initError) throw entry.initError;
       const serverVersion = await entry.run(() => entry.session.serverVersion());
       return { ok: true, durationMs: Date.now() - started, serverVersion };
     } catch (error) {
@@ -995,6 +1045,8 @@ const handlers = {
     const limit = clampMaxRows(maxRows);
     const timeout = clampTimeout(timeoutMs);
     try {
+      await entry.ready;
+      if (entry.initError) throw entry.initError;
       const result = await entry.run(() =>
         withTimeout(entry.session.query(sql, { maxRows: limit }), timeout, () => entry.session.cancel()),
       );

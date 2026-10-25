@@ -78,6 +78,8 @@ export const zhCNDatabaseMessages: Messages = {
   'databases.form.jdbcJarHint': '选择厂商提供的 JDBC 驱动 jar；驱动有依赖时把依赖 jar 一并加入。',
   'databases.form.javaPath': 'Java 可执行文件（可选）',
   'databases.form.javaPathPlaceholder': '自动检测',
+  'databases.form.initSql': '初始化 SQL',
+  'databases.form.initSqlHint': '会话打开时执行一次，适合重建内存库结构。',
   'databases.form.sslMode': 'SSL 模式',
   'databases.form.sqlitePath': '数据库文件',
   'databases.form.sqlitePathPlaceholder': '选择一个 .db 文件',

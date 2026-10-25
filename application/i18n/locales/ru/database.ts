@@ -78,6 +78,8 @@ export const ruDatabaseMessages: Messages = {
   'databases.form.jdbcJarHint': 'Выберите JDBC-драйвер вендора; при необходимости добавьте jar-файлы зависимостей.',
   'databases.form.javaPath': 'Исполняемый файл Java (необязательно)',
   'databases.form.javaPathPlaceholder': 'Определять автоматически',
+  'databases.form.initSql': 'SQL инициализации',
+  'databases.form.initSqlHint': 'Выполняется при открытии сессии — удобно для пересоздания схемы в памяти.',
   'databases.form.sslMode': 'Режим SSL',
   'databases.form.sqlitePath': 'Файл базы данных',
   'databases.form.sqlitePathPlaceholder': 'Выберите файл .db',

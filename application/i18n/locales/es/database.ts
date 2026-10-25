@@ -78,6 +78,8 @@ export const esDatabaseMessages: Messages = {
   'databases.form.jdbcJarHint': 'Elige el jar JDBC del fabricante; añade también los jars de dependencias si hacen falta.',
   'databases.form.javaPath': 'Ejecutable de Java (opcional)',
   'databases.form.javaPathPlaceholder': 'Detectar automáticamente',
+  'databases.form.initSql': 'SQL de inicialización',
+  'databases.form.initSqlHint': 'Se ejecuta al abrir la sesión; útil para recrear esquemas en memoria.',
   'databases.form.sslMode': 'Modo SSL',
   'databases.form.sqlitePath': 'Archivo de base de datos',
   'databases.form.sqlitePathPlaceholder': 'Elige un archivo .db',

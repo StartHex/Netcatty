@@ -78,6 +78,8 @@ export const zhTNDatabaseMessages: Messages = {
   'databases.form.jdbcJarHint': '選擇廠商提供的 JDBC 驅動 jar；驅動有相依套件時一併加入。',
   'databases.form.javaPath': 'Java 執行檔（選填）',
   'databases.form.javaPathPlaceholder': '自動偵測',
+  'databases.form.initSql': '初始化 SQL',
+  'databases.form.initSqlHint': '工作階段開啟時執行一次，適合重建記憶體資料庫結構。',
   'databases.form.sslMode': 'SSL 模式',
   'databases.form.sqlitePath': '資料庫檔案',
   'databases.form.sqlitePathPlaceholder': '選擇一個 .db 檔案',

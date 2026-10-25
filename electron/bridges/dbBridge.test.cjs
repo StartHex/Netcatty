@@ -219,3 +219,31 @@ test("jdbc: reports a clear error when Java is missing", async () => {
   assert.match(result.error.message, /Java|java|sidecar/i);
   await handlers.disconnect({ id: "jdbc-no-java", kind: "jdbc" });
 });
+
+test("initSql runs once before the first query", async () => {
+  const target = {
+    id: "sqlite-init",
+    kind: "sqlite",
+    sqlitePath: ":memory:",
+    initSql: "create table init_probe(value integer);\ninsert into init_probe values (7);",
+  };
+  const connected = await handlers.connect(target);
+  assert.equal(connected.ok, true);
+  const result = await handlers.query({ target, sql: "select value from init_probe" });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.result.rows, [[7]]);
+  await handlers.disconnect({ id: "sqlite-init", kind: "sqlite" });
+});
+
+test("a failing initSql surfaces on connect", async () => {
+  const target = {
+    id: "sqlite-init-bad",
+    kind: "sqlite",
+    sqlitePath: ":memory:",
+    initSql: "create table broken(",
+  };
+  const connected = await handlers.connect(target);
+  assert.equal(connected.ok, false);
+  assert.ok(connected.error.message);
+  await handlers.disconnect({ id: "sqlite-init-bad", kind: "sqlite" });
+});

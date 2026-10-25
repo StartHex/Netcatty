@@ -78,6 +78,8 @@ export const enDatabaseMessages: Messages = {
   'databases.form.jdbcJarHint': 'Pick the vendor JDBC driver jar; add dependency jars too when the driver needs them.',
   'databases.form.javaPath': 'Java executable (optional)',
   'databases.form.javaPathPlaceholder': 'Auto-detect',
+  'databases.form.initSql': 'Initialisation SQL',
+  'databases.form.initSqlHint': 'Run once when the session opens — used to recreate in-memory schemas.',
   'databases.form.sslMode': 'SSL mode',
   'databases.form.sqlitePath': 'Database file',
   'databases.form.sqlitePathPlaceholder': 'Choose a .db file',

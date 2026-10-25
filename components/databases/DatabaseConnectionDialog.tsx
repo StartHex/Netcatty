@@ -50,6 +50,7 @@ interface FormState {
   password: string;
   savePassword: boolean;
   sslMode: DatabaseSslMode;
+  initSql: string;
   sqlitePath: string;
   inMemory: boolean;
   sshHostId: string;
@@ -71,6 +72,7 @@ const EMPTY_FORM: FormState = {
   password: '',
   savePassword: true,
   sslMode: 'disable',
+  initSql: '',
   sqlitePath: '',
   inMemory: false,
   sshHostId: '',
@@ -93,6 +95,7 @@ function formFromConnection(connection: DatabaseConnection): FormState {
     password: connection.password ?? '',
     savePassword: connection.savePassword !== false,
     sslMode: connection.sslMode ?? 'disable',
+    initSql: connection.initSql ?? '',
     sqlitePath: connection.sqlitePath ?? '',
     inMemory: connection.inMemory === true,
     sshHostId: connection.sshHostId ?? '',
@@ -184,6 +187,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       password: form.savePassword ? form.password : undefined,
       savePassword: form.savePassword,
       sslMode: isSqlite ? undefined : form.sslMode,
+      initSql: form.initSql.trim() || undefined,
       sqlitePath: isSqlite ? form.sqlitePath.trim() : undefined,
       inMemory: isSqlite ? form.inMemory : undefined,
       sshHostId: isSqlite ? undefined : form.sshHostId || undefined,
@@ -588,6 +592,17 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
               </div>
             </>
           )}
+
+          <div className="grid gap-2">
+            <Label htmlFor="db-init-sql">{t('databases.form.initSql')}</Label>
+            <textarea
+              id="db-init-sql"
+              className="min-h-[64px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+              value={form.initSql}
+              onChange={(event) => update('initSql', event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t('databases.form.initSqlHint')}</p>
+          </div>
 
           <p className="text-xs text-muted-foreground">{databaseDisplayTarget(draft)}</p>
 
