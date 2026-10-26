@@ -42,6 +42,7 @@ import { resolveEffectiveTerminalHost } from '../../domain/terminalHostResolutio
 import { useDefaultLocalShellContext } from '../../lib/useDiscoveredShells';
 import { getAvailablePaneMagnificationController } from '../../domain/paneMagnification';
 import { pluginViewTabStore, usePluginViewTabs } from '../state/pluginViewTabStore';
+import { databaseTabStore, toDatabaseTabId, useDatabaseTabs } from '../state/databaseTabStore';
 import { buildPluginSettingScopeCatalog } from '../state/usePluginSettingScopeCatalog';
 import { useWorkSurfaceHostEditor } from '../state/useWorkSurfaceHostEditor';
 import {
@@ -224,6 +225,7 @@ function AppViewInner({ domains }: AppViewProps) {
   // (TopTabs items, mounts, host tree, chrome, plugin keybindings) own that
   // subscription so top-tab switches do not rebuild the App shell.
   const pluginViewTabs = usePluginViewTabs();
+  const databaseTabs = useDatabaseTabs();
   // Merge domain slices once per AppView render. AppView only re-renders when a
   // domain slice identity changes (see appViewDomainsEqual). Depend on the
   // domain bag so the hook graph stays honest; bag identity only changes when
@@ -284,12 +286,17 @@ function AppViewInner({ domains }: AppViewProps) {
     toggleBroadcast, toggleScriptsSidePanelRef, toggleSidePanelRef, terminalPaneMagnificationRef, sftpPaneMagnificationRef, toggleWorkspaceViewMode, unmanageSource,
     readPersistedHosts, readPersistedManagedSources, updateCustomGroups, updateGroupConfigs, updateHostDistro, updateHosts, updateIdentities, updateKeys, updateKnownHosts, updateManagedSources,
     updateProxyProfiles, updateOtpAuthenticators, updateSnippetPackages, updateSnippets, updateSplitSizes, updateTerminalSetting, vaultFocusRequest, workspaceRenameTarget, workspaces,
-    VaultViewContainer, SftpViewMount, TerminalLayerMount, LogViewWrapper,
+    VaultViewContainer, SftpViewMount, TerminalLayerMount, LogViewWrapper, DatabaseWorkbenchMount,
   } = ctx;
 
   // Chrome-visible settings slice comes from settingsChromeStore, not from the
   // App chrome domain bag — the whole `settings` object changes identity on
   // every settings render and would rebuild the shell.
+  const dbTunnelDeps = useMemo(
+    () => ({ hosts, keys, identities, knownHosts: effectiveKnownHosts, terminalSettings }),
+    [hosts, keys, identities, effectiveKnownHosts, terminalSettings],
+  );
+
   const {
     theme: themePreference,
     resolvedTheme,
@@ -424,6 +431,16 @@ function AppViewInner({ domains }: AppViewProps) {
       activeTabStore.setActiveTabId(next === tabId ? 'vault' : next);
     }
     pluginViewTabStore.close(tabId);
+  }, [orderedTabsWithEditors]);
+
+  const handleCloseDatabaseTab = useCallback((tabId: string) => {
+    databaseTabStore.requestClose(tabId);
+    const topId = toDatabaseTabId(tabId);
+    if (activeTabStore.getActiveTabId() === topId) {
+      const index = orderedTabsWithEditors.indexOf(topId);
+      const next = orderedTabsWithEditors[index - 1] ?? orderedTabsWithEditors[index + 1] ?? 'vault';
+      activeTabStore.setActiveTabId(next === topId ? 'vault' : next);
+    }
   }, [orderedTabsWithEditors]);
 
   const orderedTabsWithEditorsRef = useRef(orderedTabsWithEditors);
@@ -578,6 +595,8 @@ function AppViewInner({ domains }: AppViewProps) {
         editorTabs={editorTabs}
         pluginViewTabs={pluginViewTabs}
         onClosePluginViewTab={closePluginViewTab}
+        databaseTabs={databaseTabs}
+        onCloseDatabaseTab={handleCloseDatabaseTab}
         onRequestCloseEditorTab={handleRequestCloseEditorTab}
         onPopOutEditorTab={handlePopOutEditorTab}
         onFocusEditorWindowTab={(id) => { void focusEditorInWindow(id); }}
@@ -827,6 +846,12 @@ function AppViewInner({ domains }: AppViewProps) {
           onStartSessionRename={startSessionRename}
           onSubmitSessionRename={submitSessionRename}
           onRemoveSessionFromWorkspace={removeSessionFromWorkspace}
+        />
+
+        <DatabaseWorkbenchMount
+          connections={dbConnections}
+          tunnelDeps={dbTunnelDeps}
+          onUpdateConnections={updateDbConnections}
         />
 
         {/* Log Views - readonly terminal replays. The latest log body comes

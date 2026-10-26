@@ -11,6 +11,7 @@ import {
   cancelDatabaseQuery,
   closeDatabaseConnection,
   databaseConnectionTarget,
+  listDatabaseColumns,
   formatDatabaseError,
   openDatabaseConnection,
   controlDatabaseTransaction,
@@ -18,6 +19,7 @@ import {
   runDatabaseQuery,
   testDatabaseConnection,
   type DbBridgeError,
+  type DbColumnInfo,
   type DbTableRef,
 } from '../../infrastructure/services/databaseService';
 import {
@@ -28,6 +30,7 @@ import {
   type DatabaseTunnelDeps,
 } from '../../infrastructure/services/databaseTunnelService';
 import type { DbConnectionTarget, DbTestConnectionResult } from '../../domain/models';
+import { databaseTabStore, useDatabaseTabRequest } from './databaseTabStore';
 
 export type { DatabaseTunnelDeps } from '../../infrastructure/services/databaseTunnelService';
 export type { DbColumnInfo, DbTableRef } from '../../infrastructure/services/databaseService';
@@ -35,7 +38,7 @@ export type { DbColumnInfo, DbTableRef } from '../../infrastructure/services/dat
 /** Rows fetched for a statement that carries no LIMIT of its own. */
 const FULL_RESULT_ROWS = 10000;
 
-export type DatabaseTabStatus = 'connecting' | 'ready' | 'error';
+export type DatabaseTabStatus = 'idle' | 'connecting' | 'ready' | 'error';
 
 export interface DatabaseTab {
   id: string;
@@ -57,13 +60,15 @@ export interface DatabaseTab {
   tablesError?: string;
   /** Row cap for the next run (100..5000). */
   maxRows: number;
+  /** Column metadata shown by the schema panel's structure view. */
+  structure?: { table: DbTableRef; columns: DbColumnInfo[]; loading?: boolean; error?: string };
 }
 
 export interface UseDatabaseWorkbenchResult {
   tabs: DatabaseTab[];
   activeTabId: string | null;
   activeTab: DatabaseTab | undefined;
-  openTab: (connection: DatabaseConnection) => Promise<string>;
+  openTab: (connection: DatabaseConnection, options?: { forceNew?: boolean }) => Promise<string>;
   closeTab: (tabId: string) => void;
   setActiveTabId: (tabId: string | null) => void;
   updateSql: (tabId: string, sql: string) => void;
@@ -74,6 +79,8 @@ export interface UseDatabaseWorkbenchResult {
   rollbackTransaction: (tabId: string) => Promise<void>;
   refreshTables: (tabId: string) => Promise<void>;
   previewTable: (tabId: string, table: DbTableRef) => Promise<void>;
+  showStructure: (tabId: string, table: DbTableRef) => Promise<void>;
+  clearStructure: (tabId: string) => void;
   cancelQuery: (tabId: string) => void;
   reconnect: (tabId: string) => Promise<void>;
 }
@@ -214,6 +221,37 @@ export function useDatabaseWorkbench(
     [patchTab, resolveTarget],
   );
 
+  const showStructure = useCallback(
+    async (tabId: string, table: DbTableRef) => {
+      const activeTab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!activeTab) return;
+      const connection = connectionsRef.current.find((entry) => entry.id === activeTab.connectionId);
+      if (!connection) return;
+      patchTab(tabId, { structure: { table, columns: [], loading: true } });
+      const resolved = await resolveTarget(connection);
+      if (resolved.ok !== true) {
+        patchTab(tabId, { structure: { table, columns: [], error: resolved.error } });
+        return;
+      }
+      const response = await listDatabaseColumns(resolved.target, table.name, table.schema);
+      if (response.ok === true) {
+        patchTab(tabId, { structure: { table, columns: response.columns } });
+      } else {
+        patchTab(tabId, {
+          structure: { table, columns: [], error: formatDatabaseError(response.error) },
+        });
+      }
+    },
+    [patchTab, resolveTarget],
+  );
+
+  const clearStructure = useCallback(
+    (tabId: string) => {
+      patchTab(tabId, { structure: undefined });
+    },
+    [patchTab],
+  );
+
   const connectTab = useCallback(
     async (tabId: string, connection: DatabaseConnection) => {
       const seq = (openSeqRef.current.get(tabId) ?? 0) + 1;
@@ -257,8 +295,10 @@ export function useDatabaseWorkbench(
   );
 
   const openTab = useCallback(
-    async (connection: DatabaseConnection) => {
-      const existing = tabsRef.current.find((tab) => tab.connectionId === connection.id);
+    async (connection: DatabaseConnection, options?: { forceNew?: boolean }) => {
+      const existing = options?.forceNew
+        ? undefined
+        : tabsRef.current.find((tab) => tab.connectionId === connection.id);
       if (existing) {
         setActiveTabIdState(existing.id);
         return existing.id;
@@ -424,6 +464,94 @@ export function useDatabaseWorkbench(
     [connectTab],
   );
 
+  // Hydrate persisted tabs once connections are available. Restored tabs stay
+  // disconnected until the user activates them.
+  const hydrateGuardRef = useRef(false);
+  useEffect(() => {
+    if (hydrateGuardRef.current) return;
+    if (connections.length === 0) return;
+    hydrateGuardRef.current = true;
+    const persisted = databaseTabStore.loadPersisted();
+    if (!persisted || persisted.tabs.length === 0) return;
+    const restored = persisted.tabs
+      .map((entry) => {
+        const connection = connections.find((item) => item.id === entry.connectionId);
+        if (!connection) return null;
+        const tab: DatabaseTab = {
+          id: entry.id,
+          connectionId: entry.connectionId,
+          title: entry.title || connection.label,
+          kind: connection.kind,
+          sql: databaseTabStore.loadDraft(entry.id) ?? entry.sql ?? '',
+          status: 'idle',
+          connected: false,
+          running: false,
+          maxRows: 1000,
+        };
+        return tab;
+      })
+      .filter((tab): tab is DatabaseTab => tab !== null);
+    if (restored.length === 0) return;
+    setTabs((prev) => (prev.length === 0 ? restored : prev));
+    const persistedActive = persisted.activeTabId;
+    setActiveTabIdState((current) =>
+      current ??
+      (persistedActive && restored.some((tab) => tab.id === persistedActive)
+        ? persistedActive
+        : restored[0].id),
+    );
+  }, [connections]);
+
+  // Publish tab summaries for the tab bar and persist drafts for restart restore.
+  useEffect(() => {
+    const summaries = tabs.map((tab) => ({
+      id: tab.id,
+      connectionId: tab.connectionId,
+      title: tab.title,
+      kind: tab.kind,
+      status: (tab.connected ? 'ready' : tab.status) as 'idle' | 'connecting' | 'ready' | 'error',
+      transactionOpen: tab.transactionOpen,
+    }));
+    databaseTabStore.sync(summaries, activeTabId);
+    databaseTabStore.saveDrafts(
+      tabs.map((tab) => ({
+        id: tab.id,
+        connectionId: tab.connectionId,
+        title: tab.title,
+        sql: tab.sql,
+      })),
+      activeTabId,
+    );
+  }, [tabs, activeTabId]);
+
+  // Requests raised by the vault list / tab bar (open or close).
+  const tabRequest = useDatabaseTabRequest();
+  useEffect(() => {
+    if (!tabRequest) return;
+    databaseTabStore.clearRequest(tabRequest.nonce);
+    if (tabRequest.type === 'open') {
+      const connection = connectionsRef.current.find((item) => item.id === tabRequest.connectionId);
+      if (!connection) return;
+      void openTab(connection, { forceNew: tabRequest.forceNew }).then((id) => {
+        setActiveTabIdState(id);
+        databaseTabStore.activate(id);
+        databaseTabStore.markActive(id);
+      });
+    } else if (tabRequest.type === 'close') {
+      closeTab(tabRequest.tabId);
+    }
+  }, [tabRequest, openTab, closeTab]);
+
+  // A restored tab connects lazily the first time it becomes active.
+  useEffect(() => {
+    if (!activeTabId) return;
+    const tab = tabsRef.current.find((entry) => entry.id === activeTabId);
+    if (!tab || tab.status !== 'idle') return;
+    const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
+    if (!connection) return;
+    void connectTab(activeTabId, connection);
+  }, [activeTabId, connectTab]);
+
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
   useEffect(() => () => {
@@ -444,6 +572,8 @@ export function useDatabaseWorkbench(
     setMaxRows,
     refreshTables,
     previewTable,
+    showStructure,
+    clearStructure,
     beginTransaction,
     commitTransaction,
     rollbackTransaction,

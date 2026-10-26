@@ -284,6 +284,7 @@ test("duplicate double-click behavior falls back to copying when unavailable", (
 test("draggable top-tab close buttons cancel the drag gesture on mousedown", () => {
   const closeButtonLabels = [
     "tabs.closePluginViewAria",
+    "tabs.closeDatabaseAria",
     "Close editor tab",
     "tabs.closeSessionAria",
     "tabs.closeLogViewAria",
@@ -304,7 +305,7 @@ test("draggable top-tab close buttons cancel the drag gesture on mousedown", () 
 
   assert.equal(
     topTabItemsSource.match(/onMouseDown=\{handleTabCloseButtonMouseDown\}/g)?.length,
-    4,
+    5,
   );
 
   const workspaceSource = topTabItemsSource.slice(
@@ -316,7 +317,7 @@ test("draggable top-tab close buttons cancel the drag gesture on mousedown", () 
 });
 
 test("draggable top tab roots activate sub-threshold presses and still reorder past the threshold", () => {
-  const tabTypes = ["plugin-view", "editor", "session", "workspace", "logView"];
+  const tabTypes = ["plugin-view", "database", "editor", "session", "workspace", "logView"];
 
   for (const tabType of tabTypes) {
     const marker = `data-tab-type="${tabType}"`;
@@ -347,7 +348,7 @@ test("draggable top tab roots activate sub-threshold presses and still reorder p
   }
 
   assert.equal(topTabItemsSource.match(/onMouseDown=\{handleTabMiddleMouseDown\}/g)?.length ?? 0, 0);
-  assert.equal(topTabItemsSource.match(/handleTabDragThresholdRelease\(/g)?.length, 10);
+  assert.equal(topTabItemsSource.match(/handleTabDragThresholdRelease\(/g)?.length, 12);
 });
 
 test("session close button double click stays on the close button", () => {

@@ -13,8 +13,6 @@ import {
   Download,
   History,
   Loader2,
-  Maximize2,
-  Minimize2,
   Play,
   RotateCw,
   Square,
@@ -28,6 +26,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format as formatSqlText } from 'sql-formatter';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { useDatabaseWorkbench, type DatabaseTab } from '../../application/state/useDatabaseWorkbench';
+import { databaseTabStore } from '../../application/state/databaseTabStore';
 import type { DatabaseConnection, DbCellValue, DbQueryResult } from '../../domain/models';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
@@ -92,39 +91,30 @@ function StatusDot({ tab }: { tab: DatabaseTab }) {
   return <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />;
 }
 
-interface SqlWorkbenchProps {
-  open: boolean;
+interface DatabaseWorkbenchSurfaceProps {
+  /** Workbench tab id (without the `database:` prefix), or null when idle. */
+  tabId: string | null;
   connections: DatabaseConnection[];
   /** Vault lookups used to dial connections that route through an SSH host. */
   tunnelDeps?: DatabaseTunnelDeps;
-  initialConnection?: DatabaseConnection | null;
   onUpdateConnections?: (connections: DatabaseConnection[] | ((prev: DatabaseConnection[]) => DatabaseConnection[])) => void;
-  onClose: () => void;
 }
 
-export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
-  open,
+export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> = ({
+  tabId,
   connections,
-  initialConnection,
   onUpdateConnections,
   tunnelDeps,
-  onClose,
 }) => {
   const { t } = useI18n();
   const workbench = useDatabaseWorkbench(connections, tunnelDeps);
   const { tabs, activeTab, activeTabId } = workbench;
-  const openedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      openedRef.current = null;
-      return;
-    }
-    if (!initialConnection) return;
-    if (openedRef.current === initialConnection.id) return;
-    openedRef.current = initialConnection.id;
-    void workbench.openTab(initialConnection);
-  }, [open, initialConnection, workbench]);
+    if (!tabId) return;
+    workbench.setActiveTabId(tabId);
+    databaseTabStore.markActive(tabId);
+  }, [tabId, workbench]);
 
   const editorRef = useRef<ScriptCodeEditorHandle | null>(null);
   const sqlHistory = useSqlHistory();
@@ -137,38 +127,8 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
   const [saveQueryName, setSaveQueryName] = useState('');
   // The workbench is a floating window: keep its size between openings and let
   // the schema tree be widened independently.
-  const [windowSize, setWindowSize] = useState<{ width: number; height: number } | null>(null);
-  const [maximized, setMaximized] = useState(false);
   const [schemaWidth, setSchemaWidth] = useState(190);
   const [pageByTab, setPageByTab] = useState<Record<string, number>>({});
-  const windowRef = useRef<HTMLDivElement | null>(null);
-
-  const beginResize = useCallback(
-    (event: React.MouseEvent) => {
-      event.preventDefault();
-      const rect = windowRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const startWidth = rect.width;
-      const startHeight = rect.height;
-      const onMove = (move: MouseEvent) => {
-        setMaximized(false);
-        setWindowSize({
-          width: Math.min(window.innerWidth - 24, Math.max(720, startWidth + (move.clientX - startX))),
-          height: Math.min(window.innerHeight - 24, Math.max(420, startHeight + (move.clientY - startY))),
-        });
-      };
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    },
-    [],
-  );
-
   const beginSchemaResize = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     const startX = event.clientX;
@@ -348,64 +308,22 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
-      <DialogContent
-        ref={windowRef}
-        className="relative flex flex-col gap-0 overflow-hidden p-0"
-        style={
-          maximized
-            ? { width: '96vw', height: '94vh', maxWidth: '96vw' }
-            : windowSize
-              ? { width: windowSize.width, height: windowSize.height, maxWidth: '96vw', maxHeight: '94vh' }
-              : { width: '94vw', height: '88vh', maxWidth: '1500px', maxHeight: '94vh' }
-        }
-      >
-        <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <DialogTitle className="text-sm">{t('databases.workbench.title')}</DialogTitle>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto h-6 w-6 p-0"
-              aria-label={maximized ? t('databases.workbench.restore') : t('databases.workbench.maximize')}
-              onClick={() => setMaximized((value) => !value)}
-            >
-              {maximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-            </Button>
-          </div>
-        </DialogHeader>
-
-        <div className="flex shrink-0 items-stretch overflow-x-auto border-b border-border/60">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              role="tab"
-              aria-selected={tab.id === activeTabId}
-              className={cn(
-                'group flex min-w-[140px] max-w-[240px] cursor-pointer items-center gap-1.5 border-r border-border/50 px-3 py-2 text-xs',
-                tab.id === activeTabId ? 'bg-secondary/70 text-foreground' : 'text-muted-foreground hover:bg-secondary/40',
-              )}
-              onClick={() => workbench.setActiveTabId(tab.id)}
-            >
-              <StatusDot tab={tab} />
-              <span className="truncate">{tab.title}</span>
-              <button
-                type="button"
-                className="ml-auto rounded p-0.5 opacity-60 hover:bg-background hover:opacity-100"
-                aria-label={t('databases.workbench.closeTab')}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  workbench.closeTab(tab.id);
-                }}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-        </div>
-
+    <>
+      <div className="relative flex h-full min-h-0 flex-col bg-background">
         {activeTab ? (
           <>
+            <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-1.5 text-xs">
+              <StatusDot tab={activeTab} />
+              <span className="truncate font-medium">{activeTab.title}</span>
+              {activeTab.transactionOpen ? (
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                  {t('databases.workbench.beginTransaction')}
+                </span>
+              ) : null}
+              <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
+                {activeTab.serverVersion ?? ''}
+              </span>
+            </div>
             <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-1.5">
               <Button
                 size="sm"
@@ -618,6 +536,7 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                 width={schemaWidth}
                 onRefresh={() => void workbench.refreshTables(activeTab.id)}
                 onPreview={(table) => void workbench.previewTable(activeTab.id, table)}
+                onShowStructure={(table) => void workbench.showStructure(activeTab.id, table)}
                 t={t}
               />
               <div
@@ -634,7 +553,7 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                 onChange={(value) => workbench.updateSql(activeTab.id, value)}
                 language="sql"
                 fill
-                active={open}
+                active
                 autoFocus
                 ariaLabel={t('databases.workbench.editorLabel')}
                 placeholder={t('databases.workbench.placeholder')}
@@ -661,7 +580,17 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                 </div>
               ) : null}
 
-              {pagedResult ? (
+              {activeTab.structure ? (
+                <StructurePanel
+                  structure={activeTab.structure}
+                  onClose={() => workbench.clearStructure(activeTab.id)}
+                  onPreview={() => {
+                    const table = activeTab.structure?.table;
+                    if (table) void workbench.previewTable(activeTab.id, table);
+                  }}
+                  t={t}
+                />
+              ) : pagedResult ? (
                 <ResultGrid result={pagedResult} gridTemplate={gridTemplate} t={t} />
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
@@ -755,13 +684,7 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
             {t('databases.workbench.noTab')}
           </div>
         )}
-        <div
-          role="separator"
-          aria-label={t('databases.workbench.resize')}
-          className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize rounded-tl bg-border/40 hover:bg-border"
-          onMouseDown={beginResize}
-        />
-      </DialogContent>
+      </div>
       <Dialog open={saveQueryOpen} onOpenChange={setSaveQueryOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -801,7 +724,7 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
           setPendingRun(null);
         }}
       />
-    </Dialog>
+    </>
   );
 };
 
@@ -810,10 +733,11 @@ interface SchemaPanelProps {
   width: number;
   onRefresh: () => void;
   onPreview: (table: DbTableRef) => void;
+  onShowStructure: (table: DbTableRef) => void;
   t: ReturnType<typeof useI18n>['t'];
 }
 
-const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, width, onRefresh, onPreview, t }) => {
+const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, width, onRefresh, onPreview, onShowStructure, t }) => {
   const grouped = useMemo(() => {
     const map = new Map<string, DbTableRef[]>();
     for (const table of tab.tables ?? []) {
@@ -861,25 +785,98 @@ const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, width, onRefresh, onPrev
                 </p>
               ) : null}
               {tables.map((table) => (
-                <button
+                <div
                   key={`${table.schema}.${table.name}`}
-                  type="button"
-                  className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] hover:bg-secondary"
-                  title={`${table.schema}.${table.name}`}
-                  onClick={() => onPreview(table)}
+                  className="group flex w-full items-center gap-1 rounded px-1 py-0.5 text-[11px] hover:bg-secondary"
                 >
-                  {table.type === 'view' ? (
-                    <Eye className="h-3 w-3 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <Table2 className="h-3 w-3 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className="truncate">{table.name}</span>
-                </button>
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                    title={`${table.schema}.${table.name}`}
+                    onClick={() => onShowStructure(table)}
+                  >
+                    {table.type === 'view' ? (
+                      <Eye className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <Table2 className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="truncate">{table.name}</span>
+                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="rounded p-0.5 opacity-0 transition-opacity hover:bg-background group-hover:opacity-100"
+                        aria-label={t('databases.schema.preview')}
+                        onClick={() => onPreview(table)}
+                      >
+                        <Play className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('databases.schema.preview')}</TooltipContent>
+                  </Tooltip>
+                </div>
               ))}
             </div>
           ))
         )}
       </div>
+    </div>
+  );
+};
+
+interface StructurePanelProps {
+  structure: NonNullable<DatabaseTab['structure']>;
+  onClose: () => void;
+  onPreview: () => void;
+  t: ReturnType<typeof useI18n>['t'];
+}
+
+const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onPreview, t }) => {
+  const { table, columns, loading, error } = structure;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-secondary/40 px-3 py-1.5">
+        <Table2 className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="truncate text-xs font-medium">{`${table.schema}.${table.name}`}</span>
+        <span className="text-[11px] text-muted-foreground">
+          {t('databases.structure.title')}
+        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={onPreview}>
+            <Play className="mr-1 h-3 w-3" />
+            {t('databases.schema.preview')}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" aria-label={t('common.close')} onClick={onClose}>
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+      {error ? (
+        <p className="px-3 py-2 text-xs text-destructive">{error}</p>
+      ) : loading ? (
+        <p className="px-3 py-2 text-xs text-muted-foreground">{t('databases.structure.loading')}</p>
+      ) : columns.length === 0 ? (
+        <p className="px-3 py-2 text-xs text-muted-foreground">{t('databases.structure.empty')}</p>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="sticky top-0 z-10 grid grid-cols-[minmax(160px,2fr)_minmax(120px,1.5fr)_80px] border-b border-border/60 bg-secondary/60 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span>{t('databases.structure.column')}</span>
+            <span>{t('databases.structure.type')}</span>
+            <span>{t('databases.structure.nullable')}</span>
+          </div>
+          {columns.map((column) => (
+            <div
+              key={column.name}
+              className="grid grid-cols-[minmax(160px,2fr)_minmax(120px,1.5fr)_80px] items-center border-b border-border/30 px-3 py-1 text-xs"
+            >
+              <span className="truncate font-mono">{column.name}</span>
+              <span className="truncate text-muted-foreground">{column.type ?? ''}</span>
+              <span className="text-muted-foreground">{column.nullable === false ? 'NOT NULL' : 'NULL'}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

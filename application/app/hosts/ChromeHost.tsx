@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n/I18nProvider';
 import { useCustomThemes } from '../../state/customThemeStore';
 import { useEditorTabChromeList } from '../../state/editorTabStore';
 import { toEditorTabId } from '../../state/activeTabStore';
+import { toDatabaseTabId, useDatabaseTabs } from '../../state/databaseTabStore';
 import {
   getSessionSnapshotActions,
   useSessionSnapshot,
@@ -45,6 +46,7 @@ export function ChromeHost() {
   const terminalSettings = useTerminalSettingsStore();
   const editorTabs = useEditorTabChromeList();
   const pluginViewTabs = usePluginViewTabs();
+  const databaseTabs = useDatabaseTabs();
   void pluginViewTabs;
   const customThemes = useCustomThemes();
   const handlers = useSyncExternalStore(
@@ -93,9 +95,13 @@ export function ChromeHost() {
     () => pluginViewTabs.map((tab) => tab.id),
     [pluginViewTabs],
   );
+  const databaseTabTopIds = useMemo(
+    () => databaseTabs.map((tab) => toDatabaseTabId(tab.id)),
+    [databaseTabs],
+  );
   const additionalWorkTabIds = useMemo(
-    () => [...editorTabTopIds, ...pluginViewTabIds],
-    [editorTabTopIds, pluginViewTabIds],
+    () => [...editorTabTopIds, ...pluginViewTabIds, ...databaseTabTopIds],
+    [editorTabTopIds, pluginViewTabIds, databaseTabTopIds],
   );
 
   const orderedTabsWithEditors = useMemo(

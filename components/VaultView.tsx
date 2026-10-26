@@ -172,8 +172,8 @@ const OtpAuthenticatorsManager = lazy(() => import("./OtpAuthenticatorsManager")
 const DatabasesManager = lazy(() =>
   import("./databases/DatabasesManager").then((module) => ({ default: module.DatabasesManager })),
 );
-const SqlWorkbench = lazy(() =>
-  import("./databases/SqlWorkbench").then((module) => ({ default: module.SqlWorkbench })),
+const DatabaseWorkbenchSurface = lazy(() =>
+  import("./databases/DatabaseWorkbenchSurface").then((module) => ({ default: module.DatabaseWorkbenchSurface })),
 );
 const SnippetsManager = lazy(() => import("./SnippetsManager"));
 
@@ -1719,7 +1719,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           onUpdateJdbcDrivers,
           onUpdateDbConnections,
           DatabasesManager,
-          SqlWorkbench,
+          DatabaseWorkbenchSurface,
           OtpAuthenticatorsManager,
           ProxyProfilesManager,
           quickConnectTarget,

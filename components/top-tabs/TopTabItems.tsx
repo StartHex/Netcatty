@@ -1,6 +1,7 @@
-import { Copy, FileCode, FileText, LayoutGrid, Minus, Server, Square, SquareArrowOutUpRight, Terminal, TerminalSquare, Usb, X } from 'lucide-react';
+import { Copy, Database, FileCode, FileText, LayoutGrid, Minus, Server, Square, SquareArrowOutUpRight, Terminal, TerminalSquare, Usb, X } from 'lucide-react';
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { activeTabStore, useActiveTabId, useIsTabActive } from '../../application/state/activeTabStore';
+import { toDatabaseTabId, type DatabaseTabSummary } from '../../application/state/databaseTabStore';
 import {
   useAnySessionActivity,
   useSessionActivity,
@@ -588,6 +589,134 @@ export const PluginViewTopTab: React.FC<PluginViewTopTabProps> = memo(({
   );
 });
 PluginViewTopTab.displayName = 'PluginViewTopTab';
+
+interface DatabaseTopTabProps {
+  tab: DatabaseTabSummary;
+  onClose: (tabId: string) => void;
+  renderBulkCloseItems: RenderBulkCloseItems;
+  t: TranslateFn;
+  isBeingDragged: boolean;
+  isDraggingForReorder: boolean;
+  shiftStyle: React.CSSProperties;
+  showDropIndicatorBefore: boolean;
+  showDropIndicatorAfter: boolean;
+  onTabDragStart: (e: React.DragEvent, tabId: string) => void;
+  onTabDragEnd: () => void;
+  onTabDragOver: (e: React.DragEvent, tabId: string) => void;
+  onTabDragLeave: (e: React.DragEvent) => void;
+  onTabDrop: (e: React.DragEvent, targetTabId: string) => void;
+  tabAnimationClass?: string;
+  shortcutNumber?: number;
+}
+
+export const DatabaseTopTab: React.FC<DatabaseTopTabProps> = memo(({
+  tab,
+  onClose,
+  renderBulkCloseItems,
+  t,
+  isBeingDragged,
+  isDraggingForReorder,
+  shiftStyle,
+  showDropIndicatorBefore,
+  showDropIndicatorAfter,
+  onTabDragStart,
+  onTabDragEnd,
+  onTabDragOver,
+  onTabDragLeave,
+  onTabDrop,
+  tabAnimationClass,
+  shortcutNumber,
+}) => {
+  const tabId = toDatabaseTabId(tab.id);
+  const isActive = useIsTabActive(tabId);
+  const activate = useCallback(() => {
+    activeTabStore.setActiveTabId(tabId);
+  }, [tabId]);
+  const close = useCallback((event?: React.MouseEvent) => {
+    event?.stopPropagation();
+    onClose(tab.id);
+  }, [onClose, tab.id]);
+  const busy = tab.status === 'connecting';
+  const dotClass =
+    tab.status === 'ready'
+      ? 'bg-emerald-500'
+      : tab.status === 'error'
+        ? 'bg-destructive'
+        : busy
+          ? 'bg-amber-500 animate-pulse'
+          : 'bg-muted-foreground/40';
+  const tabBody = (
+    <div
+      data-tab-id={tabId}
+      data-tab-type="database"
+      data-state={isActive ? 'active' : 'inactive'}
+      data-active={topTabActiveValue(isActive)}
+      onClick={activate}
+      onMouseDown={handleTabDragThresholdMouseDown}
+      onMouseUp={(event) => handleTabDragThresholdRelease(event, activate)}
+      onAuxClick={(event) => handleTabMiddleClickClose(event, close)}
+      draggable
+      onDragStart={(event) => {
+        handleTabDragThresholdDragStart(event);
+        onTabDragStart(event, tabId);
+      }}
+      onDrag={(event) => {
+        if (!handleTabDragThresholdDrag(event)) return;
+        onTabDragStart(event, tabId);
+      }}
+      onDragEnd={(event) => {
+        handleTabDragThresholdRelease(event, activate);
+        onTabDragEnd();
+      }}
+      onDragOver={(event) => onTabDragOver(event, tabId)}
+      onDragLeave={onTabDragLeave}
+      onDrop={(event) => onTabDrop(event, tabId)}
+      className={cn(
+        TOP_TAB_ITEM_CLASS,
+        'netcatty-tab relative h-7 min-w-[140px] max-w-[240px] flex-shrink-0 cursor-pointer items-center justify-between gap-2 overflow-hidden rounded-t-md pl-3 pr-2 text-xs font-semibold app-no-drag',
+        'flex transition-transform duration-150',
+        isBeingDragged && isDraggingForReorder && 'scale-95 opacity-40',
+        tabAnimationClass,
+      )}
+      style={{ ...shiftStyle, ...resolveTopTabChromeStyle(isActive) } as React.CSSProperties}
+    >
+      {showDropIndicatorBefore && isDraggingForReorder && <div className="absolute -left-0.5 bottom-1 top-1 w-0.5 rounded-full bg-primary" />}
+      {showDropIndicatorAfter && isDraggingForReorder && <div className="absolute -right-0.5 bottom-1 top-1 w-0.5 rounded-full bg-primary" />}
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {shortcutNumber != null ? (
+          <TabShortcutNumberBadge number={shortcutNumber} />
+        ) : (
+          <Database size={12} className="shrink-0 text-muted-foreground" />
+        )}
+        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dotClass)} aria-hidden="true" />
+        <span className="truncate leading-5">{tab.title}</span>
+      </div>
+      <button
+        onMouseDown={handleTabCloseButtonMouseDown}
+        onClick={close}
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-muted"
+        aria-label={t('tabs.closeDatabaseAria', { title: tab.title })}
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+  return (
+    <ContextMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <ContextMenuTrigger asChild>{tabBody}</ContextMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{tab.title}</TooltipContent>
+      </Tooltip>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={() => onClose(tab.id)}>{t('common.close')}</ContextMenuItem>
+        {renderBulkCloseItems(tabId)}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+});
+DatabaseTopTab.displayName = 'DatabaseTopTab';
 
 interface EditorTopTabProps {
   tabId: string;

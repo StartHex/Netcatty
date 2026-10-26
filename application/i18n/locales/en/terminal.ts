@@ -720,6 +720,7 @@ export const enTerminalMessages: Messages = {
   'tabs.closeSessionAria': 'Close session',
   'tabs.closeLogViewAria': 'Close log view',
   'tabs.closePluginViewAria': 'Close {title}',
+  'tabs.closeDatabaseAria': 'Close {title}',
   'tabs.logPrefix': 'Log:',
   'tabs.logLocal': 'Local',
   'tabs.copyTab': 'Copy Tab',

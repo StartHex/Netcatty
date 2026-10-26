@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useActiveTabId, useIsSftpActive, useIsVaultActive } from '../state/activeTabStore';
+import { fromDatabaseTabId, isDatabaseTabId } from '../state/databaseTabStore';
 import { useTerminalHostTreeLayoutWidth } from '../state/terminalHostTreeStore';
 import { isTerminalContentTabSurface } from './workTabSurface';
 import { cn } from '../../lib/utils';
@@ -8,6 +9,8 @@ import { LazyLoadBoundary } from '../../components/ui/lazy-load-boundary';
 import type { LogView as LogViewType } from '../state/logViewState';
 import type { SftpView as SftpViewComponent } from '../../components/SftpView';
 import type { TerminalLayer as TerminalLayerComponent } from '../../components/TerminalLayer';
+import type { DatabaseConnection } from '../../domain/models';
+import type { DatabaseTunnelDeps } from '../state/useDatabaseWorkbench';
 
 // Visibility container for VaultView - isolates isActive subscription
 export const VaultViewContainer: React.FC<{
@@ -208,5 +211,47 @@ export const TerminalLayerMount: React.FC<TerminalLayerProps> = (props) => {
         <LazyTerminalLayer {...props} />
       </Suspense>
     </LazyLoadBoundary>
+  );
+};
+
+const LazyDatabaseWorkbenchSurface = lazy(() =>
+  import('../../components/databases/DatabaseWorkbenchSurface').then((m) => ({ default: m.DatabaseWorkbenchSurface })),
+);
+
+/**
+ * Database workbench surface. Stays mounted while another tab is active so SQL
+ * drafts, results and pooled connections survive tab switches (same contract as
+ * VaultViewContainer).
+ */
+export const DatabaseWorkbenchMount: React.FC<{
+  connections: readonly DatabaseConnection[];
+  tunnelDeps?: DatabaseTunnelDeps;
+  onUpdateConnections?: (
+    connections: DatabaseConnection[] | ((prev: DatabaseConnection[]) => DatabaseConnection[]),
+  ) => void;
+}> = ({ connections, tunnelDeps, onUpdateConnections }) => {
+  const activeTabId = useActiveTabId();
+  const isActive = isDatabaseTabId(activeTabId);
+  const containerStyle: React.CSSProperties = isActive
+    ? {}
+    : { visibility: 'hidden', pointerEvents: 'none', position: 'absolute', zIndex: -1 };
+
+  return (
+    <div
+      className={cn('absolute inset-0', isActive ? 'z-20' : '')}
+      data-inactive-app-surface={isActive ? undefined : 'true'}
+      style={containerStyle}
+    >
+      <LazyLoadBoundary name="Database workbench" resetKey="database">
+        <Suspense fallback={null}>
+          <LazyDatabaseWorkbenchSurface
+            tabId={isActive ? fromDatabaseTabId(activeTabId) : null}
+            connections={[...connections]}
+            tunnelDeps={tunnelDeps}
+            onUpdateConnections={onUpdateConnections}
+          />
+        </Suspense>
+      </LazyLoadBoundary>
+    </div>
   );
 };

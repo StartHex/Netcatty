@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo
 import { registerAppHandlers } from './appHandlersBridge';
 import { publishAppLocalUi } from './appLocalUiStore';
 import { activeTabStore, toEditorTabId, fromEditorTabId, isEditorTabId } from '../state/activeTabStore';
+import { databaseTabStore, toDatabaseTabId, useDatabaseTabs } from '../state/databaseTabStore';
 import { useAutoSync } from '../state/useAutoSync';
 import { useManagedSourceSync } from '../state/useManagedSourceSync';
 import { usePortForwardingState } from '../state/usePortForwardingState';
@@ -121,6 +122,7 @@ export function AppSideEffects() {
   const { locked: appLockLocked } = useAppLockChrome();
   const { t } = useI18n();
   const pluginViewTabs = usePluginViewTabs();
+  const databaseTabs = useDatabaseTabs();
 
   const [isQuickSwitcherOpen, setIsQuickSwitcherOpen] = useState(false);
   const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
@@ -1049,9 +1051,13 @@ export function AppSideEffects() {
     () => pluginViewTabs.map((tab) => tab.id),
     [pluginViewTabs],
   );
+  const databaseTabTopIds = useMemo(
+    () => databaseTabs.map((tab) => toDatabaseTabId(tab.id)),
+    [databaseTabs],
+  );
   const additionalWorkTabIds = useMemo(
-    () => [...editorTabTopIds, ...pluginViewTabIds],
-    [editorTabTopIds, pluginViewTabIds],
+    () => [...editorTabTopIds, ...pluginViewTabIds, ...databaseTabTopIds],
+    [editorTabTopIds, pluginViewTabIds, databaseTabTopIds],
   );
 
   // 顶层标签顺序需要包含编辑器标签，供顶部标签和编辑器邻居计算使用。
@@ -1078,7 +1084,7 @@ export function AppSideEffects() {
       () => ({
         closeLogView, closeSessions, closeTabsInFlightRef, closeWorkspace,
         confirmIfBusyLocalTerminal, logViews, sessions, workspaces,
-        activeTabStore, editorTabStore, pluginViewTabStore,
+        activeTabStore, editorTabStore, pluginViewTabStore, databaseTabStore,
         handleRequestCloseEditorTabRef, findEditorSftpOwnerTabId, orderedTabsWithEditors,
       }),
       targetIds,

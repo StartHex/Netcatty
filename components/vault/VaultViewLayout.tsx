@@ -4,6 +4,7 @@ import { MonitorNavButton } from './MonitorNavButton';
 import { Database, ShieldCheck } from "lucide-react";
 import { Combobox } from "../ui/combobox";
 import React, { useCallback, useMemo } from "react";
+import { databaseTabStore } from "../../application/state/databaseTabStore";
 import { deleteVaultKey } from "../../application/defaultKeyPassphrases";
 import { VaultGroupDeletionConfirmationChangedError } from "../../application/state/useVaultGroupDeletion";
 import { usePluginImporterCommit } from "../../application/state/usePluginImporterCommit";
@@ -135,7 +136,6 @@ function VaultConnectionLogsSection({
 }
 
 export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
-  const [databaseWorkbenchConnection, setDatabaseWorkbenchConnection] = React.useState<any>(null);
   const {
     Activity,
     allGroupPaths,
@@ -290,7 +290,6 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     onUpdateJdbcDrivers,
     onUpdateDbConnections,
     DatabasesManager,
-    SqlWorkbench,
     ProxyProfilesManager,
     quickConnectTarget,
     quickConnectWarnings,
@@ -1508,7 +1507,7 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                   <DatabasesManager
                     dbConnections={dbConnections}
                     onUpdateDbConnections={onUpdateDbConnections}
-                    onOpenConnection={setDatabaseWorkbenchConnection}
+                    onOpenConnection={(connection: { id: string }) => databaseTabStore.requestOpen(connection.id)}
                     sshHosts={hosts
                       .filter((host: any) => (host.protocol ?? 'ssh') === 'ssh' && host.id)
                       .map((host: any) => ({ id: host.id, label: host.label || host.hostname }))}
@@ -2042,20 +2041,6 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
           </Suspense>
         </LazyLoadBoundary>
       )}
-
-      {/* Database workbench */}
-      {databaseWorkbenchConnection && SqlWorkbench ? (
-        <Suspense fallback={null}>
-          <SqlWorkbench
-            open={Boolean(databaseWorkbenchConnection)}
-            connections={dbConnections}
-            initialConnection={databaseWorkbenchConnection}
-            tunnelDeps={dbTunnelDeps}
-            onUpdateConnections={onUpdateDbConnections}
-            onClose={() => setDatabaseWorkbenchConnection(null)}
-          />
-        </Suspense>
-      ) : null}
 
       {/* Serial Connect Modal */}
       <SerialConnectModal

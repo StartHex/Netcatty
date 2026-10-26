@@ -67,6 +67,7 @@ export const STORAGE_KEY_OTP_AUTHENTICATORS = 'netcatty_otp_authenticators_v1';
 /** Database connections opened by the SQL workbench. */
 export const STORAGE_KEY_DB_QUERY_HISTORY = 'netcatty_db_query_history_v1';
 export const STORAGE_KEY_DB_CONNECTIONS = 'netcatty_db_connections_v1';
+export const STORAGE_KEY_DATABASE_TABS = 'netcatty_database_tabs_v1';
 /** User-registered JDBC driver jars. */
 export const STORAGE_KEY_JDBC_DRIVERS = 'netcatty_jdbc_drivers_v1';
 export const STORAGE_KEY_VAULT_HOSTS_VIEW_MODE = 'netcatty_vault_hosts_view_mode_v1';

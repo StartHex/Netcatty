@@ -722,6 +722,7 @@ export const esTerminalMessages: Messages = {
   'tabs.closeSessionAria': 'Cerrar sesión',
   'tabs.closeLogViewAria': 'Cerrar vista de registro',
   'tabs.closePluginViewAria': 'Cerrar {title}',
+  'tabs.closeDatabaseAria': 'Cerrar {title}',
   'tabs.logPrefix': 'Registro:',
   'tabs.logLocal': 'Local',
   'tabs.copyTab': 'Copiar pestaña',
