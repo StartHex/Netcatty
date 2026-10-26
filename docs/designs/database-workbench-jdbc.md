@@ -625,3 +625,21 @@ GUI 应用不继承登录 shell 的 PATH，Homebrew 的 `openjdk@21` 因此对�
 返回 false，导致直接跳过）；显式配置的 java 路径若版本过低，直接报错而不是悄悄换一个。
 本机已把 brew 的 JDK 软链到 `~/Library/Java/JavaVirtualMachines/openjdk-21.jdk`，
 使 `/usr/libexec/java_home` 与 `/usr/bin/java` 都能解析到 Java 21。
+
+## 13. AI 助手（复用应用内 AI 配置，2026-10）
+
+窗口右上角的 AI 面板（TopTabs 的 Sparkles 按钮 → `netcatty:toggle-ai-panel`）属于终端层：它按终端标签挂载侧边面板，数据库标签激活时终端层是隐藏的，因此面板本身无法在数据库窗口里显示。所以数据库里的「AI 助手」复用的是**同一套 AI 配置**而不是同一套 UI：
+
+| 复用项 | 来源 |
+| --- | --- |
+| Provider 列表 / 启停 | `STORAGE_KEY_AI_PROVIDERS`（`netcatty_ai_providers_v1`） |
+| 当前 provider / model | `STORAGE_KEY_AI_ACTIVE_PROVIDER` / `STORAGE_KEY_AI_ACTIVE_MODEL` |
+| 模型构造与密钥注入 | `createModelFromConfig()` + `createBridgeFetchForSDK()`（与 Catty 同一路径，密钥仍由主进程注入） |
+
+模块：
+- `domain/database/sqlAssistant.ts`：`buildSqlAssistantMessages()`（三种模式 generate/explain/optimize 的 system+prompt 拼装）、`extractSqlFromAnswer()`（解包 ```sql 代码块）、`looksLikeSqlAnswer()`、`dialectLabel()`。
+- `application/state/useSqlAssistant.ts`：`useSqlAssistant()` → `{ available, providerLabel, running, run() }`，单次 `generateText`，错误归一为 `no-provider` / `no-model` / `empty-response` / 原始消息。
+- `components/databases/SqlAssistantDialog.tsx`：模式下拉、提问框、答案区（等宽可滚动）、复制 / 替换编辑器。
+- `components/databases/DatabaseWorkbenchSurface.tsx`：编辑器工具栏新增 Sparkles 按钮；上下文取「编辑器选区优先，否则整段 SQL」，外加左侧表结构的表名列表。
+
+未做：把结果流式输出、把解释结果写回历史、在数据库标签里内嵌 Catty 面板。
