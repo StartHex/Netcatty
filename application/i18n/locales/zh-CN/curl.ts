@@ -31,6 +31,7 @@ export const zhCNCurlMessages: Messages = {
   'curl.url.port': '端口',
   'curl.url.path': '路径',
   'curl.url.invalidPort': '端口必须是 1-65535',
+  'curl.url.invalidHost': '主机为空或格式不正确',
   'curl.request.params': '参数',
   'curl.request.headers': '请求头',
   'curl.request.cookies': 'Cookie',

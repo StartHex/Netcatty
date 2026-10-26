@@ -396,7 +396,7 @@ export function useHttpClient({ requests, onUpdateRequests }: UseHttpClientOptio
     curlTabStore.clearRequest(request.nonce);
   }, [request, openSaved, openBlank, closeTab]);
 
-  const savedRequests = useMemo(() => sortCurlRequests(requests), [requests]);
+  const savedRequests = useMemo(() => sortCurlRequests(requests ?? []), [requests]);
 
   return {
     tabs,

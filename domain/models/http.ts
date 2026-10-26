@@ -127,7 +127,7 @@ export function createEmptyCurlRequest(id: string, overrides?: Partial<CurlReque
     id,
     name: '',
     method: 'GET',
-    url: 'https://',
+    url: '',
     params: [],
     headers: [],
     cookies: [],

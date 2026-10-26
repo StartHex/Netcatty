@@ -31,6 +31,7 @@ export const ruCurlMessages: Messages = {
   'curl.url.port': 'Порт',
   'curl.url.path': 'Путь',
   'curl.url.invalidPort': 'Порт должен быть 1-65535',
+  'curl.url.invalidHost': 'Хост не указан или указан неверно',
   'curl.request.params': 'Параметры',
   'curl.request.headers': 'Заголовки',
   'curl.request.cookies': 'Cookie',

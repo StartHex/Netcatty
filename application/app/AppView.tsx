@@ -1009,7 +1009,7 @@ function AppViewInner({ domains }: AppViewProps) {
                 title: tab.title,
                 subtitle: tab.method,
               }))}
-              curlRequests={curlRequests.map((request) => ({
+              curlRequests={(curlRequests ?? []).map((request) => ({
                 id: request.id,
                 title: request.name,
                 subtitle: `${request.method} ${request.url}`,

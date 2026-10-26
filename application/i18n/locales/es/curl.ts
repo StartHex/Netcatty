@@ -31,6 +31,7 @@ export const esCurlMessages: Messages = {
   'curl.url.port': 'Puerto',
   'curl.url.path': 'Ruta',
   'curl.url.invalidPort': 'El puerto debe estar entre 1 y 65535',
+  'curl.url.invalidHost': 'El host falta o no es válido',
   'curl.request.params': 'Parámetros',
   'curl.request.headers': 'Cabeceras',
   'curl.request.cookies': 'Cookies',

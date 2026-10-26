@@ -172,12 +172,18 @@ const UrlBar: React.FC<{
   tab: CurlTab;
   onUrlChange: (url: string) => void;
   onPartsChange: (patch: Partial<HttpUrlParts>) => void;
-  invalidLabel: string;
-}> = ({ tab, onUrlChange, onPartsChange, invalidLabel }) => {
+  invalidPortLabel: string;
+  invalidHostLabel: string;
+}> = ({ tab, onUrlChange, onPartsChange, invalidPortLabel, invalidHostLabel }) => {
   const { t } = useI18n();
   const parsed = useMemo(() => parseHttpUrl(tab.draft.url), [tab.draft.url]);
   const parts = parsed.ok ? parsed.parts : DEFAULT_PARTS;
   const urlInvalid = !parsed.ok && tab.draft.url.trim() !== '';
+  const invalidMessage = !parsed.ok
+    ? parsed.reason === 'invalid-port'
+      ? invalidPortLabel
+      : invalidHostLabel
+    : '';
 
   return (
     <div className="space-y-2">
@@ -215,7 +221,7 @@ const UrlBar: React.FC<{
           value={parts.port}
           onChange={(port) => onPartsChange({ port })}
           placeholder={t('curl.url.port')}
-          invalidLabel={invalidLabel}
+          invalidLabel={invalidPortLabel}
         />
         <Input
           value={parts.path}
@@ -225,7 +231,7 @@ const UrlBar: React.FC<{
           data-testid="curl-path-input"
         />
       </div>
-      {urlInvalid ? <p className="text-[11px] text-destructive">{invalidLabel}</p> : null}
+      {urlInvalid ? <p className="text-[11px] text-destructive">{invalidMessage}</p> : null}
     </div>
   );
 };
@@ -338,6 +344,7 @@ export const CurlClientSurface: React.FC<{
   }, [tabId, client]);
 
   const invalidPortLabel = t('curl.url.invalidPort');
+  const invalidHostLabel = t('curl.url.invalidHost');
 
   const onPartsChange = useCallback(
     (patch: Partial<HttpUrlParts>) => {
@@ -484,7 +491,13 @@ export const CurlClientSurface: React.FC<{
       </div>
 
       <div className="border-b border-border/60 px-3 py-2">
-        <UrlBar tab={tab} onUrlChange={(url) => client.setUrl(tab.id, url)} onPartsChange={onPartsChange} invalidLabel={invalidPortLabel} />
+        <UrlBar
+          tab={tab}
+          onUrlChange={(url) => client.setUrl(tab.id, url)}
+          onPartsChange={onPartsChange}
+          invalidPortLabel={invalidPortLabel}
+          invalidHostLabel={invalidHostLabel}
+        />
       </div>
 
       <div className="grid min-h-0 flex-1 grid-rows-2 divide-y divide-border/60">

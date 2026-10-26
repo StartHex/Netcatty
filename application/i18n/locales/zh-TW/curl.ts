@@ -31,6 +31,7 @@ export const zhTWCurlMessages: Messages = {
   'curl.url.port': '連接埠',
   'curl.url.path': '路徑',
   'curl.url.invalidPort': '連接埠必須是 1-65535',
+  'curl.url.invalidHost': '主機為空或格式不正確',
   'curl.request.params': '參數',
   'curl.request.headers': '標頭',
   'curl.request.cookies': 'Cookie',

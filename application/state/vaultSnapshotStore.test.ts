@@ -73,6 +73,7 @@ test('vault actions register and unregister', () => {
     updateOtpAuthenticators: noop,
     updateDbConnections: noop,
     updateJdbcDrivers: noop,
+    updateCurlRequests: noop,
     updateSnippets: noop,
     updateSnippetPackages: noop,
     updateCustomGroups: noop,

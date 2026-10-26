@@ -31,6 +31,7 @@ export const enCurlMessages: Messages = {
   'curl.url.port': 'Port',
   'curl.url.path': 'Path',
   'curl.url.invalidPort': 'Port must be between 1 and 65535',
+  'curl.url.invalidHost': 'Host is missing or invalid',
   'curl.request.params': 'Params',
   'curl.request.headers': 'Headers',
   'curl.request.cookies': 'Cookies',

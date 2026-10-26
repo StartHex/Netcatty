@@ -30,7 +30,7 @@ export const CurlCollections: React.FC<{
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const sorted = [...requests].sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+    const sorted = [...(requests ?? [])].sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
     if (!needle) return sorted;
     return sorted.filter(
       (request) =>
@@ -52,7 +52,7 @@ export const CurlCollections: React.FC<{
       <VaultPageHeader>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <h2 className="truncate text-sm font-semibold">{t('curl.title')}</h2>
-          <span className="text-xs text-muted-foreground">{t('curl.count', { count: String(requests.length) })}</span>
+          <span className="text-xs text-muted-foreground">{t('curl.count', { count: String((requests ?? []).length) })}</span>
         </div>
         <VaultHeaderSearch
           value={query}
