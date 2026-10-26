@@ -317,7 +317,7 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
 
   return (
     <>
-      <div className="relative flex h-full min-h-0 flex-col bg-background">
+      <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background">
         {activeTab ? (
           <>
             <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-1.5 text-xs">
@@ -538,7 +538,7 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
               </span>
             </div>
 
-            <div className="flex min-h-0 flex-1">
+            <div className="flex min-h-0 min-w-0 flex-1">
               <SchemaPanel
                 tab={activeTab}
                 width={schemaWidth}
@@ -554,8 +554,8 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
                 className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
                 onMouseDown={beginSchemaResize}
               />
-              <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex min-h-0 basis-[38%] flex-col border-b border-border/60">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 min-w-0 basis-[38%] flex-col border-b border-border/60">
               <ScriptCodeEditor
                 value={activeTab.sql}
                 onChange={(value) => workbench.updateSql(activeTab.id, value)}
@@ -570,7 +570,7 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
               />
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               {activeTab.error ? (
                 <div className="shrink-0 border-b border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                   <div className="flex items-start gap-1.5">
@@ -1006,7 +1006,7 @@ const ResultGrid: React.FC<ResultGridProps> = ({ result, gridTemplate, gridWidth
     );
   }
   return (
-    <div className="min-h-0 flex-1 overflow-x-auto">
+    <div className="min-h-0 w-full min-w-0 flex-1 overflow-x-auto [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-background [&::-webkit-scrollbar-thumb]:bg-clip-padding [&::-webkit-scrollbar-track]:bg-transparent">
       <div
         className="flex min-h-full flex-col"
         style={{ minWidth: '100%', width: gridWidth > 0 ? `${gridWidth}px` : undefined }}
