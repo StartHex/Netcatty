@@ -50,3 +50,14 @@ posixOnly("treats symlinked JDK directories as homes (Homebrew layout)", () => {
   const linked = entries.find((entry) => entry.name === "openjdk@21");
   assert.equal(isDirLike(linked), true);
 });
+
+test("listJavaCandidates returns absolute, de-duplicated binaries with the explicit path first", () => {
+  const { listJavaCandidates } = require("./javaRuntime.cjs");
+  const withPath = listJavaCandidates({ javaPath: "/opt/example/bin/java" });
+  assert.equal(withPath[0], "/opt/example/bin/java");
+  assert.equal(new Set(withPath).size, withPath.length);
+  assert.ok(withPath.every((candidate) => candidate.startsWith("/") || candidate.includes(":\\")));
+  const plain = listJavaCandidates({});
+  assert.ok(Array.isArray(plain));
+  assert.equal(new Set(plain).size, plain.length);
+});
