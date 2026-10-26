@@ -113,6 +113,9 @@ class JdbcSidecar {
     this.child.stderr.setEncoding("utf8");
     this.child.stdout.on("data", (chunk) => this.onData(chunk));
     this.child.stderr.on("data", (chunk) => {
+      // Keep the tail so a crash (bad class-file version, missing native lib)
+      // surfaces the actual JVM message instead of a bare "process exited".
+      this.stderrTail = `${this.stderrTail || ""}${chunk}`.slice(-2000);
       if (process.env.NETCATTY_DEBUG_JDBC) process.stderr.write(`[jdbc] ${chunk}`);
     });
     this.child.on("exit", (code) => this.onExit(code));
@@ -173,9 +176,13 @@ class JdbcSidecar {
   }
 
   onExit(code) {
+    const detail = (this.stderrTail || "").trim();
+    const message = detail
+      ? `JDBC 进程已退出 (code ${code})：${detail.split(/\r?\n/).slice(-3).join(" ")}`
+      : `JDBC 进程已退出 (code ${code})`;
     const error = {
       ok: false,
-      error: { message: `JDBC 进程已退出 (code ${code})`, code: "sidecar-exit" },
+      error: { message, code: "sidecar-exit" },
     };
     for (const entry of this.pending.values()) entry.resolve(error);
     this.pending.clear();

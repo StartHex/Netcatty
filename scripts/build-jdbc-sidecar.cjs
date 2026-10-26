@@ -18,16 +18,46 @@ const classesDir = path.join(outDir, "classes");
 const jarPath = path.join(outDir, "netcatty-jdbc-sidecar.jar");
 const { resolveJava } = require(path.join(root, "electron", "bridges", "javaRuntime.cjs"));
 
-function findJdkTool(name) {
+function jdkHomeCandidates() {
+  const homes = [];
+  const exe = process.platform === "win32" ? `${"java"}.exe` : "java";
   const java = resolveJava({});
+  if (java.ok) {
+    for (const tried of java.tried || []) {
+      if (!tried.includes(path.sep)) continue;
+      // tried entries are bin/java paths; keep the home even when the runtime
+      // came from PATH so javac can be found next to it.
+      homes.push(path.dirname(path.dirname(tried)));
+    }
+    if (java.path && java.path.includes(path.sep)) {
+      homes.push(path.dirname(path.dirname(java.path)));
+    }
+  }
+  if (process.env.JAVA_HOME) homes.push(process.env.JAVA_HOME);
+  if (process.platform === "darwin") {
+    for (const glob of ["/opt/homebrew/opt/openjdk@21", "/opt/homebrew/opt/openjdk@17"]) {
+      homes.push(path.join(glob, "libexec", "openjdk.jdk", "Contents", "Home"));
+    }
+    const userJvms = path.join(process.env.HOME || "", "Library", "Java", "JavaVirtualMachines");
+    try {
+      for (const entry of fs.readdirSync(userJvms)) {
+        homes.push(path.join(userJvms, entry, "Contents", "Home"));
+      }
+    } catch {
+      // no per-user JDKs
+    }
+  }
+  void exe;
+  return homes;
+}
+
+function findJdkTool(name) {
+  const exe = process.platform === "win32" ? `${name}.exe` : name;
   const candidates = [];
-  if (java.ok && java.path && java.path.includes(path.sep)) {
-    candidates.push(path.join(path.dirname(java.path), process.platform === "win32" ? `${name}.exe` : name));
+  for (const home of jdkHomeCandidates()) {
+    candidates.push(path.join(home, "bin", exe));
   }
-  if (process.env.JAVA_HOME) {
-    candidates.push(path.join(process.env.JAVA_HOME, "bin", process.platform === "win32" ? `${name}.exe` : name));
-  }
-  candidates.push(name);
+  candidates.push(exe);
   for (const candidate of candidates) {
     try {
       if (!candidate.includes(path.sep)) {
@@ -55,7 +85,11 @@ function main() {
   }
   fs.rmSync(classesDir, { recursive: true, force: true });
   fs.mkdirSync(classesDir, { recursive: true });
-  execFileSync(javac, ["-encoding", "UTF-8", "-d", classesDir, source], { stdio: "inherit" });
+  // Target Java 17 so a machine with an older (but still supported) runtime can
+  // execute the sidecar; class-file 65 would fail with UnsupportedClassVersionError.
+  execFileSync(javac, ["-encoding", "UTF-8", "--release", "17", "-d", classesDir, source], {
+    stdio: "inherit",
+  });
   fs.rmSync(jarPath, { force: true });
   execFileSync(jar, ["cfe", jarPath, "NetcattyJdbcSidecar", "-C", classesDir, "."], { stdio: "inherit" });
   // Ship a copy next to jdbcSidecar.cjs so it lands inside app.asar: the packaged

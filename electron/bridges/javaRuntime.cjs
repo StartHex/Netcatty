@@ -236,22 +236,44 @@ function resolveJava(options = {}) {
   for (const home of defaultHomes()) candidates.push(javaBinaryIn(home));
   for (const home of bundledJreHomes()) candidates.push(javaBinaryIn(home));
 
+  const healthy = [];
   for (const candidate of candidates.filter(Boolean)) {
     const isBareCommand = !candidate.includes(path.sep) && !candidate.includes("/");
     if (!isBareCommand && !isExecutableFile(candidate)) continue;
     tried.push(candidate);
     const result = probe(candidate);
     if (result.ok) {
-      const resolved = { ok: true, path: candidate, version: result.version, major: result.major, tried };
-      cache.set(key, resolved);
-      return resolved;
+      // An explicitly configured runtime wins immediately; otherwise keep
+      // looking and prefer the newest major (a Java 17 only understands
+      // class-file 61, while 21 runs everything we build).
+      if (explicit.includes(candidate)) {
+        const resolved = { ok: true, path: candidate, version: result.version, major: result.major, tried };
+        cache.set(key, resolved);
+        return resolved;
+      }
+      healthy.push({ path: candidate, version: result.version, major: result.major });
+      continue;
     }
     if (result.tooOld) {
       sawTooOld = { path: candidate, version: result.version, major: result.major };
-      // An explicitly configured runtime is authoritative: report it instead of
-      // silently switching to a different Java the user did not pick.
-      if (explicit.includes(candidate)) break;
+      if (explicit.includes(candidate)) {
+        const resolved = {
+          ok: false,
+          tried,
+          foundButTooOld: sawTooOld,
+          error: `检测到 Java ${sawTooOld.major}（${sawTooOld.path}），但数据库工作台需要 Java ${MIN_JAVA_MAJOR}+。请安装 Temurin 17/21，或在数据库连接的「Java 路径」里填 java 可执行文件。`,
+        };
+        cache.set(key, resolved);
+        return resolved;
+      }
     }
+  }
+  if (healthy.length) {
+    healthy.sort((a, b) => b.major - a.major);
+    const best = healthy[0];
+    const resolved = { ok: true, path: best.path, version: best.version, major: best.major, tried };
+    cache.set(key, resolved);
+    return resolved;
   }
   const resolved = {
     ok: false,
