@@ -302,3 +302,36 @@ P1 完成即可日常替代 curl 工具。
 仍需在实现时确认的小项：
 - 响应体上限 8 MB、历史 200 条是否够用。
 - TLS 校验开关在 P1 是否可见（取决于 `net.fetch` 的会话级证书钩子能否做到请求级白名单，见 §11 风险 1）。
+
+## 13. 实施记录（P1，2026-10-26）
+
+侧边栏类别与 i18n 前缀统一用 `curl`（不是 `http`），与数据库工作台的分区/标签结构一致。
+
+### 13.1 已落地模块
+
+| 层 | 文件 | 说明 |
+| --- | --- | --- |
+| 领域 | `domain/http/urlParts.ts` | 手写解析/拼接：`scheme/host/port/path/query` 五段各自可编辑；改协议时只有端口是旧协议默认值才回落 `null`；行列化 query 用 `splitQueryString`/`joinQueryString`。 |
+| 领域 | `domain/http/httpWire.ts` | 组装请求：cookies 合并成 `Cookie`、basic/bearer/apiKey（header 或 query）、GET/HEAD 丢弃 body 并给 `body-dropped-for-method` 警告、URL 内 userinfo 剥离。 |
+| 领域 | `domain/http/history.ts` | 历史 200 条，同 method+url 去重提前。 |
+| 模型 | `domain/models/http.ts` | `CurlRequest`/`CurlResponse`/`CurlWireRequest`/`sanitizeCurlRequest(s)`/`redactCurlRequestForSync`/`isSensitiveHeaderName`。 |
+| 主进程 | `electron/bridges/httpBridge.cjs` | node `http`/`https`（未用 `net.fetch`）：手工重定向 301/302/303/307/308、gzip/deflate/br/zstd、8 MB 上限、超时/取消、header 注入防护、错误码归一。IPC：`netcatty:http:request`、`netcatty:http:cancel`。 |
+| 服务 | `infrastructure/services/httpClientService.ts` | 渲染层只依赖这一层调 IPC。 |
+| 状态 | `application/state/curlTabStore.ts` | `curl:` 前缀、摘要同步、草稿恢复、open/close 请求队列。 |
+| 状态 | `application/state/useHttpClient.ts` | 标签草稿、发送/取消/保存、响应与警告、历史记录、从 store 消费打开请求。 |
+| UI | `components/curl/CurlCollections.tsx` | 侧边栏列表（搜索、打开、删除）。 |
+| UI | `components/curl/CurlClientSurface.tsx` | 顶部方法 + 发送/取消/保存/名称/历史；URL 文本框与 scheme/host/port/path 四段双向同步；请求区分栏 6 页；响应区 Body/Raw/Headers。 |
+| 标签 | `components/top-tabs/TopTabItems.tsx` `CurlTopTab` | 顶部工作标签，方法徽标 + 状态点 + 右键批量关闭 + 拖拽。 |
+
+### 13.2 与设计的偏差
+
+- 未使用 `net.fetch`，直接用 node `http`/`https`：需要请求级 TLS 开关与取消，`net.fetch` 走 Electron 会话证书钩子无法按请求粒度控制。
+- Params 页不保留"禁用"行语义：`url` 是唯一事实来源，改 URL 会重建参数行；避免 URL 与行表格双向同步出现分叉。
+- 阶段一的 URL 校验是"软校验"：非法 host/port 只标红，不阻止输入，发送时才报错。
+
+### 13.3 未完成（后续阶段）
+
+- curl 粘贴导入 / 复制为 curl、`-H`/`-d`/`--data-raw` 解析。
+- 经 SSH 主机的隧道请求。
+- multipart/form-data 文件上传、响应体保存到文件。
+- 环境变量（`{{baseUrl}}` 等）与请求链。
