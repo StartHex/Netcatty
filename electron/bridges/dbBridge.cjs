@@ -35,6 +35,74 @@ function withTypeSize(type, size, scale) {
   return base;
 }
 
+
+let mysqlTypeNames = null;
+/** mysql2 reports numeric field types; expose readable names when possible. */
+function mysqlTypeName(code) {
+  if (!mysqlTypeNames) {
+    try {
+      const { Types } = require("mysql2");
+      mysqlTypeNames = new Map(Object.entries(Types).map(([name, value]) => [value, name.toLowerCase()]));
+    } catch {
+      mysqlTypeNames = new Map();
+    }
+  }
+  return mysqlTypeNames.get(Number(code)) ?? String(code ?? "");
+}
+
+/**
+ * Shape a mysql2 query result. mysql2 returns rows (object array) for a single
+ * SELECT, an OkPacket object for DML/DDL, and — because multipleStatements is
+ * enabled — an array of result sets for multi-statement scripts.
+ */
+function shapeMysqlResult(result, fields, maxRows, startedAt) {
+  const fieldSets = Array.isArray(fields) ? fields : [];
+  const multiStatement = Array.isArray(fieldSets[0]);
+
+  if (multiStatement) {
+    const lastResult = Array.isArray(result) ? result[result.length - 1] : result;
+    const lastFields = fieldSets[fieldSets.length - 1] || [];
+    if (!Array.isArray(lastResult)) {
+      return {
+        columns: [],
+        rows: [],
+        rowCount: Number(lastResult?.affectedRows ?? 0),
+        truncated: false,
+        command: "OK",
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    return buildSelectResult(lastResult, lastFields, maxRows, startedAt);
+  }
+
+  // Single statement: rows for SELECT, OkPacket otherwise.
+  if (!Array.isArray(result)) {
+    return {
+      columns: [],
+      rows: [],
+      rowCount: Number(result?.affectedRows ?? 0),
+      truncated: false,
+      command: "OK",
+      durationMs: Date.now() - startedAt,
+    };
+  }
+  return buildSelectResult(result, fieldSets, maxRows, startedAt);
+}
+
+function buildSelectResult(rowObjects, fields, maxRows, startedAt) {
+  const columns = Array.isArray(fields) ? fields : [];
+  const names = columns.map((field) => field.name);
+  const sliced = rowObjects.slice(0, maxRows);
+  return {
+    columns: columns.map((field) => ({ name: field.name, type: mysqlTypeName(field.type) })),
+    rows: rowsToMatrix(sliced, names),
+    rowCount: rowObjects.length,
+    truncated: sliced.length < rowObjects.length,
+    command: "SELECT",
+    durationMs: Date.now() - startedAt,
+  };
+}
+
 const DEFAULT_MAX_ROWS = 1000;
 const HARD_MAX_ROWS = 5000;
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -320,37 +388,7 @@ function createMysqlSession(target) {
       const instance = await ensure();
       const started = Date.now();
       const [result, fields] = await instance.query(sql);
-      const packets = Array.isArray(result) ? result : [result];
-      const fieldList = Array.isArray(fields) ? fields : [];
-      const lastPacket = packets[packets.length - 1];
-
-      // INSERT/UPDATE/DDL: mysql2 returns an OkPacket (no rows).
-      if (!Array.isArray(lastPacket)) {
-        return {
-          columns: [],
-          rows: [],
-          rowCount: Number(lastPacket?.affectedRows ?? 0),
-          truncated: false,
-          command: "OK",
-          durationMs: Date.now() - started,
-        };
-      }
-
-      // SELECT with multiple statements: fields is an array of field arrays.
-      let columns = fieldList;
-      if (Array.isArray(fieldList[0])) {
-        columns = fieldList[fieldList.length - 1] || [];
-      }
-      const names = columns.map((field) => field.name);
-      const sliced = lastPacket.slice(0, maxRows);
-      return {
-        columns: columns.map((field) => ({ name: field.name, type: String(field.type ?? "") })),
-        rows: rowsToMatrix(sliced, names),
-        rowCount: lastPacket.length,
-        truncated: sliced.length < lastPacket.length,
-        command: "SELECT",
-        durationMs: Date.now() - started,
-      };
+      return shapeMysqlResult(result, fields, maxRows, started);
     },
     async tables() {
       const instance = await ensure();
@@ -1270,6 +1308,8 @@ module.exports = {
     mysqlSslOptions,
     rowsToMatrix,
     numberOrUndefined,
+    shapeMysqlResult,
+    mysqlTypeName,
     sessions,
   },
 };

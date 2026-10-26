@@ -7,6 +7,7 @@ const bridge = require("./dbBridge.cjs");
 const { __test, handlers } = bridge;
 
 const {
+  shapeMysqlResult,
   clampMaxRows,
   clampTimeout,
   toCellValue,
@@ -260,4 +261,39 @@ test("readSqlFile reads utf8 scripts and rejects missing paths", async () => {
   const missing = await bridge.readSqlFile(path.join(os.tmpdir(), "does-not-exist.sql"));
   assert.equal(missing.ok, false);
   fs.unlinkSync(file);
+});
+
+test("mysql: single SELECT rows are returned as a grid", () => {
+  const fields = [{ name: "ok", type: 8 }];
+  const result = shapeMysqlResult([{ ok: 1 }], fields, 100, Date.now());
+  assert.equal(result.command, "SELECT");
+  assert.deepEqual(result.columns.map((column) => column.name), ["ok"]);
+  assert.deepEqual(result.rows, [[1]]);
+  assert.equal(result.rowCount, 1);
+});
+
+test("mysql: OkPacket stays an execution result", () => {
+  const result = shapeMysqlResult({ affectedRows: 3 }, undefined, 100, Date.now());
+  assert.equal(result.command, "OK");
+  assert.equal(result.rowCount, 3);
+  assert.deepEqual(result.rows, []);
+});
+
+test("mysql: multi-statement scripts expose the last result set", () => {
+  const result = shapeMysqlResult(
+    [[{ a: 1 }], [{ b: 2 }, { b: 3 }]],
+    [[{ name: "a", type: 8 }], [{ name: "b", type: 8 }]],
+    100,
+    Date.now(),
+  );
+  assert.equal(result.command, "SELECT");
+  assert.deepEqual(result.columns.map((column) => column.name), ["b"]);
+  assert.deepEqual(result.rows, [[2], [3]]);
+});
+
+test("mysql: SELECT honours maxRows truncation", () => {
+  const result = shapeMysqlResult([{ a: 1 }, { a: 2 }, { a: 3 }], [{ name: "a", type: 8 }], 2, Date.now());
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.rowCount, 3);
+  assert.equal(result.truncated, true);
 });
