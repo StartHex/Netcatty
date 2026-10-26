@@ -45,6 +45,7 @@ import {
   suggestExportFileName,
 } from '../../domain/database/sqlResultExport';
 import { classifySqlSafety } from '../../domain/database/sqlSafety';
+import { filterTables } from '../../domain/database/tableFilter';
 import { readSqlFile } from '@/infrastructure/services/databaseService.ts';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
 import { ConfirmDialog } from '../ui/confirm-dialog';
@@ -738,15 +739,17 @@ interface SchemaPanelProps {
 }
 
 const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, width, onRefresh, onPreview, onShowStructure, t }) => {
+  const [tableQuery, setTableQuery] = useState('');
+  const visibleTables = useMemo(() => filterTables(tab.tables ?? [], tableQuery), [tab.tables, tableQuery]);
   const grouped = useMemo(() => {
     const map = new Map<string, DbTableRef[]>();
-    for (const table of tab.tables ?? []) {
+    for (const table of visibleTables) {
       const list = map.get(table.schema) ?? [];
       list.push(table);
       map.set(table.schema, list);
     }
     return [...map.entries()];
-  }, [tab.tables]);
+  }, [visibleTables]);
 
   return (
     <div className="flex shrink-0 flex-col border-r border-border/60" style={{ width }}>
@@ -769,12 +772,25 @@ const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, width, onRefresh, onPrev
           <TooltipContent>{t('databases.schema.refresh')}</TooltipContent>
         </Tooltip>
       </div>
+      <div className="shrink-0 px-1 pt-1">
+        <Input
+          className="h-6 text-[11px]"
+          placeholder={t('databases.schema.searchPlaceholder')}
+          value={tableQuery}
+          aria-label={t('databases.schema.searchPlaceholder')}
+          onChange={(event) => setTableQuery(event.target.value)}
+        />
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1">
         {tab.tablesError ? (
           <p className="px-1 py-2 text-[11px] text-destructive">{tab.tablesError}</p>
         ) : grouped.length === 0 ? (
           <p className="px-1 py-2 text-[11px] text-muted-foreground">
-            {tab.tablesLoading ? t('databases.schema.loading') : t('databases.schema.empty')}
+            {tab.tablesLoading
+              ? t('databases.schema.loading')
+              : tableQuery.trim()
+                ? t('databases.schema.noMatches')
+                : t('databases.schema.empty')}
           </p>
         ) : (
           grouped.map(([schema, tables]) => (
@@ -834,6 +850,11 @@ interface StructurePanelProps {
 
 const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onPreview, t }) => {
   const { table, columns, loading, error } = structure;
+  const [columnQuery, setColumnQuery] = useState('');
+  const visibleColumns = useMemo(
+    () => filterTables(columns, columnQuery),
+    [columns, columnQuery],
+  );
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-secondary/40 px-3 py-1.5">
@@ -842,6 +863,13 @@ const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onP
         <span className="text-[11px] text-muted-foreground">
           {t('databases.structure.title')}
         </span>
+        <Input
+          className="ml-2 h-6 w-40 text-[11px]"
+          placeholder={t('databases.structure.searchPlaceholder')}
+          value={columnQuery}
+          aria-label={t('databases.structure.searchPlaceholder')}
+          onChange={(event) => setColumnQuery(event.target.value)}
+        />
         <div className="ml-auto flex items-center gap-1">
           <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={onPreview}>
             <Play className="mr-1 h-3 w-3" />
@@ -856,7 +884,7 @@ const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onP
         <p className="px-3 py-2 text-xs text-destructive">{error}</p>
       ) : loading ? (
         <p className="px-3 py-2 text-xs text-muted-foreground">{t('databases.structure.loading')}</p>
-      ) : columns.length === 0 ? (
+      ) : visibleColumns.length === 0 ? (
         <p className="px-3 py-2 text-xs text-muted-foreground">{t('databases.structure.empty')}</p>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -865,7 +893,7 @@ const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onP
             <span>{t('databases.structure.type')}</span>
             <span>{t('databases.structure.nullable')}</span>
           </div>
-          {columns.map((column) => (
+          {visibleColumns.map((column) => (
             <div
               key={column.name}
               className="grid grid-cols-[minmax(160px,2fr)_minmax(120px,1.5fr)_80px] items-center border-b border-border/30 px-3 py-1 text-xs"

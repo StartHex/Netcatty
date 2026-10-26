@@ -198,7 +198,12 @@ export function useDatabaseWorkbench(
         patchTab(tabId, { error: resolved.error });
         return;
       }
-      patchTab(tabId, { running: true, error: undefined, errorDetail: undefined });
+      patchTab(tabId, {
+        running: true,
+        structure: undefined,
+        error: undefined,
+        errorDetail: undefined,
+      });
       const startedAt = Date.now();
       const response = await runDatabaseQuery(resolved.target, sql);
       if (response.ok === true && response.result) {
@@ -367,7 +372,12 @@ export function useDatabaseWorkbench(
         patchTab(tabId, { error: 'Connection was deleted', errorDetail: undefined });
         return;
       }
-      patchTab(tabId, { running: true, error: undefined, errorDetail: undefined });
+      patchTab(tabId, {
+        running: true,
+        structure: undefined,
+        error: undefined,
+        errorDetail: undefined,
+      });
       const startedAt = Date.now();
       try {
         const resolved = await resolveTarget(connection);

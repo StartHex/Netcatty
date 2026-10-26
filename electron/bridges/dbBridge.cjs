@@ -19,6 +19,22 @@ const fs = require("fs");
 const net = require("net");
 const path = require("path");
 
+
+/** Append length/precision to a base SQL type so the schema tree shows `char(10)`. */
+function withTypeSize(type, size, scale) {
+  const base = String(type || "");
+  if (!base) return base;
+  const sized = /char|binary|text|bit|varbinary|varchar/i.test(base);
+  const numeric = /decimal|numeric|number/i.test(base);
+  const length = Number(size);
+  if (sized && Number.isFinite(length) && length > 0) return `${base}(${length})`;
+  if (numeric && Number.isFinite(length) && length > 0) {
+    const digits = Number(scale);
+    return Number.isFinite(digits) && digits > 0 ? `${base}(${length},${digits})` : `${base}(${length})`;
+  }
+  return base;
+}
+
 const DEFAULT_MAX_ROWS = 1000;
 const HARD_MAX_ROWS = 5000;
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -217,14 +233,15 @@ function createPgSession(target) {
     async columns(schema, table) {
       const instance = await ensure();
       const result = await instance.query(
-        "select column_name as name, data_type as type, is_nullable as nullable " +
+        "select column_name as name, data_type as type, is_nullable as nullable, " +
+          "character_maximum_length as size, numeric_precision as precision, numeric_scale as scale " +
           "from information_schema.columns where table_schema = $1 and table_name = $2 " +
           "order by ordinal_position",
         [schema, table],
       );
       return result.rows.map((row) => ({
         name: row.name,
-        type: row.type,
+        type: withTypeSize(row.type, row.size ?? row.precision, row.scale),
         nullable: row.nullable === "YES",
       }));
     },
@@ -472,16 +489,22 @@ function createOracleSession(target) {
     async columns(schema, table) {
       const instance = await ensure();
       const result = await instance.execute(
-        "select column_name, data_type, nullable from all_tab_columns " +
-          "where owner = :1 and table_name = :2 order by column_id",
+        "select column_name, data_type, nullable, data_length, char_length, data_precision, data_scale " +
+          "from all_tab_columns where owner = :1 and table_name = :2 order by column_id",
         [schema, table],
         { outFormat: oracledb.OUT_FORMAT_ARRAY },
       );
-      return (result.rows || []).map((row) => ({
-        name: String(row[0] || ""),
-        type: String(row[1] || ""),
-        nullable: row[2] === "Y",
-      }));
+      return (result.rows || []).map((row) => {
+        const baseType = String(row[1] || "");
+        const charLength = Number(row[4]) || Number(row[3]);
+        const precision = Number(row[5]);
+        const size = /char/i.test(baseType) ? charLength : precision;
+        return {
+          name: String(row[0] || ""),
+          type: withTypeSize(baseType, size, row[6]),
+          nullable: row[2] === "Y",
+        };
+      });
     },
     async control(action) {
       const instance = await ensure();
@@ -885,14 +908,15 @@ function createSqlServerSession(target) {
       const escapedTable = String(table || "").replace(/'/g, "''");
       const result = await exec(
         instance,
-        "select column_name as [name], data_type as [type], is_nullable as [nullable] " +
+        "select column_name as [name], data_type as [type], is_nullable as [nullable], " +
+          "character_maximum_length as [size], numeric_precision as [precision], numeric_scale as [scale] " +
           `from information_schema.columns where table_schema = '${escapedSchema}' and table_name = '${escapedTable}' ` +
           "order by ordinal_position",
         HARD_MAX_ROWS,
       );
       return result.rows.map((row) => ({
         name: String(row[0] || ""),
-        type: String(row[1] || ""),
+        type: withTypeSize(row[1], row.size ?? row.precision, row.scale),
         nullable: String(row[2] || "").toUpperCase() === "YES",
       }));
     },

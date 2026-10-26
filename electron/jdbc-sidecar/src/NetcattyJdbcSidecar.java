@@ -249,9 +249,16 @@ public final class NetcattyJdbcSidecar {
       int rows = 0;
       while (resultSet.next() && rows < 2000) {
         boolean nullable = resultSet.getInt("NULLABLE") != java.sql.DatabaseMetaData.columnNoNulls;
+        String typeName = resultSet.getString("TYPE_NAME");
+        int size = resultSet.getInt("COLUMN_SIZE");
+        int digits = resultSet.getInt("DECIMAL_DIGITS");
+        if (size > 0 && typeName != null && typeName.matches("(?i).*(CHAR|BINARY|TEXT|DECIMAL|NUMERIC|NUMBER).*")) {
+          boolean numeric = typeName.matches("(?i).*(DECIMAL|NUMERIC|NUMBER).*");
+          typeName = typeName + "(" + size + (numeric && digits > 0 ? "," + digits : "") + ")";
+        }
         out.println("ROW\t" + id
             + "\t" + encode(resultSet.getString("COLUMN_NAME"))
-            + "\t" + encode(resultSet.getString("TYPE_NAME"))
+            + "\t" + encode(typeName)
             + "\t" + encode(nullable ? "true" : "false"));
         rows++;
       }
