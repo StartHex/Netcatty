@@ -41,6 +41,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/ScriptCodeEditor';
 import { buildSqlCompletionEntries } from '../../domain/database/sqlCompletion';
+import { applyWidths, widthScopeKey } from '../../domain/database/columnWidths';
+import { useDatabaseColumnWidthStore } from '../../application/state/useDatabaseColumnWidths';
 import { useSqlHistory } from '../../application/state/useSqlHistory';
 import type { DatabaseTunnelDeps, DbTableRef } from '../../application/state/useDatabaseWorkbench';
 import {
@@ -134,6 +136,7 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
   headerActions,
 }) => {
   const { t } = useI18n();
+  const columnWidthStore = useDatabaseColumnWidthStore();
   const editorRef = useRef<ScriptCodeEditorHandle | null>(null);
   const connection = useMemo(
     () => connections.find((entry) => entry.id === tab.connectionId),
@@ -257,9 +260,19 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
 
   const activeHistory = sqlHistory.entriesFor(tab.connectionId);
 
-  const widths = useMemo(() => columnWidths(tab.result), [tab.result]);
-  const gridTemplate = useMemo(() => widths.map((width) => `${Math.round(width)}px`).join(' '), [widths]);
-  const gridWidth = useMemo(() => widths.reduce((total, width) => total + Math.round(width), 0), [widths]);
+  const autoWidths = useMemo(() => columnWidths(tab.result), [tab.result]);
+  const widthScope = useMemo(
+    () =>
+      tab.result
+        ? widthScopeKey(tab.connectionId, tab.editMeta?.target.table, tab.result.columns.map((column) => column.name))
+        : '',
+    [tab.connectionId, tab.editMeta, tab.result],
+  );
+  const savedWidths = columnWidthStore.widthsFor(widthScope);
+  const widths = useMemo(
+    () => applyWidths(autoWidths, tab.result?.columns ?? [], savedWidths),
+    [autoWidths, savedWidths, tab.result],
+  );
 
   const sqlCompletionSource = useCallback(
     () =>
@@ -580,8 +593,12 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
       ) : pagedResult ? (
         <ResultGrid
           result={pagedResult}
-          gridTemplate={gridTemplate}
-          gridWidth={gridWidth}
+          columnWidths={widths}
+          onResizeColumn={(index, width) => {
+            const column = tab.result?.columns[index];
+            if (!column || !widthScope) return;
+            columnWidthStore.setWidth(widthScope, column.name, width);
+          }}
           t={t}
           editable={Boolean(tab.editMeta) && !connection?.readOnly}
           rowOffset={pageIndex * pageSize}
@@ -1218,9 +1235,8 @@ const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onP
 
 interface ResultGridProps {
   result: DbQueryResult;
-  gridTemplate: string;
-  /** Sum of the fixed column widths; the scroll container uses it as min width. */
-  gridWidth: number;
+  /** Resolved pixel width per rendered column (after manual overrides). */
+  columnWidths: number[];
   t: ReturnType<typeof useI18n>['t'];
   /** In-place editing is only offered when the row has a usable primary key. */
   editable?: boolean;
@@ -1228,19 +1244,23 @@ interface ResultGridProps {
   rowOffset?: number;
   onUpdateCell?: (rowIndex: number, column: string, value: string | null) => Promise<boolean>;
   onDeleteRow?: (rowIndex: number) => Promise<boolean>;
+  /** Fired while dragging a header divider; width is already in pixels. */
+  onResizeColumn?: (index: number, width: number) => void;
+  onResizeCommit?: () => void;
 }
 
 const ACTION_COLUMN_WIDTH = 32;
 
 const ResultGrid: React.FC<ResultGridProps> = ({
   result,
-  gridTemplate,
-  gridWidth,
+  columnWidths,
   t,
   editable = false,
   rowOffset = 0,
   onUpdateCell,
   onDeleteRow,
+  onResizeColumn,
+  onResizeCommit,
 }) => {
   const [editing, setEditing] = useState<{ row: number; cell: number; draft: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ row: number } | null>(null);
@@ -1256,8 +1276,10 @@ const ResultGrid: React.FC<ResultGridProps> = ({
     );
   }
 
-  const template = editable ? `${ACTION_COLUMN_WIDTH}px ${gridTemplate}` : gridTemplate;
-  const width = editable ? gridWidth + ACTION_COLUMN_WIDTH : gridWidth;
+  const template = [editable ? `${ACTION_COLUMN_WIDTH}px` : null, ...columnWidths.map((entry) => `${Math.round(entry)}px`)]
+    .filter(Boolean)
+    .join(' ');
+  const width = columnWidths.reduce((total, entry) => total + Math.round(entry), 0) + (editable ? ACTION_COLUMN_WIDTH : 0);
 
   const commitEdit = async () => {
     if (!editing || !onUpdateCell) {
@@ -1308,10 +1330,36 @@ const ResultGrid: React.FC<ResultGridProps> = ({
             {result.columns.map((column, index) => (
               <div
                 key={`${column.name}-${index}`}
-                className="truncate px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                className="group/head relative truncate px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
                 title={column.type ? `${column.name} · ${column.type}` : column.name}
               >
                 {column.name}
+                {onResizeColumn ? (
+                  <span
+                    role="separator"
+                    aria-orientation="vertical"
+                    className="absolute -right-0.5 top-0 h-full w-1.5 cursor-col-resize select-none bg-transparent hover:bg-primary/40"
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      const startX = event.clientX;
+                      const startWidth = columnWidths[index] ?? MIN_COLUMN_WIDTH;
+                      const target = event.currentTarget;
+                      target.setPointerCapture(event.pointerId);
+                      const move = (moveEvent: PointerEvent) => {
+                        onResizeColumn(index, startWidth + (moveEvent.clientX - startX));
+                      };
+                      const up = () => {
+                        target.removeEventListener('pointermove', move);
+                        target.removeEventListener('pointerup', up);
+                        target.removeEventListener('pointercancel', up);
+                        onResizeCommit?.();
+                      };
+                      target.addEventListener('pointermove', move);
+                      target.addEventListener('pointerup', up);
+                      target.addEventListener('pointercancel', up);
+                    }}
+                  />
+                ) : null}
               </div>
             ))}
           </div>
