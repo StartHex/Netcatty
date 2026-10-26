@@ -13,6 +13,7 @@ import { sanitizeGroupConfig } from "../../domain/groupConfig";
 import {
   sanitizeDatabaseConnections,
 } from "../../domain/models/database";
+import { sanitizeCurlRequests } from "../../domain/models/http";
 import { sanitizeJdbcDrivers } from "../../domain/database/jdbcDrivers";
 import {
   clearOtpAuthenticatorReferences,
@@ -29,6 +30,7 @@ import {
 } from "../../domain/pluginImporter";
 import {
   ConnectionLog,
+  CurlRequest,
   DatabaseConnection,
   JdbcDriver,
   GroupConfig,
@@ -123,6 +125,7 @@ import {
   decryptHosts,
   decryptIdentities,
   decryptKeys,
+  decryptCurlRequests,
   decryptDatabaseConnections,
   decryptOtpAuthenticators,
   decryptProxyProfiles,
@@ -130,6 +133,7 @@ import {
   encryptHosts,
   encryptIdentities,
   encryptKeys,
+  encryptCurlRequests,
   encryptDatabaseConnections,
   encryptOtpAuthenticators,
   encryptProxyProfiles,
@@ -137,7 +141,7 @@ import {
 } from "../../infrastructure/persistence/secureFieldAdapter";
 import { pluginExtensionBridge } from "./pluginExtensionBridge";
 import type { PluginImporterCommitRequest } from "./usePluginImporterCommit";
-import { STORAGE_KEY_DB_CONNECTIONS, STORAGE_KEY_JDBC_DRIVERS } from "../../infrastructure/config/storageKeys";
+import { STORAGE_KEY_DB_CONNECTIONS, STORAGE_KEY_HTTP_REQUESTS, STORAGE_KEY_JDBC_DRIVERS } from "../../infrastructure/config/storageKeys";
 import {
   isVaultImportLockHeld,
   type VaultLockHandle,
@@ -167,6 +171,7 @@ type ExportableVaultData = {
   otpAuthenticators?: OtpAuthenticator[];
   jdbcDrivers?: JdbcDriver[];
   dbConnections?: DatabaseConnection[];
+  curlRequests?: CurlRequest[];
   snippets: Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -335,6 +340,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const [proxyProfiles, setProxyProfiles] = useState<ProxyProfile[]>([]);
   const [otpAuthenticators, setOtpAuthenticators] = useState<OtpAuthenticator[]>([]);
   const [dbConnections, setDbConnections] = useState<DatabaseConnection[]>([]);
+  const [curlRequests, setCurlRequests] = useState<CurlRequest[]>([]);
   const [jdbcDrivers, setJdbcDrivers] = useState<JdbcDriver[]>([]);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [customGroups, setCustomGroups] = useState<string[]>([]);
@@ -353,6 +359,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const groupConfigsRef = useRef<GroupConfig[]>([]);
   const otpAuthenticatorsRef = useRef<OtpAuthenticator[]>([]);
   const dbConnectionsRef = useRef<DatabaseConnection[]>([]);
+  const curlRequestsRef = useRef<CurlRequest[]>([]);
   const jdbcDriversRef = useRef<JdbcDriver[]>([]);
   const notesRef = useRef<VaultNote[]>([]);
   const notesStorageRef = useRef<VaultNote[]>([]);
@@ -370,6 +377,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   groupConfigsRef.current = groupConfigs;
   otpAuthenticatorsRef.current = otpAuthenticators;
   dbConnectionsRef.current = dbConnections;
+  curlRequestsRef.current = curlRequests;
   jdbcDriversRef.current = jdbcDrivers;
   notesRef.current = notes;
   noteGroupsRef.current = noteGroups;
@@ -383,6 +391,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const proxyProfilesWriteVersion = useRef(0);
   const otpAuthenticatorsWriteVersion = useRef(0);
   const dbConnectionsWriteVersion = useRef(0);
+  const curlRequestsWriteVersion = useRef(0);
   const jdbcDriversWriteVersion = useRef(0);
   const snippetsWriteVersion = useRef(0);
   const managedSourcesWriteVersion = useRef(0);
@@ -466,6 +475,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const proxyProfilesReadSeq = useRef(0);
   const otpAuthenticatorsReadSeq = useRef(0);
   const dbConnectionsReadSeq = useRef(0);
+  const curlRequestsReadSeq = useRef(0);
   const jdbcDriversReadSeq = useRef(0);
   const groupConfigsReadSeq = useRef(0);
   const connectionLogsRef = useRef<ConnectionLog[]>([]);
@@ -935,6 +945,16 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     return encryptDatabaseConnections(cleaned).then((enc) => {
       if (ver === dbConnectionsWriteVersion.current)
         localStorageAdapter.write(STORAGE_KEY_DB_CONNECTIONS, enc);
+    });
+  }, []);
+
+  const updateCurlRequests = useCallback((data: CurlRequest[]) => {
+    const cleaned = sanitizeCurlRequests(data);
+    setCurlRequests(cleaned);
+    const ver = ++curlRequestsWriteVersion.current;
+    return encryptCurlRequests(cleaned).then((enc) => {
+      if (ver === curlRequestsWriteVersion.current)
+        localStorageAdapter.write(STORAGE_KEY_HTTP_REQUESTS, enc);
     });
   }, []);
 
@@ -1470,6 +1490,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateProxyProfiles([]);
     updateOtpAuthenticators([]);
     updateDbConnections([]);
+    updateCurlRequests([]);
     updateJdbcDrivers([]);
     updateSnippets([], { replace: true });
     updateSnippetPackages([]);
@@ -1486,6 +1507,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateIdentities,
     updateOtpAuthenticators,
     updateDbConnections,
+    updateCurlRequests,
     updateJdbcDrivers,
     updateProxyProfiles,
     updateSnippets,
@@ -1834,6 +1856,22 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
             encryptDatabaseConnections(orderedConnections).then((enc) => {
               if (dbVer === dbConnectionsWriteVersion.current)
                 localStorageAdapter.write(STORAGE_KEY_DB_CONNECTIONS, enc);
+            });
+          }
+        }
+
+        const savedCurlRequests =
+          localStorageAdapter.read<CurlRequest[]>(STORAGE_KEY_HTTP_REQUESTS);
+        if (savedCurlRequests) {
+          const curlVer = ++curlRequestsWriteVersion.current;
+          const decryptedRequests = await decryptCurlRequests(savedCurlRequests);
+          if (cancelled) return;
+          if (curlVer === curlRequestsWriteVersion.current) {
+            const orderedRequests = sanitizeCurlRequests(decryptedRequests);
+            setCurlRequests(orderedRequests);
+            encryptCurlRequests(orderedRequests).then((enc) => {
+              if (curlVer === curlRequestsWriteVersion.current)
+                localStorageAdapter.write(STORAGE_KEY_HTTP_REQUESTS, enc);
             });
           }
         }
@@ -2190,6 +2228,18 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
         return;
       }
 
+      if (key === STORAGE_KEY_HTTP_REQUESTS) {
+        const next = safeParse<CurlRequest[]>(event.newValue) ?? [];
+        ++curlRequestsWriteVersion.current;
+        const seq = ++curlRequestsReadSeq.current;
+        const writeAtStart = curlRequestsWriteVersion.current;
+        decryptCurlRequests(next).then((dec) => {
+          if (seq === curlRequestsReadSeq.current && writeAtStart === curlRequestsWriteVersion.current)
+            setCurlRequests(sanitizeCurlRequests(dec));
+        });
+        return;
+      }
+
       if (key === STORAGE_KEY_JDBC_DRIVERS) {
         const next = safeParse<JdbcDriver[]>(event.newValue) ?? [];
         ++jdbcDriversWriteVersion.current;
@@ -2448,6 +2498,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       proxyProfiles,
       otpAuthenticators,
       dbConnections,
+      curlRequests,
       jdbcDrivers,
       snippets,
       customGroups,
@@ -2457,7 +2508,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       knownHosts,
       groupConfigs,
     }),
-    [hosts, keys, identities, proxyProfiles, otpAuthenticators, dbConnections, jdbcDrivers, snippets, customGroups, snippetPackages, notes, noteGroups, knownHosts, groupConfigs],
+    [hosts, keys, identities, proxyProfiles, otpAuthenticators, dbConnections, curlRequests, jdbcDrivers, snippets, customGroups, snippetPackages, notes, noteGroups, knownHosts, groupConfigs],
   );
 
   const importData = useCallback(
@@ -2468,6 +2519,8 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       // as the restored hosts land.
       if (Array.isArray(payload.otpAuthenticators)) encryptedWrites.push(updateOtpAuthenticators(payload.otpAuthenticators));
       if (Array.isArray(payload.dbConnections)) encryptedWrites.push(updateDbConnections(payload.dbConnections));
+      if (Array.isArray(payload.curlRequests)) encryptedWrites.push(updateCurlRequests(payload.curlRequests));
+      if (Array.isArray(payload.curlRequests)) encryptedWrites.push(updateCurlRequests(payload.curlRequests));
       if (Array.isArray(payload.jdbcDrivers)) updateJdbcDrivers(payload.jdbcDrivers);
       if (payload.hosts) {
         // Cloud payloads no longer carry `lastConnectedAt` (#2629), but any
@@ -2506,6 +2559,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       updateIdentities,
       updateOtpAuthenticators,
       updateDbConnections,
+      updateCurlRequests,
       updateJdbcDrivers,
       updateProxyProfiles,
       updateSnippets,
@@ -2676,8 +2730,10 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     proxyProfiles,
     otpAuthenticators,
     dbConnections,
+    curlRequests,
     jdbcDrivers,
     updateJdbcDrivers,
+    updateCurlRequests,
     snippets,
     customGroups,
     snippetPackages,

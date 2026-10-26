@@ -1,7 +1,7 @@
 import { MonitorPanels } from './MonitorPanels';
 import { MonitorNavButton } from './MonitorNavButton';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Database, ShieldCheck } from "lucide-react";
+import { Database, ShieldCheck, Waypoints } from "lucide-react";
 import { Combobox } from "../ui/combobox";
 import React, { useCallback, useMemo } from "react";
 import { databaseTabStore } from "../../application/state/databaseTabStore";
@@ -286,10 +286,13 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     onUpdateOtpAuthenticators,
     OtpAuthenticatorsManager,
     dbConnections,
+    curlRequests,
     jdbcDrivers,
     onUpdateJdbcDrivers,
     onUpdateDbConnections,
+    onUpdateCurlRequests,
     DatabasesManager,
+    CurlCollections,
     ProxyProfilesManager,
     quickConnectTarget,
     quickConnectWarnings,
@@ -748,6 +751,32 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
               {sidebarCollapsed && (
                 <TooltipContent side="right">
                   {t("vault.nav.databases")}
+                </TooltipContent>
+              )}
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <RippleButton
+                  variant={currentSection === "curl" ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full h-10",
+                    sidebarCollapsed
+                      ? "justify-center p-0"
+                      : "justify-start gap-3",
+                    currentSection === "curl" &&
+                      "bg-foreground/10 text-foreground hover:bg-foreground/15 border-border/40",
+                  )}
+                  onClick={() => {
+                    setCurrentSection("curl");
+                  }}
+                >
+                  <Waypoints size={16} className="flex-shrink-0" />
+                  {!sidebarCollapsed && t("vault.nav.curl")}
+                </RippleButton>
+              </TooltipTrigger>
+              {sidebarCollapsed && (
+                <TooltipContent side="right">
+                  {t("vault.nav.curl")}
                 </TooltipContent>
               )}
             </Tooltip>
@@ -1515,6 +1544,13 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
                     jdbcDrivers={jdbcDrivers}
                     onUpdateJdbcDrivers={onUpdateJdbcDrivers}
                   />
+                </Suspense>
+              </LazyLoadBoundary>
+            )}
+            {currentSection === "curl" && (
+              <LazyLoadBoundary name="Curl" resetKey="curl">
+                <Suspense fallback={<VaultSectionLoading />}>
+                  <CurlCollections requests={curlRequests} onUpdateRequests={onUpdateCurlRequests} />
                 </Suspense>
               </LazyLoadBoundary>
             )}

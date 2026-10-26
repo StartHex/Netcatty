@@ -11,7 +11,8 @@
  * plaintext, and never persist empty over recoverable ciphertext.
  */
 
-import type { DatabaseConnection, GroupConfig, Host, Identity, OtpAuthenticator, ProxyProfile, SSHKey } from "../../domain/models";
+import type { CurlRequest, DatabaseConnection, GroupConfig, Host, Identity, OtpAuthenticator, ProxyProfile, SSHKey } from "../../domain/models";
+import { isSensitiveHeaderName } from "../../domain/models";
 import type { ProviderConnection, S3Config, WebDAVConfig } from "../../domain/sync";
 import {
   isEncryptedCredentialPlaceholder,
@@ -421,6 +422,75 @@ export function encryptDatabaseConnections(connections: DatabaseConnection[]): P
 
 export function decryptDatabaseConnections(connections: DatabaseConnection[]): Promise<DatabaseConnection[]> {
   return Promise.all(connections.map(decryptDatabaseConnectionSecrets));
+}
+
+// ---------------------------------------------------------------------------
+// CurlRequest (built-in HTTP client)
+// ---------------------------------------------------------------------------
+
+/**
+ * Encrypt every credential-bearing field of a saved request: the three auth
+ * secrets plus values of sensitive headers and cookies. The request shape stays
+ * plain so structure can sync while secrets remain device-local.
+ */
+export async function encryptCurlRequestSecrets(request: CurlRequest): Promise<CurlRequest> {
+  const headers = await Promise.all(
+    request.headers.map(async (header) =>
+      header.value && isSensitiveHeaderName(header.key)
+        ? { ...header, value: await encryptField(header.value) }
+        : header
+    )
+  );
+  const cookies = await Promise.all(
+    request.cookies.map(async (cookie) =>
+      cookie.value ? { ...cookie, value: await encryptField(cookie.value) } : cookie
+    )
+  );
+  return {
+    ...request,
+    headers,
+    cookies,
+    auth: {
+      ...request.auth,
+      password: await encryptField(request.auth.password),
+      token: await encryptField(request.auth.token),
+      apiKeyValue: await encryptField(request.auth.apiKeyValue),
+    },
+  };
+}
+
+export async function decryptCurlRequestSecrets(request: CurlRequest): Promise<CurlRequest> {
+  const decryptValue = async (value?: string) =>
+    value === undefined ? undefined : persistDecryptedSecret(value, await decryptField(value)) ?? value;
+  const headers = await Promise.all(
+    request.headers.map(async (header) =>
+      header.value ? { ...header, value: await decryptValue(header.value) as string } : header
+    )
+  );
+  const cookies = await Promise.all(
+    request.cookies.map(async (cookie) =>
+      cookie.value ? { ...cookie, value: await decryptValue(cookie.value) as string } : cookie
+    )
+  );
+  return {
+    ...request,
+    headers,
+    cookies,
+    auth: {
+      ...request.auth,
+      password: await decryptValue(request.auth.password),
+      token: await decryptValue(request.auth.token),
+      apiKeyValue: await decryptValue(request.auth.apiKeyValue),
+    },
+  };
+}
+
+export function encryptCurlRequests(requests: CurlRequest[]): Promise<CurlRequest[]> {
+  return Promise.all(requests.map(encryptCurlRequestSecrets));
+}
+
+export function decryptCurlRequests(requests: CurlRequest[]): Promise<CurlRequest[]> {
+  return Promise.all(requests.map(decryptCurlRequestSecrets));
 }
 
 // ---------------------------------------------------------------------------

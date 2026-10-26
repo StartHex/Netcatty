@@ -7,6 +7,7 @@ import { buildTabShortcutNumberById } from '../application/app/tabShortcutTarget
 import { useShortcutModifierHeld } from '../application/state/useShortcutModifierHeld';
 import type { EditorTabChrome } from '../application/state/editorTabStore';
 import { toDatabaseTabId, type DatabaseTabSummary } from '../application/state/databaseTabStore';
+import { toCurlTabId, type CurlTabSummary } from '../application/state/curlTabStore';
 import { collectSessionIds } from '../domain/workspace';
 import {
   appendHostFromWorkspaceDrop,
@@ -35,6 +36,7 @@ import { GlobalSftpTransferCenter } from './GlobalSftpTransferCenter';
 import { TopTabsQuickControls } from './TopTabsQuickControls';
 import {
   ActiveTabAutoScroller,
+  CurlTopTab,
   DatabaseTopTab,
   EditorTopTab,
   LogViewTopTab,
@@ -176,6 +178,8 @@ interface TopTabsProps {
   pluginViewTabs: readonly PluginViewTab[];
   databaseTabs: readonly DatabaseTabSummary[];
   onCloseDatabaseTab: (tabId: string) => void;
+  curlTabs: readonly CurlTabSummary[];
+  onCloseCurlTab: (tabId: string) => void;
   onClosePluginViewTab: (tabId: string) => void;
   onRequestCloseEditorTab: (editorTabId: string) => void;
   onPopOutEditorTab?: (editorTabId: string) => void;
@@ -230,6 +234,8 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
   pluginViewTabs,
   databaseTabs,
   onCloseDatabaseTab,
+  curlTabs,
+  onCloseCurlTab,
   onClosePluginViewTab,
   onRequestCloseEditorTab,
   onPopOutEditorTab,
@@ -752,6 +758,11 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
     [databaseTabs],
   );
 
+  const curlTabMap = useMemo(
+    () => new Map(curlTabs.map((tab) => [toCurlTabId(tab.id), tab])),
+    [curlTabs],
+  );
+
   // fileName → count, for the rename-disambiguation suffix in the render loop.
   // Memoed so we don't do a per-tab O(n) filter on every render (was O(n²)).
   const editorTabFileNameCounts = useMemo(() => {
@@ -773,6 +784,8 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
       if (pluginViewTab) return { type: 'pluginView' as const, id: tabId, pluginViewTab };
       const databaseTab = databaseTabMap.get(tabId);
       if (databaseTab) return { type: 'database' as const, id: tabId, databaseTab };
+      const curlTab = curlTabMap.get(tabId);
+      if (curlTab) return { type: 'curl' as const, id: tabId, curlTab };
       const session = orphanSessionMap.get(tabId);
       const workspace = workspaceMap.get(tabId);
       const logView = logViewMap.get(tabId);
@@ -787,7 +800,7 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
       }
       return null;
     }).filter(Boolean);
-  }, [orderedTabs, editorTabMap, pluginViewTabMap, databaseTabMap, orphanSessionMap, workspaceMap, logViewMap, workspacePaneCounts]);
+  }, [orderedTabs, editorTabMap, pluginViewTabMap, databaseTabMap, curlTabMap, orphanSessionMap, workspaceMap, logViewMap, workspacePaneCounts]);
 
   // Bulk-close menu items shared by session and workspace context menus.
   // Anchor is the tab the user right-clicked on (matches VSCode/JetBrains UX).
@@ -905,6 +918,31 @@ const TopTabsInner: React.FC<TopTabsProps> = ({
             key={tabId}
             tab={item.databaseTab}
             onClose={onCloseDatabaseTab}
+            renderBulkCloseItems={renderBulkCloseItems}
+            t={t}
+            isBeingDragged={draggingSessionId === tabId}
+            isDraggingForReorder={isDraggingForReorder}
+            shiftStyle={tabShiftStyles[tabId] || emptyTabStyle}
+            showDropIndicatorBefore={dropIndicator?.tabId === tabId && dropIndicator.position === 'before'}
+            showDropIndicatorAfter={dropIndicator?.tabId === tabId && dropIndicator.position === 'after'}
+            onTabDragStart={handleTabDragStart}
+            onTabDragEnd={handleTabDragEnd}
+            onTabDragOver={handleTabDragOver}
+            onTabDragLeave={handleTabDragLeave}
+            onTabDrop={handleTabDrop}
+            tabAnimationClass={getTabAnimationClass(tabId)}
+            shortcutNumber={tabShortcutNumbers?.get(tabId)}
+          />
+        );
+      }
+
+      if (item.type === 'curl') {
+        const tabId = item.id;
+        return (
+          <CurlTopTab
+            key={tabId}
+            tab={item.curlTab}
+            onClose={onCloseCurlTab}
             renderBulkCloseItems={renderBulkCloseItems}
             t={t}
             isBeingDragged={draggingSessionId === tabId}
@@ -1340,6 +1378,8 @@ export const topTabsAreEqual = (prev: TopTabsProps, next: TopTabsProps): boolean
     prev.pluginViewTabs === next.pluginViewTabs &&
     prev.onClosePluginViewTab === next.onClosePluginViewTab &&
     prev.databaseTabs === next.databaseTabs &&
+    prev.curlTabs === next.curlTabs &&
+    prev.onCloseCurlTab === next.onCloseCurlTab &&
     prev.onCloseDatabaseTab === next.onCloseDatabaseTab &&
     prev.draggingSessionId === next.draggingSessionId &&
     prev.isMacClient === next.isMacClient &&

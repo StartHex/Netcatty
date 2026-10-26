@@ -1,6 +1,7 @@
 import { ruMonitorMessages } from './ru/monitor';
 import type { Messages } from './types';
 import { ruDatabaseMessages } from './ru/database';
+import { ruCurlMessages } from './ru/curl';
 import { ruCoreMessages } from './ru/core';
 import { ruVaultMessages } from './ru/vault';
 import { ruTerminalMessages } from './ru/terminal';
@@ -12,6 +13,7 @@ export type { Messages } from './types';
 
 const ru: Messages = {
   ...ruDatabaseMessages,
+  ...ruCurlMessages,
   ...ruMonitorMessages,
   ...ruCoreMessages,
   ...ruVaultMessages,

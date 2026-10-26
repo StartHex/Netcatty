@@ -11,6 +11,7 @@ import { decryptProviderHeaders, encryptProviderHeaders } from '../infrastructur
  */
 
 import type {
+  CurlRequest,
   DatabaseConnection,
   GroupConfig,
   Host,
@@ -162,6 +163,7 @@ export interface SyncableVaultData {
   proxyProfiles?: ProxyProfile[];
   otpAuthenticators?: OtpAuthenticator[];
   dbConnections?: DatabaseConnection[];
+  curlRequests?: CurlRequest[];
   snippets: Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -1105,6 +1107,7 @@ function buildVaultSyncPayload(
     proxyProfiles: vault.proxyProfiles,
     ...(vault.otpAuthenticators?.length ? { otpAuthenticators: vault.otpAuthenticators } : {}),
     ...(vault.dbConnections?.length ? { dbConnections: vault.dbConnections } : {}),
+    ...(vault.curlRequests?.length ? { curlRequests: vault.curlRequests } : {}),
     snippets: vault.snippets,
     customGroups: vault.customGroups,
     snippetPackages: vault.snippetPackages,
@@ -1196,6 +1199,7 @@ export async function buildCloudSyncPayload(
     proxyProfiles: vault.proxyProfiles,
     ...(vault.otpAuthenticators?.length ? { otpAuthenticators: vault.otpAuthenticators } : {}),
     ...(vault.dbConnections?.length ? { dbConnections: vault.dbConnections } : {}),
+    ...(vault.curlRequests?.length ? { curlRequests: vault.curlRequests } : {}),
     snippets: vault.snippets,
     customGroups: vault.customGroups,
     snippetPackages: vault.snippetPackages,
@@ -1408,6 +1412,7 @@ async function preparePayloadApply(
     proxyProfiles: sanitizedPayload.proxyProfiles,
     otpAuthenticators: sanitizedPayload.otpAuthenticators,
     dbConnections: sanitizedPayload.dbConnections,
+    curlRequests: sanitizedPayload.curlRequests,
     snippets: sanitizedPayload.snippets,
     customGroups: sanitizedPayload.customGroups,
   };

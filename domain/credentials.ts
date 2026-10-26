@@ -243,6 +243,24 @@ export const stripSyncPayloadEncryptedCredentials = (
     return rest;
   });
 
+  const curlRequests = payload.curlRequests?.map((request) => {
+    const next = { ...request };
+    if (next.auth) {
+      const auth = { ...next.auth };
+      if (isEncryptedCredentialPlaceholder(auth.password)) delete auth.password;
+      if (isEncryptedCredentialPlaceholder(auth.token)) delete auth.token;
+      if (isEncryptedCredentialPlaceholder(auth.apiKeyValue)) delete auth.apiKeyValue;
+      next.auth = auth;
+    }
+    const stripRows = (rows: typeof next.headers | undefined) =>
+      rows?.map((row) =>
+        isEncryptedCredentialPlaceholder(row.value) ? { ...row, value: '' } : row,
+      );
+    if (next.headers) next.headers = stripRows(next.headers) ?? next.headers;
+    if (next.cookies) next.cookies = stripRows(next.cookies) ?? next.cookies;
+    return next;
+  });
+
   const otpAuthenticators = payload.otpAuthenticators?.map((authenticator) => {
     if (!isEncryptedCredentialPlaceholder(authenticator.secret)) return authenticator;
     const { secret: _removed, ...rest } = authenticator;
@@ -271,6 +289,9 @@ export const stripSyncPayloadEncryptedCredentials = (
       : {}),
     ...(payload.dbConnections !== undefined
       ? { dbConnections: dbConnections ?? payload.dbConnections }
+      : {}),
+    ...(payload.curlRequests !== undefined
+      ? { curlRequests: curlRequests ?? payload.curlRequests }
       : {}),
     groupConfigs: groupConfigs ?? payload.groupConfigs,
   };

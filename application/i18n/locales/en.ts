@@ -1,6 +1,7 @@
 import { enMonitorMessages } from './en/monitor';
 import type { Messages } from './types';
 import { enDatabaseMessages } from './en/database';
+import { enCurlMessages } from './en/curl';
 import { enCoreMessages } from './en/core';
 import { enVaultMessages } from './en/vault';
 import { enTerminalMessages } from './en/terminal';
@@ -12,6 +13,7 @@ export type { Messages } from './types';
 
 const en: Messages = {
   ...enDatabaseMessages,
+  ...enCurlMessages,
   ...enMonitorMessages,
   ...enCoreMessages,
   ...enVaultMessages,

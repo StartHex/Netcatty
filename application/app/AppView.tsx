@@ -44,6 +44,7 @@ import { useDefaultLocalShellContext } from '../../lib/useDiscoveredShells';
 import { getAvailablePaneMagnificationController } from '../../domain/paneMagnification';
 import { pluginViewTabStore, usePluginViewTabs } from '../state/pluginViewTabStore';
 import { databaseTabStore, toDatabaseTabId, useDatabaseTabs } from '../state/databaseTabStore';
+import { curlTabStore, toCurlTabId, useCurlTabs } from '../state/curlTabStore';
 import { buildPluginSettingScopeCatalog } from '../state/usePluginSettingScopeCatalog';
 import { useWorkSurfaceHostEditor } from '../state/useWorkSurfaceHostEditor';
 import {
@@ -227,6 +228,7 @@ function AppViewInner({ domains }: AppViewProps) {
   // subscription so top-tab switches do not rebuild the App shell.
   const pluginViewTabs = usePluginViewTabs();
   const databaseTabs = useDatabaseTabs();
+  const curlTabs = useCurlTabs();
   // Merge domain slices once per AppView render. AppView only re-renders when a
   // domain slice identity changes (see appViewDomainsEqual). Depend on the
   // domain bag so the hook graph stays honest; bag identity only changes when
@@ -277,7 +279,7 @@ function AppViewInner({ domains }: AppViewProps) {
     handleRequestCloseEditorTabRef, handleSessionStatusChange, handleSyncNowManual, handleTerminalDataCapture, handleUpdateHostFromTerminal,
     hostById, hosts, terminalHosts, updateTerminalHosts, hotkeyScheme, identities, importOrReuseKey, isBroadcastEnabled, isComposeSendToAll, onToggleComposeSendTarget, isGlobalBroadcastEnabled, isGlobalComposeSendToAll, onToggleGlobalBroadcast, onToggleGlobalComposeSendTarget, canUseGlobalBroadcast, isCreateWorkspaceOpen, isMacClient, isQuickSwitcherOpen,
     keyBindings, keyboardInteractiveQueue, keys, logViews, managedSources, navigateToSection, openLogView, openNoteRequest, orderedTabsWithEditors, orphanSessions,
-    passphraseQueue, fidoPromptQueue, protocolSelectHost, proxyProfiles, otpAuthenticators, dbConnections, updateDbConnections, jdbcDrivers, updateJdbcDrivers, portForwardingRules, quickResults, quickSearch, removeSessionFromWorkspace, reorderWorkTabs, reorderWorkspaceSessions,
+    passphraseQueue, fidoPromptQueue, protocolSelectHost, proxyProfiles, otpAuthenticators, dbConnections, updateDbConnections, jdbcDrivers, updateJdbcDrivers, curlRequests, updateCurlRequests, portForwardingRules, quickResults, quickSearch, removeSessionFromWorkspace, reorderWorkTabs, reorderWorkspaceSessions,
     resolveEmptyVaultConflict, resolveSessionAppearance, runSnippet, sessionLogsDir, sessionLogsEnabled, sessionLogsFormat, sessionLogsTimestampsEnabled, sessionRenameTarget, sshDebugLogsEnabled,
     sessions, setActiveTabId, setDeepLinkHostDraft, setDraggingSessionId, setEditorWordWrap,
     setNavigateToSection, setTerminalFontFamilyId, setTerminalFontSize, setVaultFocusRequest, updateSessionFontSize, updateSessionRestoreCwd, updateSessionDynamicTitle, updateSessionCodingCliProvider, clearSessionFontSizeOverride,
@@ -287,7 +289,7 @@ function AppViewInner({ domains }: AppViewProps) {
     toggleBroadcast, toggleScriptsSidePanelRef, toggleSidePanelRef, terminalPaneMagnificationRef, sftpPaneMagnificationRef, toggleWorkspaceViewMode, unmanageSource,
     readPersistedHosts, readPersistedManagedSources, updateCustomGroups, updateGroupConfigs, updateHostDistro, updateHosts, updateIdentities, updateKeys, updateKnownHosts, updateManagedSources,
     updateProxyProfiles, updateOtpAuthenticators, updateSnippetPackages, updateSnippets, updateSplitSizes, updateTerminalSetting, vaultFocusRequest, workspaceRenameTarget, workspaces,
-    VaultViewContainer, SftpViewMount, TerminalLayerMount, LogViewWrapper, DatabaseWorkbenchMount,
+    VaultViewContainer, SftpViewMount, TerminalLayerMount, LogViewWrapper, DatabaseWorkbenchMount, CurlClientMount,
   } = ctx;
 
   // Chrome-visible settings slice comes from settingsChromeStore, not from the
@@ -437,6 +439,16 @@ function AppViewInner({ domains }: AppViewProps) {
   const handleCloseDatabaseTab = useCallback((tabId: string) => {
     databaseTabStore.requestClose(tabId);
     const topId = toDatabaseTabId(tabId);
+    if (activeTabStore.getActiveTabId() === topId) {
+      const index = orderedTabsWithEditors.indexOf(topId);
+      const next = orderedTabsWithEditors[index - 1] ?? orderedTabsWithEditors[index + 1] ?? 'vault';
+      activeTabStore.setActiveTabId(next === topId ? 'vault' : next);
+    }
+  }, [orderedTabsWithEditors]);
+
+  const handleCloseCurlTab = useCallback((tabId: string) => {
+    curlTabStore.requestClose(tabId);
+    const topId = toCurlTabId(tabId);
     if (activeTabStore.getActiveTabId() === topId) {
       const index = orderedTabsWithEditors.indexOf(topId);
       const next = orderedTabsWithEditors[index - 1] ?? orderedTabsWithEditors[index + 1] ?? 'vault';
@@ -598,6 +610,8 @@ function AppViewInner({ domains }: AppViewProps) {
         onClosePluginViewTab={closePluginViewTab}
         databaseTabs={databaseTabs}
         onCloseDatabaseTab={handleCloseDatabaseTab}
+        curlTabs={curlTabs}
+        onCloseCurlTab={handleCloseCurlTab}
         onRequestCloseEditorTab={handleRequestCloseEditorTab}
         onPopOutEditorTab={handlePopOutEditorTab}
         onFocusEditorWindowTab={(id) => { void focusEditorInWindow(id); }}
@@ -659,9 +673,11 @@ function AppViewInner({ domains }: AppViewProps) {
             proxyProfiles={proxyProfiles}
             otpAuthenticators={otpAuthenticators}
             dbConnections={dbConnections}
+            curlRequests={curlRequests}
             jdbcDrivers={jdbcDrivers}
             onUpdateJdbcDrivers={updateJdbcDrivers}
             onUpdateDbConnections={updateDbConnections}
+            onUpdateCurlRequests={updateCurlRequests}
             snippets={snippets}
             snippetPackages={snippetPackages}
             customGroups={customGroups}
@@ -854,6 +870,8 @@ function AppViewInner({ domains }: AppViewProps) {
           tunnelDeps={dbTunnelDeps}
           onUpdateConnections={updateDbConnections}
         />
+
+        <CurlClientMount requests={curlRequests} onUpdateRequests={updateCurlRequests} />
 
         {/* Log Views - readonly terminal replays. The latest log body comes
             from connectionLogsStore inside AppLogViewSurface. */}

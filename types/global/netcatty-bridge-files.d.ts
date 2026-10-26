@@ -184,6 +184,9 @@ declare global {
     dbDispose?(): Promise<{ ok: boolean }>;
     dbSaveTextFile(payload: { defaultName?: string; content: string }): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }>;
   dbReadSqlFile?(path: string): Promise<{ ok: boolean; text?: string; path?: string; error?: string }>;
+    // Curl tool (built-in HTTP client). Requests are fully resolved by the renderer.
+    httpRequest?(payload: { wire: unknown }): Promise<{ ok: boolean; response?: unknown; error?: { code: string; message: string; detail?: string } }>;
+    httpCancel?(payload: { requestId: string }): Promise<{ ok: boolean; cancelled?: boolean }>;
 
     previewTotp?(payload: { text?: string; uri?: string }): Promise<{
       ok: boolean;

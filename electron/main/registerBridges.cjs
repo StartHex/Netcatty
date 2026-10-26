@@ -535,6 +535,8 @@ function createBridgeRegistrar(context) {
     registerTotpHandlers(ipcMain, electronModule);
     const { registerDbHandlers } = require("../bridges/dbBridge.cjs");
     registerDbHandlers(ipcMain);
+    const { registerHttpHandlers } = require("../bridges/httpBridge.cjs");
+    registerHttpHandlers(ipcMain);
     autoUpdateBridge.init(deps);
     autoUpdateBridge.registerHandlers(ipcMain);
     aiBridge.registerHandlers(ipcMain);

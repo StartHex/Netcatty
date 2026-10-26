@@ -157,7 +157,7 @@ import {
   TooltipProvider,
 } from "./ui/tooltip";
 import { Badge } from "./ui/badge";
-import { DatabaseConnection, HotkeyScheme, JdbcDriver, KeyBinding, OtpAuthenticator } from "../domain/models";
+import { CurlRequest, DatabaseConnection, HotkeyScheme, JdbcDriver, KeyBinding, OtpAuthenticator } from "../domain/models";
 import { VaultViewLayout } from "./vault/VaultViewLayout";
 import { useVaultHostCollections } from "./vault/useVaultHostCollections";
 import { useVaultImportHandlers } from "../application/state/useVaultImportHandlers";
@@ -175,6 +175,9 @@ const DatabasesManager = lazy(() =>
 const DatabaseWorkbenchSurface = lazy(() =>
   import("./databases/DatabaseWorkbenchSurface").then((module) => ({ default: module.DatabaseWorkbenchSurface })),
 );
+const CurlCollections = lazy(() =>
+  import("./curl/CurlCollections").then((module) => ({ default: module.CurlCollections })),
+);
 const SnippetsManager = lazy(() => import("./SnippetsManager"));
 
 export type VaultSection =
@@ -184,6 +187,7 @@ export type VaultSection =
   | "proxies"
   | "authenticators"
   | "databases"
+  | "curl"
   | "snippets"
   | "notes"
   | "port"
@@ -234,6 +238,7 @@ interface VaultViewProps {
   proxyProfiles: ProxyProfile[];
   otpAuthenticators: OtpAuthenticator[];
   dbConnections: DatabaseConnection[];
+  curlRequests: CurlRequest[];
   jdbcDrivers: JdbcDriver[];
   onUpdateJdbcDrivers: (drivers: JdbcDriver[]) => void;
   snippets: Snippet[];
@@ -266,6 +271,7 @@ interface VaultViewProps {
   onUpdateProxyProfiles: (profiles: ProxyProfile[]) => void;
   onUpdateOtpAuthenticators: (authenticators: OtpAuthenticator[]) => void;
   onUpdateDbConnections: (connections: DatabaseConnection[]) => void;
+  onUpdateCurlRequests: (requests: CurlRequest[]) => void;
   onUpdateSnippets: (snippets: Snippet[]) => void;
   onUpdateSnippetPackages: (pkgs: string[]) => void;
   onUpdateCustomGroups: (
@@ -332,6 +338,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   proxyProfiles,
   otpAuthenticators,
   dbConnections,
+  curlRequests,
   jdbcDrivers,
   onUpdateJdbcDrivers,
   snippets,
@@ -359,6 +366,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   onUpdateProxyProfiles,
   onUpdateOtpAuthenticators,
   onUpdateDbConnections,
+  onUpdateCurlRequests,
   onUpdateSnippets,
   onUpdateSnippetPackages,
   onUpdateCustomGroups,
@@ -1715,10 +1723,13 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           otpAuthenticators,
           onUpdateOtpAuthenticators,
           dbConnections,
+          curlRequests,
           jdbcDrivers,
           onUpdateJdbcDrivers,
           onUpdateDbConnections,
+          onUpdateCurlRequests,
           DatabasesManager,
+          CurlCollections,
           DatabaseWorkbenchSurface,
           OtpAuthenticatorsManager,
           ProxyProfilesManager,
@@ -1846,6 +1857,8 @@ export const vaultViewAreEqual = (
     prev.otpAuthenticators === next.otpAuthenticators &&
     prev.onUpdateOtpAuthenticators === next.onUpdateOtpAuthenticators &&
     prev.dbConnections === next.dbConnections &&
+    prev.curlRequests === next.curlRequests &&
+    prev.onUpdateCurlRequests === next.onUpdateCurlRequests &&
     prev.jdbcDrivers === next.jdbcDrivers &&
     prev.onUpdateJdbcDrivers === next.onUpdateJdbcDrivers &&
     prev.onUpdateDbConnections === next.onUpdateDbConnections &&

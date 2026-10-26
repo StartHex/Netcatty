@@ -80,6 +80,7 @@ const OPTIONAL_ENTITY_KEYS = new Set<CloudSyncPayloadEntityKey>([
   'proxyProfiles',
   'otpAuthenticators',
   'dbConnections',
+  'curlRequests',
   'snippetPackages',
   'notes',
   'noteGroups',
@@ -874,6 +875,14 @@ export function mergeSyncPayloads(
     tombstones('dbConnections'),
     mergeOptions,
   );
+  const baseCurlRequests = b.curlRequests ?? [];
+  const curlRequests = mergeEntityArrays(
+    baseCurlRequests,
+    entityArray(local, 'curlRequests', baseCurlRequests),
+    entityArray(remote, 'curlRequests', baseCurlRequests),
+    tombstones('curlRequests'),
+    mergeOptions,
+  );
   const snippets = mergeEntityArrays(b.snippets ?? [], local.snippets ?? [], remote.snippets ?? [], tombstones('snippets'), mergeOptions);
   const baseMonitorPanels = b.monitorPanels ?? [];
   const monitorPanels = mergeEntityArrays(baseMonitorPanels, entityArray(local, 'monitorPanels', baseMonitorPanels), entityArray(remote, 'monitorPanels', baseMonitorPanels), tombstones('monitorPanels'), { ...mergeOptions, mergeFields: true, deleteWins: true });
@@ -928,7 +937,7 @@ export function mergeSyncPayloads(
 
   // Aggregate stats
   const entityResults: Pick<EntityMergeResult<unknown>, 'added' | 'deleted' | 'modified' | 'conflicts'>[] =
-    [hosts, keys, identities, proxyProfiles, otpAuthenticators, dbConnections, snippets, monitorPanels, notes, portForwardingRules, browserBookmarks, groupConfigsResult, aiSessions];
+    [hosts, keys, identities, proxyProfiles, otpAuthenticators, dbConnections, curlRequests, snippets, monitorPanels, notes, portForwardingRules, browserBookmarks, groupConfigsResult, aiSessions];
   for (const r of entityResults) {
     summary.added.local += r.added.local;
     summary.added.remote += r.added.remote;
@@ -1023,6 +1032,9 @@ export function mergeSyncPayloads(
       : {}),
     ...(base?.dbConnections !== undefined || local.dbConnections !== undefined || remote.dbConnections !== undefined
       ? { dbConnections: dbConnections.merged }
+      : {}),
+    ...(base?.curlRequests !== undefined || local.curlRequests !== undefined || remote.curlRequests !== undefined
+      ? { curlRequests: curlRequests.merged }
       : {}),
     snippets: snippets.merged,
     monitorPanels: monitorPanels.merged,

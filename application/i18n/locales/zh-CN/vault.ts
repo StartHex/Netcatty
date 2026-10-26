@@ -978,6 +978,7 @@ export const zhCNVaultMessages: Messages = {
   'cloudSync.conflict.entity.proxyProfiles': '代理配置',
   'cloudSync.conflict.entity.otpAuthenticators': 'OTP 验证器',
   'cloudSync.conflict.entity.dbConnections': '数据库连接',
+  'cloudSync.conflict.entity.curlRequests': 'Curl 请求',
   'cloudSync.conflict.entity.snippets': '片段',
   'cloudSync.conflict.entity.notes': '笔记',
   'cloudSync.conflict.entity.noteGroups': '笔记分组',

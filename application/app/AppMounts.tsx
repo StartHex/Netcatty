@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useActiveTabId, useIsSftpActive, useIsVaultActive } from '../state/activeTabStore';
 import { fromDatabaseTabId, isDatabaseTabId } from '../state/databaseTabStore';
+import { fromCurlTabId, isCurlTabId } from '../state/curlTabStore';
 import { useTerminalHostTreeLayoutWidth } from '../state/terminalHostTreeStore';
 import { isTerminalContentTabSurface } from './workTabSurface';
 import { cn } from '../../lib/utils';
@@ -9,7 +10,7 @@ import { LazyLoadBoundary } from '../../components/ui/lazy-load-boundary';
 import type { LogView as LogViewType } from '../state/logViewState';
 import type { SftpView as SftpViewComponent } from '../../components/SftpView';
 import type { TerminalLayer as TerminalLayerComponent } from '../../components/TerminalLayer';
-import type { DatabaseConnection } from '../../domain/models';
+import type { CurlRequest, DatabaseConnection } from '../../domain/models';
 import type { DatabaseTunnelDeps } from '../state/useDatabaseWorkbench';
 
 // Visibility container for VaultView - isolates isActive subscription
@@ -218,6 +219,10 @@ const LazyDatabaseWorkbenchSurface = lazy(() =>
   import('../../components/databases/DatabaseWorkbenchSurface').then((m) => ({ default: m.DatabaseWorkbenchSurface })),
 );
 
+const LazyCurlClientSurface = lazy(() =>
+  import('../../components/curl/CurlClientSurface').then((m) => ({ default: m.CurlClientSurface })),
+);
+
 /**
  * Database workbench surface. Stays mounted while another tab is active so SQL
  * drafts, results and pooled connections survive tab switches (same contract as
@@ -249,6 +254,39 @@ export const DatabaseWorkbenchMount: React.FC<{
             connections={[...connections]}
             tunnelDeps={tunnelDeps}
             onUpdateConnections={onUpdateConnections}
+          />
+        </Suspense>
+      </LazyLoadBoundary>
+    </div>
+  );
+};
+
+/**
+ * Curl client surface. Stays mounted while another tab is active so in-flight
+ * responses, drafts and history survive tab switches.
+ */
+export const CurlClientMount: React.FC<{
+  requests: readonly CurlRequest[];
+  onUpdateRequests: (next: CurlRequest[]) => void | Promise<void>;
+}> = ({ requests, onUpdateRequests }) => {
+  const activeTabId = useActiveTabId();
+  const isActive = isCurlTabId(activeTabId);
+  const containerStyle: React.CSSProperties = isActive
+    ? {}
+    : { visibility: 'hidden', pointerEvents: 'none', position: 'absolute', zIndex: -1 };
+
+  return (
+    <div
+      className={cn('absolute inset-0', isActive ? 'z-20' : '')}
+      data-inactive-app-surface={isActive ? undefined : 'true'}
+      style={containerStyle}
+    >
+      <LazyLoadBoundary name="Curl client" resetKey="curl">
+        <Suspense fallback={null}>
+          <LazyCurlClientSurface
+            tabId={isActive ? fromCurlTabId(activeTabId) : null}
+            requests={requests}
+            onUpdateRequests={onUpdateRequests}
           />
         </Suspense>
       </LazyLoadBoundary>
