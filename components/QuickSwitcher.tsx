@@ -9,6 +9,7 @@ import {
   Search,
   Terminal,
   TerminalSquare,
+  Waypoints,
   Zap,
 } from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +39,7 @@ type QuickSwitcherItemBase = {
 
 type QuickSwitcherItem = QuickSwitcherItemBase & (
   | { type: "plugin-command"; commandId: string }
-  | { type: "host" | "tab" | "workspace" | "action" | "shell" | "plugin-view" | "quick-connect" | "database-tab" | "database"; commandId?: never }
+  | { type: "host" | "tab" | "workspace" | "action" | "shell" | "plugin-view" | "quick-connect" | "database-tab" | "database" | "curl-tab" | "curl"; commandId?: never }
 );
 
 export function buildPaneMagnificationPaletteAction(
@@ -161,6 +162,11 @@ interface QuickSwitcherProps {
   /** Saved database connections; selecting one opens the workbench. */
   databaseConnections?: ReadonlyArray<{ id: string; title: string; subtitle?: string }>;
   onOpenDatabaseConnection?: (connectionId: string) => void;
+  /** Open Curl client tabs, searchable like terminal tabs. */
+  curlTabs?: ReadonlyArray<{ id: string; title: string; subtitle?: string }>;
+  /** Saved Curl requests; selecting one opens the client. */
+  curlRequests?: ReadonlyArray<{ id: string; title: string; subtitle?: string }>;
+  onOpenCurlRequest?: (requestId: string) => void;
   onQueryChange: (value: string) => void;
   onSelect: (host: Host) => void;
   onEditHost?: (host: Host) => void;
@@ -186,6 +192,9 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
   databaseTabs = [],
   databaseConnections = [],
   onOpenDatabaseConnection,
+  curlTabs = [],
+  curlRequests = [],
+  onOpenCurlRequest,
   onQueryChange,
   onSelect,
   onEditHost,
@@ -313,6 +322,18 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
     );
   }, [databaseConnections, trimmedQuery]);
 
+  const filteredCurlTabs = useMemo(() => {
+    if (!trimmedQuery) return curlTabs;
+    return curlTabs.filter((tab) => matchesSearchQuery(trimmedQuery, tab.title, tab.subtitle ?? '', 'curl'));
+  }, [curlTabs, trimmedQuery]);
+
+  const filteredCurlRequests = useMemo(() => {
+    if (!trimmedQuery) return [];
+    return curlRequests.filter((request) =>
+      matchesSearchQuery(trimmedQuery, request.title, request.subtitle ?? '', 'curl'),
+    );
+  }, [curlRequests, trimmedQuery]);
+
   const filteredOrphanSessions = useMemo(() => {
     if (!trimmedQuery) return orphanSessions;
     return orphanSessions.filter((session) =>
@@ -376,7 +397,9 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
       || filteredOrphanSessions.length > 0
       || filteredWorkspaces.length > 0
       || filteredDatabaseTabs.length > 0
-      || filteredDatabaseConnections.length > 0;
+      || filteredDatabaseConnections.length > 0
+      || filteredCurlTabs.length > 0
+      || filteredCurlRequests.length > 0;
 
     // The address row is the default Enter target only when nothing else matches.
     // Matching hosts and open tabs stay ahead of it.
@@ -409,6 +432,17 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
           id: connection.id,
           title: connection.title,
           altCommand: connection.subtitle,
+        }),
+      );
+      filteredCurlTabs.forEach((tab) =>
+        pushItem({ type: "curl-tab", id: tab.id, title: tab.title }),
+      );
+      filteredCurlRequests.forEach((request) =>
+        pushItem({
+          type: "curl",
+          id: request.id,
+          title: request.title,
+          altCommand: request.subtitle,
         }),
       );
       filteredOrphanSessions.forEach((s) =>
@@ -449,6 +483,8 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
     builtInTabs,
     filteredDatabaseConnections,
     filteredDatabaseTabs,
+    filteredCurlRequests,
+    filteredCurlTabs,
     filteredOrphanSessions,
     filteredShells,
     filteredWorkspaces,
@@ -518,6 +554,14 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
         break;
       case "database":
         onOpenDatabaseConnection?.(item.id);
+        onClose();
+        break;
+      case "curl-tab":
+        onSelectTab(item.id);
+        onClose();
+        break;
+      case "curl":
+        onOpenCurlRequest?.(item.id);
         onClose();
         break;
       case "tab":
@@ -754,6 +798,29 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
                       {item.title ?? item.id}
                     </span>
                     {item.type === "database" && item.altCommand ? (
+                      <span className="shrink-0 truncate text-xs text-muted-foreground">{item.altCommand}</span>
+                    ) : null}
+                  </div>
+                );
+              }
+
+              if (item.type === "curl-tab" || item.type === "curl") {
+                return (
+                  <div
+                    className={rowClass}
+                    onClick={() => {
+                      if (item.type === "curl") onOpenCurlRequest?.(item.id);
+                      else onSelectTab(item.id);
+                      onClose();
+                    }}
+                  >
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground">
+                      <Waypoints size={16} />
+                    </div>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {item.title ?? item.id}
+                    </span>
+                    {item.type === "curl" && item.altCommand ? (
                       <span className="shrink-0 truncate text-xs text-muted-foreground">{item.altCommand}</span>
                     ) : null}
                   </div>

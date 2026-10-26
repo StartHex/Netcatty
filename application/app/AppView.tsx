@@ -1004,6 +1004,19 @@ function AppViewInner({ domains }: AppViewProps) {
               onOpenDatabaseConnection={(connectionId) => {
                 databaseTabStore.requestOpen(connectionId);
               }}
+              curlTabs={curlTabs.map((tab) => ({
+                id: toCurlTabId(tab.id),
+                title: tab.title,
+                subtitle: tab.method,
+              }))}
+              curlRequests={curlRequests.map((request) => ({
+                id: request.id,
+                title: request.name,
+                subtitle: `${request.method} ${request.url}`,
+              }))}
+              onOpenCurlRequest={(requestId) => {
+                curlTabStore.requestOpen(requestId);
+              }}
               showSftpTab={showSftpTab}
               onQueryChange={setQuickSearch}
               onSelect={handleHostConnectWithProtocolCheck}
