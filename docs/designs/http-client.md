@@ -17,6 +17,7 @@ Headers / Cookies / Auth 分栏、请求体与响应体上下分区），侧边�
 - 响应面板：状态码、耗时、大小、Headers、Body（JSON 美化 / 原文）、复制、保存到文件。
 - 请求历史（最近 200 条，本地）。
 - 取消请求、超时、重定向跟随开关、TLS 校验开关。
+- 保存的请求进加密 vault，并接入云同步（凭据字段按仓库既有规则剥离，见 §7）。
 - 主进程发请求（绕开渲染层 CORS/混合内容限制），协议仅允许 `http` / `https`。
 
 ### v2 候选
@@ -234,15 +235,26 @@ IPC（沿用 `netcatty:<domain>:<action>` 命名）：
 
 请求编辑器与响应面板之间放一条可拖拽分隔条（记忆到标签），与数据库工作台的 schema 分隔条同款实现。
 
-## 7. 持久化
+## 7. 持久化与同步
 
-| 数据 | 位置 | 加密 | 同步 |
+| 数据 | 位置 | 加密 | 云同步 |
 | --- | --- | --- | --- |
-| 保存的请求（含 headers/auth/body） | vault：`netcatty_http_requests_v1` | 整个请求 JSON 走 `enc:v1`（复用 `secureFieldAdapter`） | 不参与云同步（v1），避免凭据随同步外泄；v2 评估 |
-| 打开的标签与草稿 | `netcatty_http_tabs_v1`（localStorage） | 否（只存 url/method/名字，不存 headers/auth） | 否 |
-| 请求历史 | `netcatty_http_history_v1`（localStorage） | 否；仅 method/url/status/耗时，不存 header 与 body | 否 |
+| 保存的请求（headers / cookies / body / auth） | vault：`netcatty_http_requests_v1` | 敏感字段走 `enc:v1`（复用 `secureFieldAdapter`：`auth.password` / `auth.token` / `auth.apiKeyValue`，以及 `authorization`、`cookie`、`x-api-key` 一类 header 值） | **参与**，但 `enc:v1` 字段在载荷里被剥离，规则与 hosts 的 password、数据库连接的 password 一致（参考 `domain/credentials.ts:240` 对 `dbConnections` 的处理） |
+| 打开的标签与草稿 | `netcatty_http_tabs_v1`（localStorage） | 否（只存 url / method / 名称，不存 header 与 auth） | 否 |
+| 请求历史 | `netcatty_http_history_v1`（localStorage） | 否；仅 method / url / status / 耗时，不存 header 与 body | 否 |
 
-理由：与数据库连接同一策略——凭据进 vault 并加密，便利性数据放 localStorage，且不参与同步。
+同步接入点（与 `dbConnections` 完全同构，按顺序接线）：
+
+1. `domain/sync.ts`：`SyncPayload` 增加 `httpRequests`，并加入两组 entity key 列表（用于冲突统计与标签）。
+2. `domain/syncMerge.ts`：`OPTIONAL_ENTITY_KEYS` + `mergeEntityArrays` + `entityResults`。
+3. `domain/credentials.ts`：注册「剥离 `enc:v1` 字段」的 sanitizer（写进 `sanitizeHttpRequestForSync`）。
+4. `domain/convergentSync/payload.ts`：`CONVERGENT_ENTITY_COLLECTIONS` + `typedCollection`。
+5. `application/syncPayload.ts`：`SyncableVaultData` 字段、两个 builder、hash 依赖、`vaultImport` 回填。
+6. `application/state/useAutoSync.ts`：config 字段 / 快照 / hash 依赖。
+7. `components/cloud-sync/CloudSyncControls.tsx`：`httpRequests` → `cloudSync.conflict.entity.httpRequests`（5 语言）。
+
+结论按用户选择：**请求定义随云同步、凭据字段留在本机**。若之后希望 token 也跨设备，需要单独设计（那会把
+本机密钥暴露给同步载荷，与 SSH 密码现有策略冲突）。
 
 ## 8. 与既有能力的衔接
 
@@ -266,7 +278,7 @@ IPC（沿用 `netcatty:<domain>:<action>` 命名）：
 
 | 阶段 | 内容 | 估时 |
 | --- | --- | --- |
-| P1 | 模型 + URL 拆解 + 主进程桥 + 标签接入 + 侧边栏 + 请求编辑器（方法/URL/Params/Headers/Body/Auth）+ 响应面板 + 历史 | 2.5–3 天 |
+| P1 | 模型 + URL 拆解 + 主进程桥 + 标签接入 + 侧边栏 + 请求编辑器（方法/URL/Params/Headers/Body/Auth）+ 响应面板 + 历史 + vault/云同步接线 | 3–3.5 天 |
 | P2 | 集合文件夹、curl 导入/导出、Cookie jar、保存响应到文件、多部分表单 | 1.5–2 天 |
 | P3 | 经 SSH 主机请求、环境变量、集合批量运行、AI 解释响应 | 2–3 天 |
 
@@ -281,9 +293,12 @@ P1 完成即可日常替代 curl 工具。
 4. **`params` 双份表示**：`url` 与 `params` 可能短暂不一致；约定 `url` 权威，UI 以 `url` 重算 params，避免死循环。
 5. **与浏览器工具的边界**：本工具不渲染 HTML（只做源码/JSON 查看），避免与 host-routed browser 功能重叠。
 
-## 12. 待确认
+## 12. 已确认的设计决策（2026-10-26）
 
-1. v1 是否需要「经 SSH 主机发出请求」（会牵出 TLS/SNI 细节，工期 +1–2 天）？
-2. 保存的请求是否要跟云同步（含 auth）？设计默认：进 vault 加密但**不同步**。
-3. `curl` 粘贴导入是否放进 P1？（若你手上大量现成 curl 命令，建议提前到 P1）
-4. 响应体上限 8 MB、历史 200 条是否合适？
+1. `curl` 粘贴导入 / 复制为 curl：**放第二阶段**。
+2. 经 SSH 主机发出请求：**第一阶段只做直连**，主机路由放后续阶段。
+3. 保存的请求：**加密存 vault，并参与云同步**；`enc:v1` 凭据字段在同步载荷中剥离（与 hosts / dbConnections 同规则）。
+
+仍需在实现时确认的小项：
+- 响应体上限 8 MB、历史 200 条是否够用。
+- TLS 校验开关在 P1 是否可见（取决于 `net.fetch` 的会话级证书钩子能否做到请求级白名单，见 §11 风险 1）。
