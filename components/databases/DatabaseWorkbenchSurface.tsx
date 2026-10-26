@@ -8,6 +8,7 @@ import {
   ArrowUpDown,
   Bookmark,
   BookmarkPlus,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -607,17 +608,11 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
               <div className="flex shrink-0 items-center gap-4 border-t border-border/60 px-3 py-1 text-[11px] text-muted-foreground">
                 <label className="flex items-center gap-1">
                   <span>{t('databases.workbench.rowLimit')}</span>
-                  <select
-                    className="rounded border border-border/60 bg-transparent px-1 py-0.5 text-[11px]"
+                  <RowLimitControl
                     value={activeTab.maxRows}
-                    onChange={(event) => workbench.setMaxRows(activeTab.id, Number(event.target.value))}
-                  >
-                    {[100, 500, 1000, 2000, 5000].map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
+                    label={t('databases.workbench.rowLimit')}
+                    onChange={(value) => workbench.setMaxRows(activeTab.id, value)}
+                  />
                 </label>
                 <span>
                   {t('databases.workbench.rowCount', {
@@ -726,6 +721,83 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
         }}
       />
     </>
+  );
+};
+
+const ROW_LIMIT_PRESETS = [100, 500, 1000, 2000, 5000];
+
+/**
+ * Editable row limit: the number is a text field (type any value), the chevron
+ * opens the usual presets.
+ */
+const RowLimitControl: React.FC<{
+  value: number;
+  label: string;
+  onChange: (value: number) => void;
+}> = ({ value, label, onChange }) => {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = (raw: string) => {
+    const parsed = Number(raw.trim());
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setDraft(String(value));
+      return;
+    }
+    onChange(parsed);
+  };
+
+  return (
+    <div className="flex items-center overflow-hidden rounded border border-border/60">
+      <input
+        className="h-5 w-14 bg-transparent px-1 text-right text-[11px] tabular-nums outline-none focus:bg-muted/40"
+        inputMode="numeric"
+        value={draft}
+        aria-label={label}
+        onChange={(event) => setDraft(event.target.value.replace(/[^0-9]/g, ''))}
+        onBlur={() => commit(draft)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            commit(draft);
+            event.currentTarget.blur();
+          } else if (event.key === 'Escape') {
+            setDraft(String(value));
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="flex h-5 w-4 items-center justify-center border-l border-border/60 text-muted-foreground hover:bg-muted/60"
+            aria-label={label}
+          >
+            <ChevronDown className="h-3 w-3" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-24 p-1">
+          <div className="flex flex-col">
+            {ROW_LIMIT_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={cn(
+                  'rounded px-2 py-1 text-left text-[11px] tabular-nums hover:bg-muted',
+                  preset === value ? 'bg-primary/10 font-medium' : '',
+                )}
+                onClick={() => onChange(preset)}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 };
 

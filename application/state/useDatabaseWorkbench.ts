@@ -355,7 +355,7 @@ export function useDatabaseWorkbench(
 
   const setMaxRows = useCallback(
     (tabId: string, maxRows: number) => {
-      const clamped = Math.min(5000, Math.max(100, Math.round(maxRows)));
+      const clamped = Math.min(5000, Math.max(1, Math.round(maxRows)));
       patchTab(tabId, { maxRows: clamped });
     },
     [patchTab],
