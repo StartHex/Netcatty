@@ -2520,7 +2520,6 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       if (Array.isArray(payload.otpAuthenticators)) encryptedWrites.push(updateOtpAuthenticators(payload.otpAuthenticators));
       if (Array.isArray(payload.dbConnections)) encryptedWrites.push(updateDbConnections(payload.dbConnections));
       if (Array.isArray(payload.curlRequests)) encryptedWrites.push(updateCurlRequests(payload.curlRequests));
-      if (Array.isArray(payload.curlRequests)) encryptedWrites.push(updateCurlRequests(payload.curlRequests));
       if (Array.isArray(payload.jdbcDrivers)) updateJdbcDrivers(payload.jdbcDrivers);
       if (payload.hosts) {
         // Cloud payloads no longer carry `lastConnectedAt` (#2629), but any

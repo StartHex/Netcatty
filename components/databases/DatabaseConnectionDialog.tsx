@@ -136,6 +136,12 @@ interface TestState {
   message?: string;
 }
 
+/**
+ * Module-level draft cache: mounted dialogues unmount when Radix closes them,
+ * so component state alone cannot survive an accidental dismissal.
+ */
+const draftCache = new Map<string, FormState>();
+
 export interface DatabaseConnectionDialogProps {
   open: boolean;
   connection?: DatabaseConnection | null;
@@ -167,16 +173,23 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
   const [javaChecking, setJavaChecking] = useState(false);
   const [test, setTest] = useState<TestState>({ status: 'idle' });
   const [showError, setShowError] = useState(false);
+  const draftKey = connection ? `connection:${connection.id}` : 'connection:new';
 
   useEffect(() => {
     if (!open) return;
-    setForm(connection ? formFromConnection(connection) : EMPTY_FORM);
+    // Restore an unfinished draft: dismissing the dialog (outside click, Esc,
+    // switching windows) must never throw away what the user already typed.
+    setForm(draftCache.get(draftKey) ?? (connection ? formFromConnection(connection) : EMPTY_FORM));
     setTest({ status: 'idle' });
     setShowError(false);
-  }, [open, connection]);
+  }, [open, connection, draftKey]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      draftCache.set(draftKey, next);
+      return next;
+    });
     setTest({ status: 'idle' });
   };
 
@@ -186,12 +199,14 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       const nextDefault = String(DATABASE_DEFAULT_PORTS[kind] ?? '');
       const port =
         prev.port === previousDefault || prev.port === '' ? nextDefault : prev.port;
-      return {
+      const next = {
         ...prev,
         kind,
         port,
         host: kind === 'sqlite' ? prev.host : prev.host === '' ? '127.0.0.1' : prev.host,
       };
+      draftCache.set(draftKey, next);
+      return next;
     });
     setTest({ status: 'idle' });
   };
@@ -253,6 +268,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
   const handleSave = () => {
     setShowError(true);
     if (invalid) return;
+    draftCache.delete(draftKey);
     onSave(draft);
   };
 
@@ -283,16 +299,20 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
       update('jdbcPresetId', presetId);
       return;
     }
-    setForm((prev) => ({
-      ...prev,
-      jdbcPresetId: presetId,
-      jdbcDriverClass: preset.driverClass,
-      jdbcUrl: applyJdbcPresetTemplate(preset, {
-        host: prev.host || '127.0.0.1',
-        port: Number(prev.port) || preset.defaultPort,
-        database: prev.database,
-      }),
-    }));
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        jdbcPresetId: presetId,
+        jdbcDriverClass: preset.driverClass,
+        jdbcUrl: applyJdbcPresetTemplate(preset, {
+          host: prev.host || '127.0.0.1',
+          port: Number(prev.port) || preset.defaultPort,
+          database: prev.database,
+        }),
+      };
+      draftCache.set(draftKey, next);
+      return next;
+    });
     setTest({ status: 'idle' });
   };
 
@@ -339,7 +359,13 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
-      <DialogContent className="max-w-[560px]">
+      <DialogContent
+        className="flex max-h-[92vh] w-[calc(100vw-2rem)] max-w-[640px] flex-col overflow-hidden"
+        // A stray click outside must not dismiss the form: the footer holds
+        // the only way to save, and small screens put it off-view.
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>
             {connection ? t('databases.form.titleEdit') : t('databases.form.titleNew')}
@@ -347,7 +373,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
           <DialogDescription>{t('databases.form.description')}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-1">
+        <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto py-1 pr-1">
           <div className="grid gap-2">
             <Label htmlFor="db-label">{t('databases.form.label')}</Label>
             <Input
@@ -764,7 +790,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
           ) : null}
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between">
+        <DialogFooter className="shrink-0 gap-2 border-t border-border/60 pt-3 sm:justify-between">
           <Button type="button" variant="outline" onClick={() => void handleTest()} disabled={test.status === 'testing'}>
             {test.status === 'testing' ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -774,7 +800,14 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
             {t('databases.test')}
           </Button>
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                draftCache.delete(draftKey);
+                onClose();
+              }}
+            >
               {t('databases.cancel')}
             </Button>
             <Button type="button" onClick={handleSave}>
