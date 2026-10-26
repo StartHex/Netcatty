@@ -46,6 +46,10 @@ function readDriverClassesFromJar(jarPath) {
   if (eocd < 0) return [];
   const entries = buffer.readUInt16LE(eocd + 10);
   let offset = buffer.readUInt32LE(eocd + 16);
+  // Some vendor jars ship no service file; fall back to class names ending in
+  // "Driver" (the shape every JDBC driver follows) so the editor can still
+  // prefill the driver class.
+  const driverClasses = [];
   for (let index = 0; index < entries; index += 1) {
     if (offset + 46 > buffer.length || buffer.readUInt32LE(offset) !== CENTRAL_SIGNATURE) return [];
     const method = buffer.readUInt16LE(offset + 10);
@@ -57,15 +61,19 @@ function readDriverClassesFromJar(jarPath) {
     const name = buffer.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
     if (name === SERVICE_ENTRY) {
       const text = readEntryData(buffer, localOffset, compressedSize, method);
-      if (!text) return [];
-      return text
-        .split(/\r?\n/)
-        .map((line) => line.replace(/#.*/, "").trim())
-        .filter(Boolean);
+      if (text) {
+        const declared = text
+          .split(/\r?\n/)
+          .map((line) => line.replace(/#.*/, "").trim())
+          .filter(Boolean);
+        if (declared.length) return declared;
+      }
+    } else if (name.endsWith("Driver.class") && !name.includes("$")) {
+      driverClasses.push(name.slice(0, -".class".length).split("/").join("."));
     }
     offset += 46 + nameLength + extraLength + commentLength;
   }
-  return [];
+  return driverClasses;
 }
 
 module.exports = { readDriverClassesFromJar };

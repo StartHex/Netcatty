@@ -70,7 +70,12 @@ function toCellValue(value) {
 
 function normalizeError(error) {
   if (!error) return { message: "Unknown database error" };
-  const message = String(error.message || error);
+  let message = String(error.message || error);
+  // JDBC drivers that ship native libraries fail with a dlopen arch mismatch.
+  // Say what to do instead of echoing the loader path.
+  if (/incompatible architecture|mach-o file|dlopen\(/i.test(message)) {
+    message = `${message}\n提示：该 JDBC 驱动自带的本地库与当前 Java 架构不一致（Apple Silicon 上多为 x86_64 库），请安装或指定 x86_64 的 Java（Rosetta）后重试。`;
+  }
   return {
     message,
     code: typeof error.code === "string" ? error.code : undefined,
@@ -586,37 +591,81 @@ function createSqliteSession(target) {
 
 function createJdbcSession(target) {
   const { JdbcSidecar } = require("./jdbcSidecar.cjs");
-  const sidecar = new JdbcSidecar({ javaPath: target.javaPath });
+  const { listJavaCandidates } = require("./javaRuntime.cjs");
+  let sidecar = new JdbcSidecar({ javaPath: target.javaPath });
   const connId = "conn-1";
   let connecting = null;
+  // x86_64-only driver libraries cannot load into an arm64 JVM. Remember which
+  // runtime worked (or failed) so retries do not reopen a doomed process.
+  const rejectedJava = new Set();
+
+  const connectOn = async (instance) => {
+    const started = await instance.start();
+    if (!started.ok) {
+      const error = new Error(started.error || "JDBC sidecar failed to start");
+      error.code = started.code || "jdbc-unavailable";
+      throw error;
+    }
+    const response = await instance.request("CONNECT", {
+      connId,
+      url: target.jdbcUrl,
+      user: target.username,
+      password: target.password,
+      driverClass: target.jdbcDriverClass,
+      jars: Array.isArray(target.jdbcDriverPaths)
+        ? target.jdbcDriverPaths.join(require("node:path").delimiter)
+        : target.jdbcDriverPaths,
+    });
+    if (!response.ok) {
+      const error = new Error(response.error?.message || "JDBC connect failed");
+      error.code = response.error?.code || "jdbc-error";
+      error.sqlState = response.error?.sqlState;
+      throw error;
+    }
+    return response.fields || {};
+  };
+
+  const isArchMismatch = (error) =>
+    /incompatible architecture|mach-o file|wrong ELF class|Can't load AMD 64/i.test(
+      String(error?.message || ""),
+    );
+
+  const connectWithFallback = async () => {
+    try {
+      return await connectOn(sidecar);
+    } catch (error) {
+      if (!isArchMismatch(error)) throw error;
+      const currentPath = sidecar.java?.path;
+      if (currentPath) rejectedJava.add(currentPath);
+      for (const candidate of listJavaCandidates({})) {
+        if (rejectedJava.has(candidate)) continue;
+        const next = new JdbcSidecar({ javaPath: candidate });
+        try {
+          const fields = await connectOn(next);
+          const previous = sidecar;
+          sidecar = next;
+          try {
+            await previous.stop();
+          } catch {
+            /* ignore */
+          }
+          return fields;
+        } catch (retryError) {
+          rejectedJava.add(candidate);
+          try {
+            await next.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      throw error;
+    }
+  };
 
   const ensure = async () => {
     if (!connecting) {
-      connecting = (async () => {
-        const started = await sidecar.start();
-        if (!started.ok) {
-          const error = new Error(started.error || "JDBC sidecar failed to start");
-          error.code = started.code || "jdbc-unavailable";
-          throw error;
-        }
-        const response = await sidecar.request("CONNECT", {
-          connId,
-          url: target.jdbcUrl,
-          user: target.username,
-          password: target.password,
-          driverClass: target.jdbcDriverClass,
-          jars: Array.isArray(target.jdbcDriverPaths)
-            ? target.jdbcDriverPaths.join(require("node:path").delimiter)
-            : target.jdbcDriverPaths,
-        });
-        if (!response.ok) {
-          const error = new Error(response.error?.message || "JDBC connect failed");
-          error.code = response.error?.code || "jdbc-error";
-          error.sqlState = response.error?.sqlState;
-          throw error;
-        }
-        return response.fields || {};
-      })();
+      connecting = (async () => connectWithFallback())();
       connecting = connecting.catch((error) => {
         connecting = null;
         throw error;

@@ -187,12 +187,45 @@ function defaultHomes() {
   return expandHomeDirs("/usr/lib/jvm").sort().reverse();
 }
 
+/**
+ * Absolute java binaries worth trying, best first. Used when the first runtime
+ * turns out to be unusable for a driver (for example an x86_64-only native
+ * library on Apple Silicon).
+ */
+function listJavaCandidates(options = {}) {
+  const homes = [];
+  if (options.javaHome) homes.push(options.javaHome);
+  for (const envName of ["NETCATTY_JAVA_HOME", "JAVA_HOME"]) {
+    if (process.env[envName]) homes.push(process.env[envName]);
+  }
+  homes.push(...defaultHomes(), ...bundledJreHomes());
+  const binaries = [];
+  if (options.javaPath) binaries.push(options.javaPath);
+  for (const home of homes) {
+    const binary = javaBinaryIn(home);
+    if (binary) binaries.push(binary);
+  }
+  return [...new Set(binaries.filter((candidate) => candidate.includes(path.sep) || candidate.includes("/")))];
+}
+
 function resolveJava(options = {}) {
   const key = `${options.javaHome || ""}|${options.javaPath || ""}`;
   if (cache.has(key)) return cache.get(key);
 
   const tried = [];
   let sawTooOld = null;
+  // A path the user typed is a promise: if it is wrong, say so instead of
+  // connecting with some other runtime they did not choose.
+  const typedPath = typeof options.javaPath === "string" ? options.javaPath.trim() : "";
+  if (typedPath && (typedPath.includes(path.sep) || typedPath.includes("/")) && !isExecutableFile(typedPath)) {
+    const resolved = {
+      ok: false,
+      tried: [typedPath],
+      error: `指定的 Java 路径不存在或不可执行：${typedPath}`,
+    };
+    cache.set(key, resolved);
+    return resolved;
+  }
   const explicit = [];
   if (options.javaPath) explicit.push(options.javaPath);
   if (options.javaHome) explicit.push(javaBinaryIn(options.javaHome));
@@ -232,4 +265,10 @@ function resolveJava(options = {}) {
   return resolved;
 }
 
-module.exports = { resolveJava, parseJavaMajor, isDirLike, MIN_JAVA_MAJOR };
+module.exports = {
+  resolveJava,
+  listJavaCandidates,
+  parseJavaMajor,
+  isDirLike,
+  MIN_JAVA_MAJOR,
+};

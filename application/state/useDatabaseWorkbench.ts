@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DatabaseConnection, DbQueryResult } from '../../domain/models';
+import { buildTablePreviewSql } from '../../domain/database/tablePreview';
 import {
   cancelDatabaseQuery,
   closeDatabaseConnection,
@@ -175,13 +176,11 @@ export function useDatabaseWorkbench(
 
   const previewTable = useCallback(
     async (tabId: string, table: DbTableRef) => {
-      const quoted = table.schema && table.schema !== 'main' ? `${table.schema}.${table.name}` : table.name;
-      const tabLimit = tabsRef.current.find((entry) => entry.id === tabId)?.maxRows ?? 1000;
-      const sql = `select * from ${quoted} limit ${tabLimit}`;
+      const activeTab = tabsRef.current.find((entry) => entry.id === tabId);
+      const sql = buildTablePreviewSql(activeTab?.kind, table, activeTab?.maxRows ?? 1000);
       patchTab(tabId, { sql });
-      const tab = tabsRef.current.find((entry) => entry.id === tabId);
-      if (!tab) return;
-      const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
+      if (!activeTab) return;
+      const connection = connectionsRef.current.find((entry) => entry.id === activeTab.connectionId);
       if (!connection) return;
       // Run through the same path as the toolbar button.
       const resolved = await resolveTarget(connection);

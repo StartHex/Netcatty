@@ -167,7 +167,9 @@ public final class NetcattyJdbcSidecar {
     String sql = params.getOrDefault("sql", "");
     int maxRows = parseInt(params.get("maxRows"), 1000);
     try (Statement statement = connection.createStatement()) {
-      statement.setMaxRows(maxRows + 1);
+      // Do not call setMaxRows: several drivers implement it by rewriting the
+      // statement (trailing LIMIT), which breaks dialects that have no LIMIT.
+      // The row cap is enforced while streaming instead.
       boolean hasResult = statement.execute(sql);
       if (!hasResult) {
         int updated = Math.max(statement.getUpdateCount(), 0);
@@ -191,6 +193,9 @@ public final class NetcattyJdbcSidecar {
           if (rows >= maxRows) {
             truncated = true;
             break;
+          }
+          if (rows == 0) {
+            try { statement.setFetchSize(Math.min(maxRows + 1, 500)); } catch (Exception ignored) {}
           }
           StringBuilder row = new StringBuilder("ROW\t").append(id);
           for (int i = 1; i <= count; i++) {
