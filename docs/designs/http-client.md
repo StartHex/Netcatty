@@ -335,3 +335,15 @@ P1 完成即可日常替代 curl 工具。
 - 经 SSH 主机的隧道请求。
 - multipart/form-data 文件上传、响应体保存到文件。
 - 环境变量（`{{baseUrl}}` 等）与请求链。
+
+### 13.4 本机构建备注
+
+打包必须带项目配置文件，否则 `asarUnpack`、压缩和产物命名全部失效（asar 会膨胀到 700 MB 以上）：
+
+```bash
+npm run build
+npx electron-builder --config electron-builder.config.cjs --mac dmg --arm64 \
+  -c.directories.output=/tmp/nce-out -c.mac.identity=null
+```
+
+本机 ad-hoc 签名需要先 `xattr -cr` 再 `codesign --force --deep --sign -`，否则 dmg 里的包会因为资源封签缺失而打不开。
