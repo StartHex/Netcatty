@@ -211,6 +211,9 @@ module.exports = {
         'node_modules/fast-deep-equal/**/*',
         'node_modules/fast-uri/**/*',
         'node_modules/json-schema-traverse/**/*',
+        // The JDBC sidecar jar is launched by an external JVM, which cannot
+        // read app.asar paths.
+        'electron/bridges/jdbc-sidecar/*.jar',
         'electron/cli/**/*',
         'electron/capabilities/**/*',
         'electron/shared/**/*',

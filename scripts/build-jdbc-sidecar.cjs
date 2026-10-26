@@ -20,7 +20,6 @@ const { resolveJava } = require(path.join(root, "electron", "bridges", "javaRunt
 
 function jdkHomeCandidates() {
   const homes = [];
-  const exe = process.platform === "win32" ? `${"java"}.exe` : "java";
   const java = resolveJava({});
   if (java.ok) {
     for (const tried of java.tried || []) {
@@ -47,7 +46,6 @@ function jdkHomeCandidates() {
       // no per-user JDKs
     }
   }
-  void exe;
   return homes;
 }
 

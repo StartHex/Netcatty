@@ -54,6 +54,22 @@ function extractBundledJar(jarInsideAsar) {
   }
 }
 
+/**
+ * Paths inside app.asar look like ordinary files to fs but java cannot open
+ * them, so they must be copied out before being handed to the JVM.
+ */
+function isInsideAsar(candidate) {
+  return typeof candidate === "string" && candidate.includes(`.asar${path.sep}`);
+}
+
+/** Archive path → the real file electron-builder leaves for asarUnpack entries. */
+function unpackedMirror(candidate) {
+  if (!isInsideAsar(candidate)) return null;
+  const marker = `.asar${path.sep}`;
+  const index = candidate.indexOf(marker);
+  return `${candidate.slice(0, index)}.asar.unpacked${candidate.slice(index + marker.length - 1)}`;
+}
+
 function resolveSidecarJar(options = {}) {
   const candidates = [
     options.jarPath,
@@ -63,6 +79,7 @@ function resolveSidecarJar(options = {}) {
     path.join(__dirname, "..", "..", "dist", "jdbc-sidecar", "netcatty-jdbc-sidecar.jar"),
   ].filter(Boolean);
   const found = candidates.find((candidate) => {
+    if (isInsideAsar(candidate)) return false;
     try {
       return fs.statSync(candidate).isFile();
     } catch {
@@ -70,9 +87,20 @@ function resolveSidecarJar(options = {}) {
     }
   });
   if (found) return found;
+  // Packaged builds: asarUnpack mirrors are real files java can open directly.
+  for (const candidate of candidates) {
+    const mirror = unpackedMirror(candidate);
+    if (!mirror) continue;
+    try {
+      if (fs.statSync(mirror).isFile()) return mirror;
+    } catch {
+      // fall through to extraction
+    }
+  }
   // Packaged builds keep the jar inside app.asar; java cannot open that path,
   // so copy it next to userData once and run from there.
   for (const candidate of candidates) {
+    if (!isInsideAsar(candidate)) continue;
     try {
       if (fs.existsSync(candidate)) return extractBundledJar(candidate);
     } catch {
@@ -229,4 +257,4 @@ class JdbcSidecar {
   }
 }
 
-module.exports = { JdbcSidecar, resolveSidecarJar };
+module.exports = { JdbcSidecar, resolveSidecarJar, isInsideAsar, unpackedMirror };
