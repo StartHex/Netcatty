@@ -98,6 +98,8 @@ export interface DbColumnInfo {
   name: string;
   type?: string;
   nullable?: boolean;
+  /** Primary-key member; required to edit table rows in place. */
+  primaryKey?: boolean;
 }
 
 export async function listDatabaseTables(

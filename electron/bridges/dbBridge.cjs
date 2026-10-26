@@ -301,16 +301,26 @@ function createPgSession(target) {
     async columns(schema, table) {
       const instance = await ensure();
       const result = await instance.query(
-        "select column_name as name, data_type as type, is_nullable as nullable, " +
-          "character_maximum_length as size, numeric_precision as precision, numeric_scale as scale " +
-          "from information_schema.columns where table_schema = $1 and table_name = $2 " +
-          "order by ordinal_position",
+        "select c.column_name as name, c.data_type as type, c.is_nullable as nullable, " +
+          "c.character_maximum_length as size, c.numeric_precision as precision, c.numeric_scale as scale, " +
+          "exists (" +
+          "  select 1 from information_schema.table_constraints tc " +
+          "  join information_schema.key_column_usage kcu " +
+          "    on kcu.constraint_schema = tc.constraint_schema " +
+          "   and kcu.constraint_name = tc.constraint_name " +
+          "   and kcu.table_name = tc.table_name " +
+          "  where tc.constraint_type = 'PRIMARY KEY' and tc.table_schema = c.table_schema " +
+          "    and tc.table_name = c.table_name and kcu.column_name = c.column_name" +
+          ") as is_pk " +
+          "from information_schema.columns c where c.table_schema = $1 and c.table_name = $2 " +
+          "order by c.ordinal_position",
         [schema, table],
       );
       return result.rows.map((row) => ({
         name: row.name,
         type: withTypeSize(row.type, row.size ?? row.precision, row.scale),
         nullable: row.nullable === "YES",
+        primaryKey: row.is_pk === true,
       }));
     },
     async control(action) {
@@ -407,15 +417,21 @@ function createMysqlSession(target) {
     async columns(schema, table) {
       const instance = await ensure();
       const [rows] = await instance.query(
-        "select column_name as name, column_type as type, is_nullable as nullable " +
-          "from information_schema.columns where table_schema = ? and table_name = ? " +
-          "order by ordinal_position",
+        "select c.column_name as name, c.column_type as type, c.is_nullable as nullable, " +
+          "exists (" +
+          "  select 1 from information_schema.key_column_usage kcu " +
+          "  where kcu.constraint_name = 'PRIMARY' and kcu.table_schema = c.table_schema " +
+          "    and kcu.table_name = c.table_name and kcu.column_name = c.column_name" +
+          ") as is_pk " +
+          "from information_schema.columns c where c.table_schema = ? and c.table_name = ? " +
+          "order by c.ordinal_position",
         [schema, table],
       );
       return (rows || []).map((row) => ({
         name: row.name,
         type: row.type,
         nullable: row.nullable === "YES",
+        primaryKey: Number(row.is_pk) === 1,
       }));
     },
     cancel() {
@@ -527,8 +543,12 @@ function createOracleSession(target) {
     async columns(schema, table) {
       const instance = await ensure();
       const result = await instance.execute(
-        "select column_name, data_type, nullable, data_length, char_length, data_precision, data_scale " +
-          "from all_tab_columns where owner = :1 and table_name = :2 order by column_id",
+        "select c.column_name, c.data_type, c.nullable, c.data_length, c.char_length, c.data_precision, c.data_scale, " +
+          "(select count(*) from all_cons_columns cc " +
+          "  join all_constraints con on con.owner = cc.owner and con.constraint_name = cc.constraint_name " +
+          "  where con.constraint_type = 'P' and cc.owner = c.owner and cc.table_name = c.table_name " +
+          "    and cc.column_name = c.column_name) as pk " +
+          "from all_tab_columns c where c.owner = :1 and c.table_name = :2 order by c.column_id",
         [schema, table],
         { outFormat: oracledb.OUT_FORMAT_ARRAY },
       );
@@ -541,6 +561,7 @@ function createOracleSession(target) {
           name: String(row[0] || ""),
           type: withTypeSize(baseType, size, row[6]),
           nullable: row[2] === "Y",
+          primaryKey: Number(row[7]) > 0,
         };
       });
     },
@@ -634,6 +655,7 @@ function createSqliteSession(target) {
         name: String(row.name),
         type: String(row.type || ""),
         nullable: Number(row.notnull) === 0,
+        primaryKey: Number(row.pk) > 0,
       }));
     },
     async control(action) {
@@ -803,6 +825,7 @@ function createJdbcSession(target) {
         name: row[0] || "",
         type: row[1] || "",
         nullable: row[2] === "true",
+        primaryKey: row[3] === "true",
       }));
     },
     async control(action) {
@@ -946,16 +969,24 @@ function createSqlServerSession(target) {
       const escapedTable = String(table || "").replace(/'/g, "''");
       const result = await exec(
         instance,
-        "select column_name as [name], data_type as [type], is_nullable as [nullable], " +
-          "character_maximum_length as [size], numeric_precision as [precision], numeric_scale as [scale] " +
-          `from information_schema.columns where table_schema = '${escapedSchema}' and table_name = '${escapedTable}' ` +
-          "order by ordinal_position",
+        "select c.column_name as [name], c.data_type as [type], c.is_nullable as [nullable], " +
+          "c.character_maximum_length as [size], c.numeric_precision as [precision], c.numeric_scale as [scale], " +
+          "case when exists (" +
+          "  select 1 from information_schema.table_constraints tc " +
+          "  join information_schema.key_column_usage kcu " +
+          "    on kcu.constraint_name = tc.constraint_name and kcu.table_schema = tc.table_schema " +
+          "  where tc.constraint_type = 'PRIMARY KEY' and tc.table_schema = c.table_schema " +
+          "    and tc.table_name = c.table_name and kcu.column_name = c.column_name" +
+          ") then 1 else 0 end as [is_pk] " +
+          `from information_schema.columns c where c.table_schema = '${escapedSchema}' and c.table_name = '${escapedTable}' ` +
+          "order by c.ordinal_position",
         HARD_MAX_ROWS,
       );
       return result.rows.map((row) => ({
         name: String(row[0] || ""),
         type: withTypeSize(row[1], row.size ?? row.precision, row.scale),
         nullable: String(row[2] || "").toUpperCase() === "YES",
+        primaryKey: Number(row[6]) === 1,
       }));
     },
     async control() {

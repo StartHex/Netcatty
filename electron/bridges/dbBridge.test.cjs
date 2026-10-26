@@ -196,6 +196,8 @@ test("sqlite: lists tables and columns for the schema tree", async () => {
       ["id", "name"],
     );
     assert.equal(columns.columns[1].nullable, false);
+    assert.equal(columns.columns[0].primaryKey, true);
+    assert.equal(columns.columns[1].primaryKey, false);
   } finally {
     await handlers.disconnect({ id: "sqlite-schema-test", kind: "sqlite" });
   }

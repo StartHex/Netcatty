@@ -8,6 +8,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DatabaseConnection, DbQueryResult } from '../../domain/models';
 import { buildTablePreviewSql } from '../../domain/database/tablePreview';
 import {
+  buildDeleteStatement,
+  buildUpdateStatement,
+  canEditRows,
+  parseSingleTableQuery,
+  type EditTarget,
+} from '../../domain/database/tableEdit';
+import {
   cancelDatabaseQuery,
   closeDatabaseConnection,
   databaseConnectionTarget,
@@ -62,6 +69,8 @@ export interface DatabaseTab {
   maxRows: number;
   /** Column metadata shown by the schema panel's structure view. */
   structure?: { table: DbTableRef; columns: DbColumnInfo[]; loading?: boolean; error?: string };
+  /** Set when the current result comes from one table with a usable primary key. */
+  editMeta?: { target: EditTarget; columns: DbColumnInfo[] } | null;
 }
 
 export interface UseDatabaseWorkbenchResult {
@@ -81,6 +90,8 @@ export interface UseDatabaseWorkbenchResult {
   previewTable: (tabId: string, table: DbTableRef) => Promise<void>;
   showStructure: (tabId: string, table: DbTableRef) => Promise<void>;
   clearStructure: (tabId: string) => void;
+  updateCell: (tabId: string, rowIndex: number, column: string, value: string | null) => Promise<boolean>;
+  deleteRow: (tabId: string, rowIndex: number) => Promise<boolean>;
   cancelQuery: (tabId: string) => void;
   reconnect: (tabId: string) => Promise<void>;
 }
@@ -361,6 +372,124 @@ export function useDatabaseWorkbench(
     [patchTab],
   );
 
+  const resolveEditMeta = useCallback(
+    async (tabId: string, target: DbConnectionTarget, table: EditTarget) => {
+      const expected = tabsRef.current.find((entry) => entry.id === tabId)?.result;
+      try {
+        const response = await listDatabaseColumns(target, table.table, table.schema);
+        const current = tabsRef.current.find((entry) => entry.id === tabId);
+        if (!current || current.result !== expected) return;
+        if (response.ok === true && canEditRows(response.columns)) {
+          patchTab(tabId, { editMeta: { target: table, columns: response.columns } });
+        }
+      } catch {
+        // Editing is optional: metadata failures just leave the grid read-only.
+      }
+    },
+    [patchTab],
+  );
+
+  /** Runs one row-level mutation through the same tunnel/session path as queries. */
+  const runMutation = useCallback(
+    async (tabId: string, build: (tab: DatabaseTab) => string | null): Promise<boolean> => {
+      const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!tab) return false;
+      const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
+      if (!connection || connection.readOnly) return false;
+      const sql = build(tab);
+      if (!sql) return false;
+      const resolved = await resolveTarget(connection);
+      if (resolved.ok !== true) {
+        patchTab(tabId, { error: resolved.error });
+        return false;
+      }
+      const response = await runDatabaseQuery(resolved.target, sql, { maxRows: 1 });
+      if (response.ok !== true) {
+        const bridgeError = response.error;
+        patchTab(tabId, { error: formatDatabaseError(bridgeError), errorDetail: bridgeError });
+        return false;
+      }
+      patchTab(tabId, { error: undefined, errorDetail: undefined });
+      return true;
+    },
+    [patchTab, resolveTarget],
+  );
+
+  const updateCell = useCallback(
+    async (tabId: string, rowIndex: number, column: string, value: string | null): Promise<boolean> => {
+      const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!tab?.editMeta || !tab.result) return false;
+      const resultColumns = tab.result.columns.map((entry) => entry.name);
+      const row = tab.result.rows[rowIndex];
+      if (!row) return false;
+      const sql = buildUpdateStatement({
+        target: tab.editMeta.target,
+        kind: tab.kind,
+        columns: tab.editMeta.columns,
+        resultColumns,
+        row,
+        column,
+        value,
+      });
+      if (!sql) return false;
+      const applied = await runMutation(tabId, () => sql);
+      if (!applied) return false;
+      patchTab(tabId, (current) => {
+        if (!current.result) return {};
+        const columnIndex = current.result.columns.findIndex(
+          (entry) => entry.name.toLowerCase() === column.toLowerCase(),
+        );
+        if (columnIndex < 0) return {};
+        return {
+          result: {
+            ...current.result,
+            rows: current.result.rows.map((entry, index) =>
+              index === rowIndex
+                ? entry.map((cell, cellIndex) => (cellIndex === columnIndex ? value : cell))
+                : entry,
+            ),
+          },
+        };
+      });
+      return true;
+    },
+    [patchTab, runMutation],
+  );
+
+  const deleteRow = useCallback(
+    async (tabId: string, rowIndex: number): Promise<boolean> => {
+      const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!tab?.editMeta || !tab.result) return false;
+      const resultColumns = tab.result.columns.map((entry) => entry.name);
+      const row = tab.result.rows[rowIndex];
+      if (!row) return false;
+      const sql = buildDeleteStatement({
+        target: tab.editMeta.target,
+        kind: tab.kind,
+        columns: tab.editMeta.columns,
+        resultColumns,
+        row,
+      });
+      if (!sql) return false;
+      const applied = await runMutation(tabId, () => sql);
+      if (!applied) return false;
+      patchTab(tabId, (current) => {
+        if (!current.result) return {};
+        const rows = current.result.rows.filter((_, index) => index !== rowIndex);
+        return {
+          result: {
+            ...current.result,
+            rows,
+            rowCount: Math.max(0, current.result.rowCount - 1),
+          },
+          editMeta: rows.length === 0 ? null : current.editMeta,
+        };
+      });
+      return true;
+    },
+    [patchTab, runMutation],
+  );
+
   const runQuery = useCallback(
     async (tabId: string, sqlOverride?: string, options?: { maxRows?: number }) => {
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
@@ -398,7 +527,12 @@ export function useDatabaseWorkbench(
             durationMs: Date.now() - startedAt,
             error: undefined,
             errorDetail: undefined,
+            editMeta: null,
           });
+          const editableTable = parseSingleTableQuery(sql);
+          if (editableTable && response.result.columns.length > 0) {
+            void resolveEditMeta(tabId, resolved.target, editableTable);
+          }
         } else {
           const bridgeError = response.ok === false ? response.error : undefined;
           patchTab(tabId, {
@@ -414,7 +548,7 @@ export function useDatabaseWorkbench(
         });
       }
     },
-    [patchTab, resolveTarget],
+    [patchTab, resolveEditMeta, resolveTarget],
   );
 
   const controlTransaction = useCallback(
@@ -584,6 +718,8 @@ export function useDatabaseWorkbench(
     previewTable,
     showStructure,
     clearStructure,
+    updateCell,
+    deleteRow,
     beginTransaction,
     commitTransaction,
     rollbackTransaction,

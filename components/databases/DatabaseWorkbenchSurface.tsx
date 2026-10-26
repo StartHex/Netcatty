@@ -20,6 +20,7 @@ import {
   Rows2,
   Square,
   Table2,
+  Trash2,
   Eye,
   FileCode2,
   Wand2,
@@ -577,7 +578,18 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
           t={t}
         />
       ) : pagedResult ? (
-        <ResultGrid result={pagedResult} gridTemplate={gridTemplate} gridWidth={gridWidth} t={t} />
+        <ResultGrid
+          result={pagedResult}
+          gridTemplate={gridTemplate}
+          gridWidth={gridWidth}
+          t={t}
+          editable={Boolean(tab.editMeta) && !connection?.readOnly}
+          rowOffset={pageIndex * pageSize}
+          onUpdateCell={(rowIndex, column, value) =>
+            workbench.updateCell(tab.id, rowIndex, column, value)
+          }
+          onDeleteRow={(rowIndex) => workbench.deleteRow(tab.id, rowIndex)}
+        />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
           <ArrowUpDown className="h-5 w-5 text-muted-foreground/60" />
@@ -590,6 +602,9 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
       )}
 
       <div className="flex shrink-0 items-center gap-4 border-t border-border/60 px-3 py-1 text-[11px] text-muted-foreground">
+        {tab.result && tab.result.columns.length > 0 && tab.result.rows.length > 0 && tab.editMeta ? (
+          <span className="truncate">{t('databases.workbench.editHint')}</span>
+        ) : null}
         <label className="flex items-center gap-1">
           <span>{t('databases.workbench.rowLimit')}</span>
           <RowLimitControl
@@ -1207,9 +1222,30 @@ interface ResultGridProps {
   /** Sum of the fixed column widths; the scroll container uses it as min width. */
   gridWidth: number;
   t: ReturnType<typeof useI18n>['t'];
+  /** In-place editing is only offered when the row has a usable primary key. */
+  editable?: boolean;
+  /** Index of the first visible row inside the full result set. */
+  rowOffset?: number;
+  onUpdateCell?: (rowIndex: number, column: string, value: string | null) => Promise<boolean>;
+  onDeleteRow?: (rowIndex: number) => Promise<boolean>;
 }
 
-const ResultGrid: React.FC<ResultGridProps> = ({ result, gridTemplate, gridWidth, t }) => {
+const ACTION_COLUMN_WIDTH = 32;
+
+const ResultGrid: React.FC<ResultGridProps> = ({
+  result,
+  gridTemplate,
+  gridWidth,
+  t,
+  editable = false,
+  rowOffset = 0,
+  onUpdateCell,
+  onDeleteRow,
+}) => {
+  const [editing, setEditing] = useState<{ row: number; cell: number; draft: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ row: number } | null>(null);
+  const [saving, setSaving] = useState(false);
+
   if (result.columns.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
@@ -1219,63 +1255,159 @@ const ResultGrid: React.FC<ResultGridProps> = ({ result, gridTemplate, gridWidth
       </div>
     );
   }
+
+  const template = editable ? `${ACTION_COLUMN_WIDTH}px ${gridTemplate}` : gridTemplate;
+  const width = editable ? gridWidth + ACTION_COLUMN_WIDTH : gridWidth;
+
+  const commitEdit = async () => {
+    if (!editing || !onUpdateCell) {
+      setEditing(null);
+      return;
+    }
+    const column = result.columns[editing.cell];
+    const original = result.rows[editing.row]?.[editing.cell];
+    const draft = editing.draft;
+    const next = draft === '' && (original === null || original === undefined) ? null : draft;
+    if (String(original ?? '') === String(next ?? '')) {
+      setEditing(null);
+      return;
+    }
+    setSaving(true);
+    const applied = await onUpdateCell(rowOffset + editing.row, column.name, next);
+    setSaving(false);
+    setEditing(null);
+    if (applied) toast.success(t('databases.workbench.rowUpdated'));
+    else toast.error(t('databases.workbench.rowUpdateFailed'));
+  };
+
+  const commitDelete = async () => {
+    if (!pendingDelete || !onDeleteRow) {
+      setPendingDelete(null);
+      return;
+    }
+    setSaving(true);
+    const applied = await onDeleteRow(rowOffset + pendingDelete.row);
+    setSaving(false);
+    setPendingDelete(null);
+    if (applied) toast.success(t('databases.workbench.rowDeleted'));
+    else toast.error(t('databases.workbench.rowDeleteFailed'));
+  };
+
   return (
-    <div className="min-h-0 w-full min-w-0 flex-1 overflow-x-auto [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-background [&::-webkit-scrollbar-thumb]:bg-clip-padding [&::-webkit-scrollbar-track]:bg-transparent">
-      <div
-        className="flex min-h-full flex-col"
-        style={{ minWidth: '100%', width: gridWidth > 0 ? `${gridWidth}px` : undefined }}
-      >
+    <>
+      <div className="min-h-0 w-full min-w-0 flex-1 overflow-x-auto [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-background [&::-webkit-scrollbar-thumb]:bg-clip-padding [&::-webkit-scrollbar-track]:bg-transparent">
         <div
-          className="sticky top-0 z-10 grid shrink-0 border-b border-border/60 bg-secondary/60"
-          style={{ gridTemplateColumns: gridTemplate }}
+          className="flex min-h-full flex-col"
+          style={{ minWidth: '100%', width: width > 0 ? `${width}px` : undefined }}
         >
-          {result.columns.map((column, index) => (
-            <div
-              key={`${column.name}-${index}`}
-              className="truncate px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-              title={column.type ? `${column.name} · ${column.type}` : column.name}
-            >
-              {column.name}
-            </div>
-          ))}
+          <div
+            className="sticky top-0 z-10 grid shrink-0 border-b border-border/60 bg-secondary/60"
+            style={{ gridTemplateColumns: template }}
+          >
+            {editable ? <div className="px-1 py-1.5" /> : null}
+            {result.columns.map((column, index) => (
+              <div
+                key={`${column.name}-${index}`}
+                className="truncate px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                title={column.type ? `${column.name} · ${column.type}` : column.name}
+              >
+                {column.name}
+              </div>
+            ))}
+          </div>
+          <FixedSizeVirtualList
+            items={result.rows}
+            itemHeight={28}
+            className="min-h-0 flex-1"
+            getItemKey={(_row, index) => String(index)}
+            renderItem={(row, rowIndex) => (
+              <div
+                className={cn(
+                  'group grid h-7 items-center text-xs',
+                  rowIndex % 2 === 1 ? 'bg-secondary/20' : 'bg-transparent',
+                )}
+                style={{ gridTemplateColumns: template }}
+              >
+                {editable ? (
+                  <div className="flex items-center justify-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-5 w-5 p-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                      aria-label={t('databases.workbench.deleteRow')}
+                      disabled={saving}
+                      onClick={() => setPendingDelete({ row: rowIndex })}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : null}
+                {row.map((value, cellIndex) => {
+                  const isEditing = editing?.row === rowIndex && editing?.cell === cellIndex;
+                  if (isEditing) {
+                    return (
+                      <input
+                        key={cellIndex}
+                        autoFocus
+                        className="h-6 w-full rounded border border-primary/60 bg-background px-2 font-mono text-xs outline-none"
+                        value={editing!.draft}
+                        disabled={saving}
+                        onChange={(event) => setEditing({ ...editing!, draft: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void commitEdit();
+                          } else if (event.key === 'Escape') {
+                            event.preventDefault();
+                            setEditing(null);
+                          }
+                        }}
+                        onBlur={() => void commitEdit()}
+                      />
+                    );
+                  }
+                  return (
+                    <div
+                      key={cellIndex}
+                      className={cn(
+                        'truncate px-3 font-mono',
+                        value !== null && 'cursor-pointer hover:bg-secondary/40',
+                        value === null && 'italic text-muted-foreground/70',
+                        typeof value === 'number' && 'text-right tabular-nums',
+                      )}
+                      title={cellText(value)}
+                      onDoubleClick={() => {
+                        if (!editable || !onUpdateCell || saving) return;
+                        setEditing({ row: rowIndex, cell: cellIndex, draft: cellText(value) });
+                      }}
+                      onClick={() => {
+                        if (value === null) return;
+                        void navigator.clipboard?.writeText(String(value)).then(() => {
+                          toast.success(t('databases.workbench.cellCopied'));
+                        });
+                      }}
+                    >
+                      {cellText(value)}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          />
         </div>
-        <FixedSizeVirtualList
-          items={result.rows}
-          itemHeight={28}
-          className="min-h-0 flex-1"
-          getItemKey={(_row, index) => String(index)}
-          renderItem={(row, rowIndex) => (
-            <div
-              className={cn(
-                'grid h-7 items-center text-xs',
-                rowIndex % 2 === 1 ? 'bg-secondary/20' : 'bg-transparent',
-              )}
-              style={{ gridTemplateColumns: gridTemplate }}
-            >
-              {row.map((value, cellIndex) => (
-                <div
-                  key={cellIndex}
-                  className={cn(
-                    'truncate px-3 font-mono',
-                    value !== null && 'cursor-pointer hover:bg-secondary/40',
-                    value === null && 'italic text-muted-foreground/70',
-                    typeof value === 'number' && 'text-right tabular-nums',
-                  )}
-                  title={cellText(value)}
-                  onClick={() => {
-                    if (value === null) return;
-                    void navigator.clipboard?.writeText(String(value)).then(() => {
-                      toast.success(t('databases.workbench.cellCopied'));
-                    });
-                  }}
-                >
-                  {cellText(value)}
-                </div>
-              ))}
-            </div>
-          )}
-        />
       </div>
-    </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={t('databases.workbench.deleteRowTitle')}
+        message={t('databases.workbench.deleteRowConfirmMessage')}
+        confirmLabel={t('databases.workbench.deleteRow')}
+        destructive
+        busy={saving}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        onConfirm={() => void commitDelete()}
+      />
+    </>
   );
 };

@@ -18,9 +18,12 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -240,10 +243,18 @@ public final class NetcattyJdbcSidecar {
   private static void metaColumns(String id, Map<String, String> params) throws Exception {
     Connection connection = connection(params);
     StringBuilder header = new StringBuilder("COLS\t").append(id);
-    for (String name : new String[] {"name", "type", "nullable"}) {
+    for (String name : new String[] {"name", "type", "nullable", "primaryKey"}) {
       header.append('\t').append(encode(name)).append(':').append(encode("text"));
     }
     out.println(header);
+    Set<String> primaryKeys = new HashSet<>();
+    try (ResultSet pk =
+        connection.getMetaData().getPrimaryKeys(null, params.get("schema"), params.get("table"))) {
+      while (pk.next()) {
+        String column = pk.getString("COLUMN_NAME");
+        if (column != null) primaryKeys.add(column.toUpperCase(Locale.ROOT));
+      }
+    }
     try (ResultSet resultSet =
         connection.getMetaData().getColumns(null, params.get("schema"), params.get("table"), "%")) {
       int rows = 0;
@@ -256,10 +267,13 @@ public final class NetcattyJdbcSidecar {
           boolean numeric = typeName.matches("(?i).*(DECIMAL|NUMERIC|NUMBER).*");
           typeName = typeName + "(" + size + (numeric && digits > 0 ? "," + digits : "") + ")";
         }
+        String columnName = resultSet.getString("COLUMN_NAME");
+        boolean isPk = columnName != null && primaryKeys.contains(columnName.toUpperCase(Locale.ROOT));
         out.println("ROW\t" + id
-            + "\t" + encode(resultSet.getString("COLUMN_NAME"))
+            + "\t" + encode(columnName)
             + "\t" + encode(typeName)
-            + "\t" + encode(nullable ? "true" : "false"));
+            + "\t" + encode(nullable ? "true" : "false")
+            + "\t" + encode(isPk ? "true" : "false"));
         rows++;
       }
       ok(id, Map.of("rows", String.valueOf(rows)));
