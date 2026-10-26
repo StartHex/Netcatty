@@ -37,6 +37,7 @@ import { FixedSizeVirtualList } from '../ui/FixedSizeVirtualList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/ScriptCodeEditor';
+import { buildSqlCompletionEntries } from '../../domain/database/sqlCompletion';
 import { useSqlHistory } from '../../application/state/useSqlHistory';
 import type { DatabaseTunnelDeps, DbTableRef } from '../../application/state/useDatabaseWorkbench';
 import {
@@ -275,6 +276,15 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
     () => widths.reduce((total, width) => total + Math.round(width), 0),
     [widths],
   );
+
+  const sqlCompletionSource = useCallback(() => {
+    if (!activeTab) return [];
+    return buildSqlCompletionEntries({
+      tables: activeTab.tables,
+      columns: activeTab.structure?.columns ?? [],
+      resultColumns: activeTab.result?.columns ?? [],
+    });
+  }, [activeTab]);
 
   // Client-side paging: statements without LIMIT fetch a full page set, and the
   // row-limit selector acts as the page size.
@@ -567,6 +577,7 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
                 placeholder={t('databases.workbench.placeholder')}
                 ref={editorRef}
                 onSubmitShortcut={runActiveQuery}
+                sqlCompletion={sqlCompletionSource}
               />
             </div>
 

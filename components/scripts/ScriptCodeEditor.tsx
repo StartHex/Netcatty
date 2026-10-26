@@ -7,6 +7,7 @@ import {
   pasteForMonacoEditorCommand,
   readClipboardTextWithFallbacks,
 } from '@/infrastructure/monaco/monacoClipboardPaste';
+import { registerSqlMonacoCompletionProvider, type SqlCompletionSource } from '@/infrastructure/monaco/sqlMonacoCompletion';
 import { useNetcattyMonacoTheme } from '@/infrastructure/monaco/useNetcattyMonacoTheme';
 import { registerNctMonacoCompletionProvider } from '@/infrastructure/scripts/nctMonacoCompletion.ts';
 
@@ -37,6 +38,8 @@ export interface ScriptCodeEditorProps {
   tabFocusMode?: boolean;
   /** Run the surrounding form's submit action for Cmd/Ctrl+Enter. */
   onSubmitShortcut?: () => void;
+  /** Schema-aware suggestions for the `sql` language (tables, columns, keywords). */
+  sqlCompletion?: SqlCompletionSource;
 }
 
 export interface ScriptCodeEditorHandle {
@@ -58,6 +61,7 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
   placeholder,
   tabFocusMode = false,
   onSubmitShortcut,
+  sqlCompletion,
 }, forwardedRef) => {
   const monaco = useMonaco();
   const themeName = useNetcattyMonacoTheme(monaco ?? undefined);
@@ -66,6 +70,8 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
   const completionDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const onSubmitShortcutRef = useRef(onSubmitShortcut);
   onSubmitShortcutRef.current = onSubmitShortcut;
+  const sqlCompletionRef = useRef(sqlCompletion);
+  sqlCompletionRef.current = sqlCompletion;
   const handlePasteRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const readClipboardTextRef = useRef<() => Promise<string | null>>(() => Promise.resolve(null));
 
@@ -135,7 +141,9 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
     completionDisposableRef.current?.dispose();
     completionDisposableRef.current = language === 'javascript'
       ? registerNctMonacoCompletionProvider(monacoInstance)
-      : null;
+      : language === 'sql'
+        ? registerSqlMonacoCompletionProvider(monacoInstance, () => sqlCompletionRef.current?.() ?? [])
+        : null;
     if (onSubmitShortcut) {
       editor.addCommand(
         monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.Enter,
