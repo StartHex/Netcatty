@@ -1311,6 +1311,28 @@ async function readSqlFile(rawPath) {
   }
 }
 
+const MAX_TEXT_FILE_BYTES = 20 * 1024 * 1024;
+
+/** Saves a text file the renderer produced (exports, DDL dumps). */
+async function saveTextFile(payload) {
+  const { defaultName, content } = payload || {};
+  if (typeof content !== "string") return { ok: false, error: "nothing-to-save" };
+  if (Buffer.byteLength(content, "utf8") > MAX_TEXT_FILE_BYTES) {
+    return { ok: false, error: "too-large" };
+  }
+  try {
+    const { dialog } = require("electron");
+    const result = await dialog.showSaveDialog({
+      defaultPath: typeof defaultName === "string" ? defaultName : undefined,
+    });
+    if (result.canceled || !result.filePath) return { ok: true, canceled: true };
+    await fs.promises.writeFile(result.filePath, content, "utf8");
+    return { ok: true, path: result.filePath };
+  } catch (error) {
+    return { ok: false, error: error?.message || "write-failed" };
+  }
+}
+
 function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:test", (_event, target) => handlers.test(target));
   ipcMain.handle("netcatty:db:connect", (_event, target) => handlers.connect(target));
@@ -1322,6 +1344,7 @@ function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:disconnect", (_event, payload) => handlers.disconnect(payload || {}));
   ipcMain.handle("netcatty:db:dispose", () => handlers.dispose());
   ipcMain.handle("netcatty:db:read-sql-file", (_event, payload) => readSqlFile(payload));
+  ipcMain.handle("netcatty:db:save-text-file", (_event, payload) => saveTextFile(payload));
   ipcMain.handle("netcatty:db:driver-classes", (_event, payload) => driverClassesFromJar(payload));
   ipcMain.handle("netcatty:db:java-runtime", (_event, payload) => javaRuntimeInfo(payload));
 }

@@ -182,7 +182,8 @@ declare global {
     dbCancel?(payload: { id: string }): Promise<{ ok: boolean }>;
     dbDisconnect?(payload: { id: string }): Promise<{ ok: boolean }>;
     dbDispose?(): Promise<{ ok: boolean }>;
-    dbReadSqlFile?(path: string): Promise<{ ok: boolean; text?: string; path?: string; error?: string }>;
+    dbSaveTextFile(payload: { defaultName?: string; content: string }): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }>;
+  dbReadSqlFile?(path: string): Promise<{ ok: boolean; text?: string; path?: string; error?: string }>;
 
     previewTotp?(payload: { text?: string; uri?: string }): Promise<{
       ok: boolean;

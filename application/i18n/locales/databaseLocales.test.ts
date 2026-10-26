@@ -25,6 +25,9 @@ const PLACEHOLDER_KEYS: Record<string, string[]> = {
   "databases.workbench.pageOf": ["{page}", "{pages}"],
   "databases.workbench.elapsed": ["{ms}"],
   "databases.workbench.statementOk": ["{command}"],
+  "databases.transfer.exported": ["{count}"],
+  "databases.transfer.exportFailed": ["{error}"],
+  "databases.transfer.imported": ["{added}", "{updated}"],
 };
 
 test("database messages exist in every bundled locale", () => {

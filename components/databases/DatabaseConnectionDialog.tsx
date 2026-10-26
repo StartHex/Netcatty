@@ -14,8 +14,10 @@ import {
   type DatabaseConnection,
   type DatabaseKind,
   type JdbcDriver,
+  type DatabaseColorTag,
   type DatabaseSslMode,
 } from '../../domain/models';
+import { cn } from '../../lib/utils';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
 import { detectJavaRuntime, readJdbcDriverClasses } from '@/infrastructure/services/databaseService';
 import type { DbTestConnectionResult } from '../../domain/models';
@@ -41,6 +43,17 @@ import { Switch } from '../ui/switch';
 const KINDS: DatabaseKind[] = ['postgresql', 'mysql', 'mariadb', 'oracle', 'sqlserver', 'sqlite', 'jdbc'];
 const SSL_MODES: DatabaseSslMode[] = ['disable', 'require', 'verify-ca', 'verify-full'];
 
+const COLOR_TAGS: DatabaseColorTag[] = ['none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple'];
+
+const COLOR_CLASS: Record<Exclude<DatabaseColorTag, 'none'>, string> = {
+  red: 'border-transparent bg-red-500',
+  orange: 'border-transparent bg-orange-500',
+  yellow: 'border-transparent bg-amber-400',
+  green: 'border-transparent bg-emerald-500',
+  blue: 'border-transparent bg-sky-500',
+  purple: 'border-transparent bg-violet-500',
+};
+
 interface FormState {
   label: string;
   kind: DatabaseKind;
@@ -62,6 +75,8 @@ interface FormState {
   jdbcDriverId: string;
   javaPath: string;
   jdbcPresetId: string;
+  group: string;
+  colorTag: DatabaseColorTag;
 }
 
 const EMPTY_FORM: FormState = {
@@ -85,6 +100,8 @@ const EMPTY_FORM: FormState = {
   jdbcDriverId: '',
   javaPath: '',
   jdbcPresetId: '',
+  group: '',
+  colorTag: 'none',
 };
 
 export function formFromConnection(connection: DatabaseConnection): FormState {
@@ -109,6 +126,8 @@ export function formFromConnection(connection: DatabaseConnection): FormState {
     jdbcDriverId: connection.jdbcDriverId ?? '',
     javaPath: connection.javaPath ?? '',
     jdbcPresetId: '',
+    group: connection.group ?? '',
+    colorTag: connection.colorTag ?? 'none',
   };
 }
 
@@ -123,6 +142,8 @@ export interface DatabaseConnectionDialogProps {
   /** SSH hosts that can be used as a jump box for this connection. */
   sshHosts?: { id: string; label: string }[];
   jdbcDrivers?: JdbcDriver[];
+  /** Existing group names offered as datalist options. */
+  existingGroups?: string[];
   onTestConnection?: (draft: DatabaseConnection) => Promise<DbTestConnectionResult>;
   onClose: () => void;
   onSave: (connection: DatabaseConnection) => void;
@@ -133,12 +154,14 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
   connection,
   sshHosts,
   jdbcDrivers = [],
+  existingGroups = [],
   onTestConnection,
   onClose,
   onSave,
 }) => {
   const { t } = useI18n();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const groupOptions = existingGroups;
   const [detectedClasses, setDetectedClasses] = useState<string[]>([]);
   const [javaInfo, setJavaInfo] = useState<{ ok: boolean; text: string } | null>(null);
   const [javaChecking, setJavaChecking] = useState(false);
@@ -214,6 +237,8 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
             : undefined
         : undefined,
       javaPath: isJdbc ? form.javaPath.trim() || undefined : undefined,
+      group: form.group.trim() || undefined,
+      colorTag: form.colorTag === 'none' ? undefined : form.colorTag,
     });
   }, [connection, form, isJdbc, isSqlite, registeredDriver]);
 
@@ -334,6 +359,44 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
             {showError && labelError ? (
               <p className="text-xs text-destructive">{t('databases.form.required')}</p>
             ) : null}
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="db-group">{t('databases.form.group')}</Label>
+              <Input
+                id="db-group"
+                list="db-group-options"
+                value={form.group ?? ''}
+                placeholder={t('databases.form.groupPlaceholder')}
+                onChange={(event) => update('group', event.target.value)}
+              />
+              <datalist id="db-group-options">
+                {groupOptions.map((group) => (
+                  <option key={group} value={group} />
+                ))}
+              </datalist>
+            </div>
+            <div className="grid gap-2">
+              <Label>{t('databases.form.colorTag')}</Label>
+              <div className="flex items-center gap-1.5">
+                {COLOR_TAGS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    aria-label={color}
+                    className={cn(
+                      'h-5 w-5 rounded-full border transition-transform',
+                      color === 'none' ? 'border-border bg-background' : COLOR_CLASS[color],
+                      (form.colorTag ?? 'none') === color
+                        ? 'ring-2 ring-ring ring-offset-1 ring-offset-background'
+                        : 'hover:scale-105',
+                    )}
+                    onClick={() => update('colorTag', color)}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-2">

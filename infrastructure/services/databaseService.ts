@@ -161,6 +161,17 @@ export async function readSqlFile(
   return { ok: true, text: response.text };
 }
 
+/** Saves exported config/SQL through the native save dialog. */
+export async function saveDatabaseTextFile(
+  defaultName: string,
+  content: string,
+): Promise<{ ok: true; path?: string; canceled?: boolean } | { ok: false; error: string }> {
+  const response = await bridge()?.dbSaveTextFile?.({ defaultName, content });
+  if (!response) return { ok: false, error: 'No response from database bridge' };
+  if (response.ok !== true) return { ok: false, error: response.error ?? 'write-failed' };
+  return { ok: true, path: response.path, canceled: response.canceled };
+}
+
 /** Driver classes declared by a JDBC jar (META-INF/services/java.sql.Driver). */
 export async function readJdbcDriverClasses(jarPath: string): Promise<string[]> {
   try {
