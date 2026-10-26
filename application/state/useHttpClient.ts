@@ -13,6 +13,12 @@ import {
   describeCurlRequest,
   type HttpWireWarning,
 } from '../../domain/http/httpWire';
+import { decodeResponseBody } from '../../domain/http/responseBody';
+import {
+  errorSnapshotFrom,
+  requestSnapshotFrom,
+  responseSnapshotFrom,
+} from '../../domain/http/history';
 import { cancelHttpRequest, formatHttpError, sendHttpRequest } from '../../infrastructure/services/httpClientService';
 import { useI18n } from '../i18n/I18nProvider';
 import { curlTabStore, useCurlTabRequest } from './curlTabStore';
@@ -281,11 +287,21 @@ export function useHttpClient({ requests, onUpdateRequests }: UseHttpClientOptio
           error: undefined,
           inFlightId: undefined,
         });
+        const decodedBody =
+          result.response.bodyText ?? decodeResponseBody(result.response.bodyBase64, 'utf-8') ?? undefined;
         history.record({
           method: tab.draft.method,
           url: built.wire.url,
           status: result.response.status,
           durationMs: result.response.durationMs,
+          request: requestSnapshotFrom(
+            tab.draft.method,
+            built.wire.url,
+            built.wire.headers,
+            tab.draft.body.kind,
+            built.wire.bodyText,
+          ),
+          response: responseSnapshotFrom(result.response, decodedBody),
         });
         return;
       }
@@ -299,7 +315,20 @@ export function useHttpClient({ requests, onUpdateRequests }: UseHttpClientOptio
         error: formatHttpError(error),
         inFlightId: undefined,
       });
-      history.record({ method: tab.draft.method, url: built.wire.url, status: 0, durationMs: 0 });
+      history.record({
+        method: tab.draft.method,
+        url: built.wire.url,
+        status: 0,
+        durationMs: 0,
+        request: requestSnapshotFrom(
+          tab.draft.method,
+          built.wire.url,
+          built.wire.headers,
+          tab.draft.body.kind,
+          built.wire.bodyText,
+        ),
+        response: errorSnapshotFrom(error),
+      });
     },
     [history, patchTab, t],
   );

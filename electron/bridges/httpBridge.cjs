@@ -16,6 +16,8 @@ const { URL } = require("url");
  */
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
+/** Bodies above this size are not mirrored as base64 (re-decoding needs the bytes). */
+const MAX_BODY_BASE64_BYTES = 4 * 1024 * 1024;
 const MAX_HEADER_COUNT = 200;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -135,8 +137,10 @@ function shapeResponse({ status, statusText, httpVersion, headers, buffer, trunc
   };
   if (httpVersion) response.httpVersion = httpVersion;
   if (contentType) response.contentType = contentType;
-  if (kind === "binary") response.bodyBase64 = buffer.toString("base64");
-  else response.bodyText = buffer.toString("utf8");
+  if (buffer.length > 0 && buffer.length <= MAX_BODY_BASE64_BYTES) {
+    response.bodyBase64 = buffer.toString("base64");
+  }
+  if (kind !== "binary") response.bodyText = buffer.toString("utf8");
   if (buffer.length === 0) response.bodyKind = "empty";
   return response;
 }
@@ -321,6 +325,7 @@ module.exports = {
   registerHttpHandlers,
   handlers,
   MAX_BODY_BYTES,
+  MAX_BODY_BASE64_BYTES,
   __test: {
     clampTimeout,
     clampRedirects,

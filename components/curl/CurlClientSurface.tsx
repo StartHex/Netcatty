@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clock, History, Play, Plus, Save, Square, X } from 'lucide-react';
+import { Clock, Copy, History, Play, Plus, Save, Square, Wand2, X } from 'lucide-react';
 
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { useHttpClient, type CurlTab } from '../../application/state/useHttpClient';
+import { useClipboardBackend } from '../../application/state/useClipboardBackend';
 import {
   HTTP_METHODS,
   isSensitiveHeaderName,
@@ -13,6 +14,17 @@ import {
   type HttpMethod,
   type HttpRequestOptions,
 } from '../../domain/models';
+import type { HttpHistoryEntry } from '../../domain/http/history';
+import {
+  charsetFromContentType,
+  decodeResponseBody,
+  formatJsonText,
+  minifyJsonText,
+  normalizeResponseEncoding,
+  RESPONSE_ENCODINGS,
+  safeParseJson,
+  type ResponseEncoding,
+} from '../../domain/http/responseBody';
 import {
   composeHttpUrl,
   parseHttpUrl,
@@ -27,6 +39,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { toast } from '../ui/toast';
+import { CurlHistoryDialog } from './CurlHistoryDialog';
+import { copyTextWithFeedback, type ClipboardWriter } from './clipboard';
+import { JsonTreeViewer } from './JsonTreeViewer';
 
 const DEFAULT_PARTS: HttpUrlParts = { scheme: 'https', host: '', port: null, path: '/', query: '' };
 
@@ -50,15 +65,6 @@ const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const prettyBody = (text: string | undefined): string => {
-  if (!text) return '';
-  try {
-    return JSON.stringify(JSON.parse(text), null, 2);
-  } catch {
-    return text;
-  }
 };
 
 const statusTone = (status: number): string => {
@@ -177,10 +183,12 @@ const UrlBar: React.FC<{
 }> = ({ tab, onUrlChange, onPartsChange, invalidPortLabel, invalidHostLabel }) => {
   const { t } = useI18n();
   const parsed = useMemo(() => parseHttpUrl(tab.draft.url), [tab.draft.url]);
-  const parts = parsed.ok ? parsed.parts : DEFAULT_PARTS;
-  const urlInvalid = !parsed.ok && tab.draft.url.trim() !== '';
-  const invalidMessage = !parsed.ok
-    ? parsed.reason === 'invalid-port'
+  // tsconfig has strictNullChecks off, so discriminated unions do not narrow here.
+  const parts = (parsed as { parts?: HttpUrlParts }).parts ?? DEFAULT_PARTS;
+  const urlInvalid = !(parsed as { parts?: HttpUrlParts }).parts && tab.draft.url.trim() !== '';
+  const parseFailure = (parsed as { reason?: string }).reason;
+  const invalidMessage = parseFailure
+    ? parseFailure === 'invalid-port'
       ? invalidPortLabel
       : invalidHostLabel
     : '';
@@ -236,10 +244,28 @@ const UrlBar: React.FC<{
   );
 };
 
-const ResponsePanel: React.FC<{ tab: CurlTab }> = ({ tab }) => {
+const ResponsePanel: React.FC<{ tab: CurlTab; writeClipboard: ClipboardWriter | null }> = ({ tab, writeClipboard }) => {
   const { t } = useI18n();
   const [section, setSection] = useState<ResponseSection>('body');
+  const [encoding, setEncoding] = useState<ResponseEncoding>('auto');
+  const [bodyView, setBodyView] = useState<'tree' | 'raw'>('tree');
   const response = tab.response;
+
+  const effectiveEncoding: ResponseEncoding = useMemo(() => {
+    if (encoding !== 'auto') return encoding;
+    return charsetFromContentType(response?.contentType) ?? 'utf-8';
+  }, [encoding, response?.contentType]);
+
+  const decodedBody = useMemo(() => {
+    if (!response) return '';
+    return decodeResponseBody(response.bodyBase64, effectiveEncoding) ?? response.bodyText ?? '';
+  }, [response, effectiveEncoding]);
+
+  const prettyBody = useMemo(() => {
+    if (!decodedBody) return '';
+    const formatted = formatJsonText(decodedBody);
+    return formatted.ok ? formatted.text : decodedBody;
+  }, [decodedBody]);
 
   if (tab.status === 'sending') {
     return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t('curl.sending')}</div>;
@@ -264,7 +290,9 @@ const ResponsePanel: React.FC<{ tab: CurlTab }> = ({ tab }) => {
     );
   }
 
-  const bodyText = response.bodyKind === 'binary' ? t('curl.response.binary') : prettyBody(response.bodyText);
+  const isBinary = response.bodyKind === 'binary';
+  const isJson = response.bodyKind === 'json' && safeParseJson(prettyBody) !== undefined;
+  const copyPayload = decodedBody || response.bodyBase64 || '';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -286,7 +314,55 @@ const ResponsePanel: React.FC<{ tab: CurlTab }> = ({ tab }) => {
             {t('curl.response.redirects', { count: response.redirects.length })}
           </span>
         ) : null}
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          {section === 'body' && !isBinary ? (
+            <>
+              {isJson ? (
+                <div className="flex items-center gap-0.5 rounded border border-border/60 p-0.5">
+                  {(['tree', 'raw'] as const).map((view) => (
+                    <button
+                      key={view}
+                      type="button"
+                      onClick={() => setBodyView(view)}
+                      className={cn(
+                        'rounded px-1.5 py-0.5 text-[11px]',
+                        bodyView === view ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {t(view === 'tree' ? 'curl.body.viewTree' : 'curl.body.viewText')}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <Select value={encoding} onValueChange={(value) => setEncoding(normalizeResponseEncoding(value))}>
+                <SelectTrigger className="h-7 w-[136px] text-[11px]" aria-label={t('curl.response.encoding')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RESPONSE_ENCODINGS.map((item) => (
+                    <SelectItem key={item} value={item} className="text-xs">
+                      {t(`curl.encoding.${item}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 px-2 text-[11px]"
+                onClick={() =>
+                  void copyTextWithFeedback(
+                    writeClipboard,
+                    copyPayload,
+                    t('curl.response.copied'),
+                    t('curl.copyFailed'),
+                  )
+                }
+              >
+                <Copy size={12} /> {t('curl.response.copy')}
+              </Button>
+            </>
+          ) : null}
           {RESPONSE_SECTIONS.map((item) => (
             <button
               key={item}
@@ -304,12 +380,30 @@ const ResponsePanel: React.FC<{ tab: CurlTab }> = ({ tab }) => {
       </div>
       <ScrollArea className="min-h-0 flex-1">
         {section === 'body' ? (
-          <pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs" data-testid="curl-response-body">
-            {bodyText}
-          </pre>
+          isBinary ? (
+            <pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs">{t('curl.response.binary')}</pre>
+          ) : isJson && bodyView === 'tree' ? (
+            <JsonTreeViewer
+              text={prettyBody}
+              labels={{
+                expand: t('curl.json.expand'),
+                collapse: t('curl.json.collapse'),
+                copyValue: t('curl.json.copyValue'),
+              }}
+              onCopyValue={(text) =>
+                void copyTextWithFeedback(writeClipboard, text, t('curl.response.copied'), t('curl.copyFailed'))
+              }
+            />
+          ) : (
+            <pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs" data-testid="curl-response-body">
+              {decodedBody}
+            </pre>
+          )
         ) : null}
         {section === 'raw' ? (
-          <pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs">{response.bodyText ?? response.bodyBase64 ?? ''}</pre>
+          <pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs">
+            {isBinary ? response.bodyBase64 ?? '' : decodedBody}
+          </pre>
         ) : null}
         {section === 'headers' ? (
           <div className="p-3 font-mono text-xs">
@@ -333,7 +427,10 @@ export const CurlClientSurface: React.FC<{
 }> = ({ tabId, requests, onUpdateRequests }) => {
   const { t } = useI18n();
   const client = useHttpClient({ requests, onUpdateRequests });
+  const { writeClipboardText } = useClipboardBackend();
   const [section, setSection] = useState<RequestSection>('params');
+  const [bodyView, setBodyView] = useState<'text' | 'tree'>('text');
+  const [historyEntry, setHistoryEntry] = useState<HttpHistoryEntry | null>(null);
   const activeTab = useMemo(
     () => client.tabs.find((tab) => tab.id === tabId) ?? client.tabs[0],
     [client.tabs, tabId],
@@ -389,6 +486,22 @@ export const CurlClientSurface: React.FC<{
 
   const tab = activeTab;
   const sending = tab.status === 'sending';
+  const bodyIsJson = tab.draft.body.kind === 'json';
+  const jsonError = (() => {
+    if (!bodyIsJson || !tab.draft.body.text.trim()) return '';
+    const formatted = formatJsonText(tab.draft.body.text) as { text?: string; message?: string };
+    return formatted.text ? '' : formatted.message ?? 'Invalid JSON';
+  })();
+  const applyJsonTransform = (transform: typeof formatJsonText) => {
+    const result = transform(tab.draft.body.text) as { text?: string; message?: string };
+    if (!result.text) {
+      toast.error(t('curl.body.invalidJson', { error: result.message ?? 'Invalid JSON' }));
+      return;
+    }
+    client.patchDraft(tab.id, { body: { ...tab.draft.body, text: result.text } });
+  };
+  const copyBody = () =>
+    void copyTextWithFeedback(writeClipboardText, tab.draft.body.text, t('curl.response.copied'), t('curl.copyFailed'));
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -455,27 +568,27 @@ export const CurlClientSurface: React.FC<{
               <History size={14} /> {t('curl.history.title')}
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[420px] p-0">
+          <PopoverContent align="end" className="w-[440px] p-0">
             {client.history.entries.length === 0 ? (
               <p className="p-3 text-xs text-muted-foreground">{t('curl.history.empty')}</p>
             ) : (
-              <ScrollArea className="max-h-[320px]">
+              <ScrollArea className="max-h-[360px]">
                 <div className="p-1">
-                  {client.history.entries.slice(0, 30).map((entry) => (
+                  {client.history.entries.slice(0, 40).map((entry) => (
                     <button
                       key={entry.id}
                       type="button"
                       className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
-                      onClick={() => {
-                        client.patchDraft(tab.id, { method: entry.method as HttpMethod, url: entry.url });
-                        client.setUrl(tab.id, entry.url);
-                      }}
+                      onClick={() => setHistoryEntry(entry)}
                     >
                       <span className={cn('w-14 shrink-0 font-mono font-semibold', METHOD_CLASS[entry.method as HttpMethod])}>
                         {entry.method}
                       </span>
                       <span className="truncate font-mono">{entry.url}</span>
-                      <span className="ml-auto text-muted-foreground">{entry.status || '—'}</span>
+                      <span className="ml-auto shrink-0 text-muted-foreground">{entry.status || '—'}</span>
+                      <span className="w-14 shrink-0 text-right text-[10px] text-muted-foreground">
+                        {new Date(entry.at).toLocaleTimeString()}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -563,32 +676,100 @@ export const CurlClientSurface: React.FC<{
 
               {section === 'body' ? (
                 <div className="space-y-2">
-                  <Select
-                    value={tab.draft.body.kind}
-                    onValueChange={(value) =>
-                      client.patchDraft(tab.id, { body: { ...tab.draft.body, kind: value as HttpBodyKind } })
-                    }
-                  >
-                    <SelectTrigger className="h-9 w-[160px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(['none', 'json', 'text', 'form'] as HttpBodyKind[]).map((kind) => (
-                        <SelectItem key={kind} value={kind} className="text-xs">
-                          {t(`curl.body.${kind}`)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Textarea
-                    value={tab.draft.body.text}
-                    disabled={tab.draft.body.kind === 'none'}
-                    placeholder={t('curl.body.placeholder')}
-                    onChange={(event) =>
-                      client.patchDraft(tab.id, { body: { ...tab.draft.body, text: event.target.value } })
-                    }
-                    className="min-h-[140px] font-mono text-xs"
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={tab.draft.body.kind}
+                      onValueChange={(value) =>
+                        client.patchDraft(tab.id, { body: { ...tab.draft.body, kind: value as HttpBodyKind } })
+                      }
+                    >
+                      <SelectTrigger className="h-9 w-[160px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(['none', 'json', 'text', 'form'] as HttpBodyKind[]).map((kind) => (
+                          <SelectItem key={kind} value={kind} className="text-xs">
+                            {t(`curl.body.${kind}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {bodyIsJson ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-1 text-xs"
+                          onClick={() => applyJsonTransform(formatJsonText)}
+                        >
+                          <Wand2 size={13} /> {t('curl.body.format')}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 gap-1 text-xs"
+                          onClick={() => applyJsonTransform(minifyJsonText)}
+                        >
+                          {t('curl.body.minify')}
+                        </Button>
+                        <div className="flex items-center gap-0.5 rounded border border-border/60 p-0.5">
+                          {(['text', 'tree'] as const).map((view) => (
+                            <button
+                              key={view}
+                              type="button"
+                              onClick={() => setBodyView(view)}
+                              className={cn(
+                                'rounded px-1.5 py-0.5 text-[11px]',
+                                bodyView === view
+                                  ? 'bg-muted text-foreground'
+                                  : 'text-muted-foreground hover:text-foreground',
+                              )}
+                            >
+                              {t(view === 'text' ? 'curl.body.viewText' : 'curl.body.viewTree')}
+                            </button>
+                          ))}
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-9 gap-1 text-xs" onClick={copyBody}>
+                          <Copy size={13} /> {t('curl.response.copy')}
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                  {jsonError ? (
+                    <p className="text-[11px] text-destructive">
+                      {t('curl.body.invalidJson', { error: jsonError })}
+                    </p>
+                  ) : null}
+                  {bodyIsJson && bodyView === 'tree' ? (
+                    <div className="min-h-[140px] rounded border border-border/60">
+                      <JsonTreeViewer
+                        text={tab.draft.body.text}
+                        labels={{
+                          expand: t('curl.json.expand'),
+                          collapse: t('curl.json.collapse'),
+                          copyValue: t('curl.json.copyValue'),
+                        }}
+                        onCopyValue={(text) =>
+                          void copyTextWithFeedback(
+                            writeClipboardText,
+                            text,
+                            t('curl.response.copied'),
+                            t('curl.copyFailed'),
+                          )
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <Textarea
+                      value={tab.draft.body.text}
+                      disabled={tab.draft.body.kind === 'none'}
+                      placeholder={t('curl.body.placeholder')}
+                      onChange={(event) =>
+                        client.patchDraft(tab.id, { body: { ...tab.draft.body, text: event.target.value } })
+                      }
+                      className="min-h-[140px] font-mono text-xs"
+                    />
+                  )}
                 </div>
               ) : null}
 
@@ -751,8 +932,19 @@ export const CurlClientSurface: React.FC<{
           </ScrollArea>
         </div>
 
-        <ResponsePanel tab={tab} />
+        <ResponsePanel tab={tab} writeClipboard={writeClipboardText} />
       </div>
+      <CurlHistoryDialog
+        entry={historyEntry}
+        onOpenChange={(open) => {
+          if (!open) setHistoryEntry(null);
+        }}
+        onReplay={(entry) => {
+          client.patchDraft(tab.id, { method: entry.method as HttpMethod, url: entry.url });
+          client.setUrl(tab.id, entry.url);
+          setHistoryEntry(null);
+        }}
+      />
     </div>
   );
 };

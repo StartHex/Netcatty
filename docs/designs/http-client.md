@@ -323,11 +323,14 @@ P1 完成即可日常替代 curl 工具。
 | UI | `components/curl/CurlClientSurface.tsx` | 顶部方法 + 发送/取消/保存/名称/历史；URL 文本框与 scheme/host/port/path 四段双向同步；请求区分栏 6 页；响应区 Body/Raw/Headers。 |
 | 标签 | `components/top-tabs/TopTabItems.tsx` `CurlTopTab` | 顶部工作标签，方法徽标 + 状态点 + 右键批量关闭 + 拖拽。 |
 
+附加增强（同批次）：请求体 JSON 一键格式化/压缩 + 树形预览；响应体 JSON 树形折叠（加减号）、文本/树形切换、复制；响应体编码选择（auto/UTF-8/GB18030/Big5/Shift_JIS/ISO-8859-1/UTF-16LE，按 content-type charset 自动推断）；历史条目保存请求与响应快照（响应体上限 64 KB，敏感 header 值在写入明文 localStorage 前替换为 `***`），详情弹窗可查看请求/响应并复制响应、回填编辑器。
+
 ### 13.2 与设计的偏差
 
 - 未使用 `net.fetch`，直接用 node `http`/`https`：需要请求级 TLS 开关与取消，`net.fetch` 走 Electron 会话证书钩子无法按请求粒度控制。
 - Params 页不保留"禁用"行语义：`url` 是唯一事实来源，改 URL 会重建参数行；避免 URL 与行表格双向同步出现分叉。
 - 阶段一的 URL 校验是"软校验"：非法 host/port 只标红，不阻止输入，发送时才报错。
+- 桥接对 4 MB 以内的响应额外返回 `bodyBase64`：渲染层换编码时需要原始字节，只靠 `bodyText`（已按 UTF-8 解码）会丢信息。
 
 ### 13.3 未完成（后续阶段）
 

@@ -21,6 +21,7 @@ const PLACEHOLDER_KEYS: Record<string, string[]> = {
   "curl.count": ["{count}"],
   "curl.deleteConfirmMessage": ["{name}"],
   "curl.response.redirects": ["{count}"],
+  "curl.body.invalidJson": ["{error}"],
 };
 
 test("database messages exist in every bundled locale", () => {
