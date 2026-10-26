@@ -58,6 +58,11 @@ function main() {
   execFileSync(javac, ["-encoding", "UTF-8", "-d", classesDir, source], { stdio: "inherit" });
   fs.rmSync(jarPath, { force: true });
   execFileSync(jar, ["cfe", jarPath, "NetcattyJdbcSidecar", "-C", classesDir, "."], { stdio: "inherit" });
+  // Ship a copy next to jdbcSidecar.cjs so it lands inside app.asar: the packaged
+  // app resolves the sidecar jar relative to the bridge directory.
+  const packagedDir = path.join(root, "electron", "bridges", "jdbc-sidecar");
+  fs.mkdirSync(packagedDir, { recursive: true });
+  fs.copyFileSync(jarPath, path.join(packagedDir, path.basename(jarPath)));
   const size = fs.statSync(jarPath).size;
   console.log(`[jdbc-sidecar] built ${path.relative(root, jarPath)} (${size} bytes)`);
 }
