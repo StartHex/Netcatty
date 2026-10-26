@@ -5,6 +5,7 @@
 
 import {
   AlertTriangle,
+  Columns2,
   ArrowUpDown,
   Bookmark,
   BookmarkPlus,
@@ -16,6 +17,7 @@ import {
   Loader2,
   Play,
   RotateCw,
+  Rows2,
   Square,
   Table2,
   Eye,
@@ -103,85 +105,76 @@ interface DatabaseWorkbenchSurfaceProps {
   onUpdateConnections?: (connections: DatabaseConnection[] | ((prev: DatabaseConnection[]) => DatabaseConnection[])) => void;
 }
 
-export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> = ({
-  tabId,
+interface DatabaseTabPaneProps {
+  tab: DatabaseTab;
+  workbench: ReturnType<typeof useDatabaseWorkbench>;
+  connections: readonly DatabaseConnection[];
+  onUpdateConnections?: (connections: DatabaseConnection[] | ((prev: DatabaseConnection[]) => DatabaseConnection[])) => void;
+  sqlHistory: ReturnType<typeof useSqlHistory>;
+  schemaWidth: number;
+  onSchemaResizeStart: (event: React.MouseEvent) => void;
+  autoFocus?: boolean;
+  headerActions?: React.ReactNode;
+}
+
+/**
+ * One editor pane: toolbar, schema tree, SQL editor, result grid and status bar.
+ * Tab state is owned by the surface so split panes can share it.
+ */
+const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
+  tab,
+  workbench,
   connections,
   onUpdateConnections,
-  tunnelDeps,
+  sqlHistory,
+  schemaWidth,
+  onSchemaResizeStart,
+  autoFocus,
+  headerActions,
 }) => {
   const { t } = useI18n();
-  const workbench = useDatabaseWorkbench(connections, tunnelDeps);
-  const { tabs, activeTab, activeTabId } = workbench;
-
-  useEffect(() => {
-    if (!tabId) return;
-    workbench.setActiveTabId(tabId);
-    databaseTabStore.markActive(tabId);
-  }, [tabId, workbench]);
-
   const editorRef = useRef<ScriptCodeEditorHandle | null>(null);
-  const sqlHistory = useSqlHistory();
-  const activeConnection = useMemo(
-    () => connections.find((connection) => connection.id === activeTab?.connectionId),
-    [connections, activeTab?.connectionId],
+  const connection = useMemo(
+    () => connections.find((entry) => entry.id === tab.connectionId),
+    [connections, tab.connectionId],
   );
-  const [pendingRun, setPendingRun] = useState<{ tabId: string; sql: string; reasons: string[] } | null>(null);
+  const [pendingRun, setPendingRun] = useState<{ sql: string; reasons: string[] } | null>(null);
   const [saveQueryOpen, setSaveQueryOpen] = useState(false);
   const [saveQueryName, setSaveQueryName] = useState('');
-  // The workbench is a floating window: keep its size between openings and let
-  // the schema tree be widened independently.
-  const [schemaWidth, setSchemaWidth] = useState(190);
-  const [pageByTab, setPageByTab] = useState<Record<string, number>>({});
-  const beginSchemaResize = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = schemaWidth;
-    const onMove = (move: MouseEvent) => {
-      setSchemaWidth(Math.min(560, Math.max(140, startWidth + (move.clientX - startX))));
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }, [schemaWidth]);
+  const [page, setPage] = useState(0);
 
   const executeSql = useCallback(
-    (tabId: string, sqlOverride: string | undefined) => {
-      const tab = tabs.find((entry) => entry.id === tabId);
-      if (!tab) return;
+    (sqlOverride: string | undefined) => {
       sqlHistory.record(tab.connectionId, sqlOverride ?? tab.sql);
-      void workbench.runQuery(tabId, sqlOverride);
+      void workbench.runQuery(tab.id, sqlOverride);
     },
-    [sqlHistory, tabs, workbench],
+    [sqlHistory, tab, workbench],
   );
 
   const runActiveQuery = useCallback(() => {
-    if (!activeTab) return;
     const selection = editorRef.current?.getSelectionText()?.trim();
     const hasSelection = Boolean(selection && selection.length > 0);
-    const sql = hasSelection ? selection! : activeTab.sql;
+    const sql = hasSelection ? selection! : tab.sql;
     const trimmed = sql.trim();
     if (!trimmed) return;
     const safety = classifySqlSafety(trimmed);
-    if (activeConnection?.readOnly && safety.risk !== 'read') {
+    if (connection?.readOnly && safety.risk !== 'read') {
       toast.error(t('databases.workbench.readOnlyBlocked'));
       return;
     }
     if (safety.risk === 'destructive') {
-      setPendingRun({ tabId: activeTab.id, sql: trimmed, reasons: safety.reasons });
+      setPendingRun({ sql: trimmed, reasons: safety.reasons });
       return;
     }
-    executeSql(activeTab.id, hasSelection ? selection : undefined);
-  }, [activeConnection?.readOnly, activeTab, executeSql, t]);
+    executeSql(hasSelection ? selection : undefined);
+  }, [connection?.readOnly, tab.sql, executeSql, t]);
 
   const downloadResult = useCallback(
     (format: 'csv' | 'json' | 'sql') => {
-      const result = activeTab?.result;
+      const result = tab.result;
       if (!result) return;
-      const dialect = SQL_DIALECTS[activeTab!.kind] ?? 'postgresql';
-      const tableMatch = /\bfrom\s+([\w."`]+)/i.exec(activeTab!.sql);
+      const dialect = SQL_DIALECTS[tab.kind] ?? 'postgresql';
+      const tableMatch = /\bfrom\s+([\w."`]+)/i.exec(tab.sql);
       const tableName = tableMatch ? tableMatch[1].replace(/["`]/g, '') : 'result';
       const payload =
         format === 'csv'
@@ -196,15 +189,14 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = suggestExportFileName(activeTab!.title, format === 'sql' ? 'sql' : format, Date.now());
+      anchor.download = suggestExportFileName(tab.title, format === 'sql' ? 'sql' : format, Date.now());
       anchor.click();
       URL.revokeObjectURL(url);
     },
-    [activeTab],
+    [tab],
   );
 
   const openSqlFile = useCallback(async () => {
-    if (!activeTab) return;
     const bridge = netcattyBridge.get();
     if (!bridge?.selectFile) return;
     const filePath = await bridge.selectFile(t('databases.workbench.openSqlFileTitle'), undefined, [
@@ -216,17 +208,17 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
       toast.error(t('databases.workbench.openSqlFileFailed', { error: (loaded as { error?: string }).error ?? 'read-failed' }));
       return;
     }
-    workbench.updateSql(activeTab.id, loaded.text);
-    sqlHistory.record(activeTab.connectionId, loaded.text);
+    workbench.updateSql(tab.id, loaded.text);
+    sqlHistory.record(tab.connectionId, loaded.text);
     toast.success(t('databases.workbench.openSqlFileLoaded'));
-  }, [activeTab, sqlHistory, t, workbench]);
+  }, [tab, sqlHistory, t, workbench]);
 
   const saveCurrentQuery = useCallback(() => {
-    if (!activeTab || !onUpdateConnections) return;
+    if (!onUpdateConnections) return;
     const name = saveQueryName.trim();
-    const sql = editorRef.current?.getSelectionText()?.trim() || activeTab.sql.trim();
+    const sql = editorRef.current?.getSelectionText()?.trim() || tab.sql.trim();
     if (!name || !sql) return;
-    const connectionId = activeTab.connectionId;
+    const connectionId = tab.connectionId;
     const query = { id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name, sql, createdAt: Date.now() };
     onUpdateConnections((prev) =>
       prev.map((entry) =>
@@ -238,20 +230,19 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
     setSaveQueryOpen(false);
     setSaveQueryName('');
     toast.success(t('databases.workbench.saveQuerySaved'));
-  }, [activeTab, onUpdateConnections, saveQueryName, t]);
+  }, [tab, onUpdateConnections, saveQueryName, t]);
 
   const loadSavedQuery = useCallback(
     (sql: string) => {
-      if (!activeTab) return;
-      workbench.updateSql(activeTab.id, sql);
+      workbench.updateSql(tab.id, sql);
     },
-    [activeTab, workbench],
+    [tab.id, workbench],
   );
 
   const deleteSavedQuery = useCallback(
     (queryId: string) => {
-      if (!activeTab || !onUpdateConnections) return;
-      const connectionId = activeTab.connectionId;
+      if (!onUpdateConnections) return;
+      const connectionId = tab.connectionId;
       onUpdateConnections((prev) =>
         prev.map((entry) =>
           entry.id === connectionId
@@ -260,66 +251,47 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
         ),
       );
     },
-    [activeTab, onUpdateConnections],
+    [tab.connectionId, onUpdateConnections],
   );
 
-  const activeHistory = sqlHistory.entriesFor(activeTab?.connectionId);
+  const activeHistory = sqlHistory.entriesFor(tab.connectionId);
 
-  const widths = useMemo(() => columnWidths(activeTab?.result), [activeTab?.result]);
-  const gridTemplate = useMemo(
-    () => widths.map((width) => `${Math.round(width)}px`).join(' '),
-    [widths],
+  const widths = useMemo(() => columnWidths(tab.result), [tab.result]);
+  const gridTemplate = useMemo(() => widths.map((width) => `${Math.round(width)}px`).join(' '), [widths]);
+  const gridWidth = useMemo(() => widths.reduce((total, width) => total + Math.round(width), 0), [widths]);
+
+  const sqlCompletionSource = useCallback(
+    () =>
+      buildSqlCompletionEntries({
+        tables: tab.tables,
+        columns: tab.structure?.columns ?? [],
+        resultColumns: tab.result?.columns ?? [],
+      }),
+    [tab],
   );
-  // Total grid width drives the horizontal scroller: without it the fixed pixel
-  // columns get clipped by the container and wide result sets cannot be read.
-  const gridWidth = useMemo(
-    () => widths.reduce((total, width) => total + Math.round(width), 0),
-    [widths],
-  );
 
-  const sqlCompletionSource = useCallback(() => {
-    if (!activeTab) return [];
-    return buildSqlCompletionEntries({
-      tables: activeTab.tables,
-      columns: activeTab.structure?.columns ?? [],
-      resultColumns: activeTab.result?.columns ?? [],
-    });
-  }, [activeTab]);
-
-  // Client-side paging: statements without LIMIT fetch a full page set, and the
-  // row-limit selector acts as the page size.
-  const pageSize = activeTab?.maxRows || 1000;
-  const allRows = useMemo(() => activeTab?.result?.rows ?? [], [activeTab?.result]);
+  const pageSize = tab.maxRows || 1000;
+  const allRows = useMemo(() => tab.result?.rows ?? [], [tab.result]);
   const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
-  const requestedPage = pageByTab[activeTab?.id ?? ''] ?? 0;
-  const pageIndex = Math.min(Math.max(0, requestedPage), totalPages - 1);
-  const setPage = useCallback(
-    (page: number) => {
-      if (!activeTab) return;
-      setPageByTab((prev) => ({ ...prev, [activeTab.id]: Math.min(Math.max(0, page), totalPages - 1) }));
-    },
-    [activeTab, totalPages],
-  );
+  const pageIndex = Math.min(Math.max(0, page), totalPages - 1);
   const pagedResult = useMemo(() => {
-    if (!activeTab?.result) return null;
+    if (!tab.result) return null;
     return {
-      ...activeTab.result,
+      ...tab.result,
       rows: allRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
       rowCount: allRows.length,
     };
-  }, [activeTab?.result, allRows, pageIndex, pageSize]);
+  }, [tab.result, allRows, pageIndex, pageSize]);
 
   useEffect(() => {
-    if (!activeTabId) return;
-    setPageByTab((prev) => (prev[activeTabId] === 0 ? prev : { ...prev, [activeTabId]: 0 }));
-  }, [activeTabId, activeTab?.result]);
+    setPage(0);
+  }, [tab.id, tab.result]);
 
   const formatSql = () => {
-    if (!activeTab) return;
-    const dialect = SQL_DIALECTS[activeTab.kind] ?? 'postgresql';
+    const dialect = SQL_DIALECTS[tab.kind] ?? 'postgresql';
     try {
-      const formatted = formatSqlText(activeTab.sql, { language: dialect as never });
-      if (formatted && formatted !== activeTab.sql) workbench.updateSql(activeTab.id, formatted);
+      const formatted = formatSqlText(tab.sql, { language: dialect as never });
+      if (formatted && formatted !== tab.sql) workbench.updateSql(tab.id, formatted);
     } catch {
       // Formatting is best-effort; leave the statement untouched on parse errors.
     }
@@ -327,377 +299,365 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
 
   return (
     <>
-      <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background">
-        {activeTab ? (
-          <>
-            <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-1.5 text-xs">
-              <StatusDot tab={activeTab} />
-              <span className="truncate font-medium">{activeTab.title}</span>
-              {activeTab.transactionOpen ? (
-                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                  {t('databases.workbench.beginTransaction')}
-                </span>
-              ) : null}
-              <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
-                {activeTab.serverVersion ?? ''}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-1.5">
-              <Button
-                size="sm"
-                className="h-7 text-xs"
-                disabled={activeTab.running || !activeTab.connected || !activeTab.sql.trim()}
-                onClick={runActiveQuery}
-              >
-                {activeTab.running ? (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                ) : (
-                  <Play className="mr-1 h-3 w-3" />
-                )}
-                {activeTab.running ? t('databases.workbench.running') : t('databases.workbench.run')}
-              </Button>
-              {activeTab.running ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => workbench.cancelQuery(activeTab.id)}
-                >
-                  <Square className="mr-1 h-3 w-3" />
-                  {t('databases.workbench.cancel')}
-                </Button>
-              ) : null}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                    <Bookmark className="h-3.5 w-3.5" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-72 p-1">
-                  {(activeConnection?.savedQueries ?? []).length === 0 ? (
-                    <p className="px-2 py-3 text-xs text-muted-foreground">
-                      {t('databases.workbench.savedQueriesEmpty')}
-                    </p>
-                  ) : (
-                    <div className="max-h-64 overflow-auto">
-                      {(activeConnection?.savedQueries ?? []).map((query) => (
-                        <div key={query.id} className="group flex items-center gap-1 rounded px-1">
-                          <button
-                            type="button"
-                            className="flex-1 truncate px-1 py-1 text-left text-xs hover:text-foreground"
-                            title={query.sql}
-                            onClick={() => loadSavedQuery(query.sql)}
-                          >
-                            {query.name}
-                          </button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
-                            onClick={() => deleteSavedQuery(query.id)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </PopoverContent>
-              </Popover>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0"
-                    disabled={!activeTab || !onUpdateConnections}
-                    onClick={() => {
-                      setSaveQueryName('');
-                      setSaveQueryOpen(true);
-                    }}
-                  >
-                    <BookmarkPlus className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('databases.workbench.saveQuery')}</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0"
-                    onClick={() => void openSqlFile()}
-                  >
-                    <FileCode2 className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('databases.workbench.openSqlFile')}</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={formatSql}>
-                    <Wand2 className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('databases.workbench.format')}</TooltipContent>
-              </Tooltip>
-              {activeTab.transactionOpen ? (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    disabled={activeTab.running}
-                    onClick={() => void workbench.commitTransaction(activeTab.id)}
-                  >
-                    {t('databases.workbench.commit')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs"
-                    disabled={activeTab.running}
-                    onClick={() => void workbench.rollbackTransaction(activeTab.id)}
-                  >
-                    {t('databases.workbench.rollback')}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs"
-                  disabled={activeTab.running || !activeTab.connected}
-                  onClick={() => void workbench.beginTransaction(activeTab.id)}
-                >
-                  {t('databases.workbench.beginTransaction')}
-                </Button>
-              )}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0"
-                    disabled={activeHistory.length === 0}
-                    aria-label={t('databases.workbench.history')}
-                  >
-                    <History className="h-3.5 w-3.5" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-[420px] p-1">
-                  <div className="max-h-[320px] overflow-y-auto">
-                    {activeHistory.slice(0, 20).map((entry) => (
-                      <button
-                        key={`${entry.at}-${entry.sql.slice(0, 40)}`}
-                        type="button"
-                        className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-[11px] hover:bg-secondary"
-                        title={entry.sql}
-                        onClick={() => {
-                          workbench.updateSql(activeTab.id, entry.sql);
-                        }}
-                      >
-                        {entry.sql.replace(/\s+/g, ' ')}
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0"
-                    disabled={!activeTab.result}
-                    title={t('databases.workbench.exportCsv')}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-40 p-1">
-                  <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground px-2 py-1">
-                    {t('databases.workbench.exportTitle')}
-                  </div>
-                  {(['csv', 'json', 'sql'] as const).map((format) => (
-                    <button
-                      key={format}
-                      type="button"
-                      className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-secondary"
-                      onClick={() => downloadResult(format)}
-                    >
-                      {t(`databases.workbench.export.${format}`)}
-                    </button>
-                  ))}
-                </PopoverContent>
-              </Popover>
-              {activeTab.status === 'error' ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => void workbench.reconnect(activeTab.id)}
-                >
-                  <RotateCw className="mr-1 h-3 w-3" />
-                  {t('databases.workbench.reconnect')}
-                </Button>
-              ) : null}
-              <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
-                {activeTab.serverVersion ?? ''}
-              </span>
-            </div>
-
-            <div className="flex min-h-0 min-w-0 flex-1">
-              <SchemaPanel
-                tab={activeTab}
-                width={schemaWidth}
-                onRefresh={() => void workbench.refreshTables(activeTab.id)}
-                onPreview={(table) => void workbench.previewTable(activeTab.id, table)}
-                onShowStructure={(table) => void workbench.showStructure(activeTab.id, table)}
-                t={t}
-              />
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label={t('databases.schema.resize')}
-                className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
-                onMouseDown={beginSchemaResize}
-              />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex min-h-0 min-w-0 basis-[38%] flex-col border-b border-border/60">
-              <ScriptCodeEditor
-                value={activeTab.sql}
-                onChange={(value) => workbench.updateSql(activeTab.id, value)}
-                language="sql"
-                fill
-                active
-                autoFocus
-                ariaLabel={t('databases.workbench.editorLabel')}
-                placeholder={t('databases.workbench.placeholder')}
-                ref={editorRef}
-                onSubmitShortcut={runActiveQuery}
-                sqlCompletion={sqlCompletionSource}
-              />
-            </div>
-
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              {activeTab.error ? (
-                <div className="shrink-0 border-b border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                  <div className="flex items-start gap-1.5">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <div className="min-w-0 space-y-0.5">
-                      <p className="whitespace-pre-wrap break-words font-medium">{activeTab.error}</p>
-                      {activeTab.errorDetail?.detail ? (
-                        <p className="opacity-80">{activeTab.errorDetail.detail}</p>
-                      ) : null}
-                      {activeTab.errorDetail?.hint ? (
-                        <p className="opacity-80">{activeTab.errorDetail.hint}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {activeTab.structure ? (
-                <StructurePanel
-                  structure={activeTab.structure}
-                  onClose={() => workbench.clearStructure(activeTab.id)}
-                  onPreview={() => {
-                    const table = activeTab.structure?.table;
-                    if (table) void workbench.previewTable(activeTab.id, table);
-                  }}
-                  t={t}
-                />
-              ) : pagedResult ? (
-                <ResultGrid result={pagedResult} gridTemplate={gridTemplate} gridWidth={gridWidth} t={t} />
-              ) : (
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                  <ArrowUpDown className="h-5 w-5 text-muted-foreground/60" />
-                  <p className="max-w-md text-xs text-muted-foreground">
-                    {activeTab.status === 'connecting'
-                      ? t('databases.workbench.connecting')
-                      : t('databases.workbench.emptyHint')}
-                  </p>
-                </div>
-              )}
-
-              <div className="flex shrink-0 items-center gap-4 border-t border-border/60 px-3 py-1 text-[11px] text-muted-foreground">
-                <label className="flex items-center gap-1">
-                  <span>{t('databases.workbench.rowLimit')}</span>
-                  <RowLimitControl
-                    value={activeTab.maxRows}
-                    label={t('databases.workbench.rowLimit')}
-                    onChange={(value) => workbench.setMaxRows(activeTab.id, value)}
-                  />
-                </label>
-                <span>
-                  {t('databases.workbench.rowCount', {
-                    count: String(activeTab.result?.rowCount ?? 0),
-                  })}
-                </span>
-                {allRows.length > 0 ? (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0"
-                      disabled={pageIndex <= 0}
-                      aria-label={t('databases.workbench.previousPage')}
-                      onClick={() => setPage(pageIndex - 1)}
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    </Button>
-                    <span className="whitespace-nowrap">
-                      {t('databases.workbench.pageOf', {
-                        page: String(pageIndex + 1),
-                        pages: String(totalPages),
-                      })}
-                    </span>
-                    <Input
-                      className="h-6 w-12 px-1 text-center text-[11px]"
-                      inputMode="numeric"
-                      value={String(pageIndex + 1)}
-                      aria-label={t('databases.workbench.pageNumber')}
-                      onChange={(event) => {
-                        const next = Number(event.target.value.replace(/[^0-9]/g, ''));
-                        if (Number.isFinite(next) && next >= 1) setPage(next - 1);
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0"
-                      disabled={pageIndex >= totalPages - 1}
-                      aria-label={t('databases.workbench.nextPage')}
-                      onClick={() => setPage(pageIndex + 1)}
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : null}
-                {activeTab.result?.truncated ? (
-                  <span className="text-amber-600 dark:text-amber-400">
-                    {t('databases.workbench.truncated')}
-                  </span>
-                ) : null}
-                {activeTab.result?.command ? <span className="font-mono">{activeTab.result.command}</span> : null}
-                {typeof activeTab.durationMs === 'number' ? (
-                  <span className="ml-auto tabular-nums">
-                    {t('databases.workbench.elapsed', { ms: String(activeTab.durationMs) })}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-              </div>
-            </div>
-          </>
+          <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-1.5 text-xs">
+      <StatusDot tab={tab} />
+      <span className="truncate font-medium">{tab.title}</span>
+      {tab.transactionOpen ? (
+        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+          {t('databases.workbench.beginTransaction')}
+        </span>
+      ) : null}
+      <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
+        {tab.serverVersion ?? ''}
+      </span>
+    </div>
+    <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-1.5">
+      <Button
+        size="sm"
+        className="h-7 text-xs"
+        disabled={tab.running || !tab.connected || !tab.sql.trim()}
+        onClick={runActiveQuery}
+      >
+        {tab.running ? (
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
         ) : (
-          <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-            {t('databases.workbench.noTab')}
-          </div>
+          <Play className="mr-1 h-3 w-3" />
         )}
+        {tab.running ? t('databases.workbench.running') : t('databases.workbench.run')}
+      </Button>
+      {tab.running ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={() => workbench.cancelQuery(tab.id)}
+        >
+          <Square className="mr-1 h-3 w-3" />
+          {t('databases.workbench.cancel')}
+        </Button>
+      ) : null}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+            <Bookmark className="h-3.5 w-3.5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 p-1">
+          {(connection?.savedQueries ?? []).length === 0 ? (
+            <p className="px-2 py-3 text-xs text-muted-foreground">
+              {t('databases.workbench.savedQueriesEmpty')}
+            </p>
+          ) : (
+            <div className="max-h-64 overflow-auto">
+              {(connection?.savedQueries ?? []).map((query) => (
+                <div key={query.id} className="group flex items-center gap-1 rounded px-1">
+                  <button
+                    type="button"
+                    className="flex-1 truncate px-1 py-1 text-left text-xs hover:text-foreground"
+                    title={query.sql}
+                    onClick={() => loadSavedQuery(query.sql)}
+                  >
+                    {query.name}
+                  </button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                    onClick={() => deleteSavedQuery(query.id)}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            disabled={!tab || !onUpdateConnections}
+            onClick={() => {
+              setSaveQueryName('');
+              setSaveQueryOpen(true);
+            }}
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t('databases.workbench.saveQuery')}</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            onClick={() => void openSqlFile()}
+          >
+            <FileCode2 className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t('databases.workbench.openSqlFile')}</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={formatSql}>
+            <Wand2 className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t('databases.workbench.format')}</TooltipContent>
+      </Tooltip>
+      {tab.transactionOpen ? (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            disabled={tab.running}
+            onClick={() => void workbench.commitTransaction(tab.id)}
+          >
+            {t('databases.workbench.commit')}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            disabled={tab.running}
+            onClick={() => void workbench.rollbackTransaction(tab.id)}
+          >
+            {t('databases.workbench.rollback')}
+          </Button>
+        </>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs"
+          disabled={tab.running || !tab.connected}
+          onClick={() => void workbench.beginTransaction(tab.id)}
+        >
+          {t('databases.workbench.beginTransaction')}
+        </Button>
+      )}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            disabled={activeHistory.length === 0}
+            aria-label={t('databases.workbench.history')}
+          >
+            <History className="h-3.5 w-3.5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-[420px] p-1">
+          <div className="max-h-[320px] overflow-y-auto">
+            {activeHistory.slice(0, 20).map((entry) => (
+              <button
+                key={`${entry.at}-${entry.sql.slice(0, 40)}`}
+                type="button"
+                className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-[11px] hover:bg-secondary"
+                title={entry.sql}
+                onClick={() => {
+                  workbench.updateSql(tab.id, entry.sql);
+                }}
+              >
+                {entry.sql.replace(/\s+/g, ' ')}
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            disabled={!tab.result}
+            title={t('databases.workbench.exportCsv')}
+          >
+            <Download className="h-3.5 w-3.5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-40 p-1">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground px-2 py-1">
+            {t('databases.workbench.exportTitle')}
+          </div>
+          {(['csv', 'json', 'sql'] as const).map((format) => (
+            <button
+              key={format}
+              type="button"
+              className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-secondary"
+              onClick={() => downloadResult(format)}
+            >
+              {t(`databases.workbench.export.${format}`)}
+            </button>
+          ))}
+        </PopoverContent>
+      </Popover>
+      {tab.status === 'error' ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={() => void workbench.reconnect(tab.id)}
+        >
+          <RotateCw className="mr-1 h-3 w-3" />
+          {t('databases.workbench.reconnect')}
+        </Button>
+      ) : null}
+      {headerActions ? <div className="ml-auto flex items-center gap-1">{headerActions}</div> : null}
+    </div>
+
+    <div className="flex min-h-0 min-w-0 flex-1">
+      <SchemaPanel
+        tab={tab}
+        width={schemaWidth}
+        onRefresh={() => void workbench.refreshTables(tab.id)}
+        onPreview={(table) => void workbench.previewTable(tab.id, table)}
+        onShowStructure={(table) => void workbench.showStructure(tab.id, table)}
+        t={t}
+      />
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t('databases.schema.resize')}
+        className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
+        onMouseDown={onSchemaResizeStart}
+      />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 basis-[38%] flex-col border-b border-border/60">
+      <ScriptCodeEditor
+        value={tab.sql}
+        onChange={(value) => workbench.updateSql(tab.id, value)}
+        language="sql"
+        fill
+        active
+        autoFocus={autoFocus}
+        ariaLabel={t('databases.workbench.editorLabel')}
+        placeholder={t('databases.workbench.placeholder')}
+        ref={editorRef}
+        onSubmitShortcut={runActiveQuery}
+        sqlCompletion={sqlCompletionSource}
+      />
+    </div>
+
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {tab.error ? (
+        <div className="shrink-0 border-b border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <div className="flex items-start gap-1.5">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div className="min-w-0 space-y-0.5">
+              <p className="whitespace-pre-wrap break-words font-medium">{tab.error}</p>
+              {tab.errorDetail?.detail ? (
+                <p className="opacity-80">{tab.errorDetail.detail}</p>
+              ) : null}
+              {tab.errorDetail?.hint ? (
+                <p className="opacity-80">{tab.errorDetail.hint}</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {tab.structure ? (
+        <StructurePanel
+          structure={tab.structure}
+          onClose={() => workbench.clearStructure(tab.id)}
+          onPreview={() => {
+            const table = tab.structure?.table;
+            if (table) void workbench.previewTable(tab.id, table);
+          }}
+          t={t}
+        />
+      ) : pagedResult ? (
+        <ResultGrid result={pagedResult} gridTemplate={gridTemplate} gridWidth={gridWidth} t={t} />
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+          <ArrowUpDown className="h-5 w-5 text-muted-foreground/60" />
+          <p className="max-w-md text-xs text-muted-foreground">
+            {tab.status === 'connecting'
+              ? t('databases.workbench.connecting')
+              : t('databases.workbench.emptyHint')}
+          </p>
+        </div>
+      )}
+
+      <div className="flex shrink-0 items-center gap-4 border-t border-border/60 px-3 py-1 text-[11px] text-muted-foreground">
+        <label className="flex items-center gap-1">
+          <span>{t('databases.workbench.rowLimit')}</span>
+          <RowLimitControl
+            value={tab.maxRows}
+            label={t('databases.workbench.rowLimit')}
+            onChange={(value) => workbench.setMaxRows(tab.id, value)}
+          />
+        </label>
+        <span>
+          {t('databases.workbench.rowCount', {
+            count: String(tab.result?.rowCount ?? 0),
+          })}
+        </span>
+        {allRows.length > 0 ? (
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0"
+              disabled={pageIndex <= 0}
+              aria-label={t('databases.workbench.previousPage')}
+              onClick={() => setPage(pageIndex - 1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="whitespace-nowrap">
+              {t('databases.workbench.pageOf', {
+                page: String(pageIndex + 1),
+                pages: String(totalPages),
+              })}
+            </span>
+            <Input
+              className="h-6 w-12 px-1 text-center text-[11px]"
+              inputMode="numeric"
+              value={String(pageIndex + 1)}
+              aria-label={t('databases.workbench.pageNumber')}
+              onChange={(event) => {
+                const next = Number(event.target.value.replace(/[^0-9]/g, ''));
+                if (Number.isFinite(next) && next >= 1) setPage(next - 1);
+              }}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0"
+              disabled={pageIndex >= totalPages - 1}
+              aria-label={t('databases.workbench.nextPage')}
+              onClick={() => setPage(pageIndex + 1)}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : null}
+        {tab.result?.truncated ? (
+          <span className="text-amber-600 dark:text-amber-400">
+            {t('databases.workbench.truncated')}
+          </span>
+        ) : null}
+        {tab.result?.command ? <span className="font-mono">{tab.result.command}</span> : null}
+        {typeof tab.durationMs === 'number' ? (
+          <span className="ml-auto tabular-nums">
+            {t('databases.workbench.elapsed', { ms: String(tab.durationMs) })}
+          </span>
+        ) : null}
       </div>
+    </div>
+      </div>
+    </div>
       <Dialog open={saveQueryOpen} onOpenChange={setSaveQueryOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -733,13 +693,256 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
         }}
         onConfirm={() => {
           if (!pendingRun) return;
-          executeSql(pendingRun.tabId, pendingRun.sql);
+          executeSql(pendingRun.sql);
           setPendingRun(null);
         }}
       />
     </>
   );
 };
+
+export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> = ({
+  tabId,
+  connections,
+  onUpdateConnections,
+  tunnelDeps,
+}) => {
+  const { t } = useI18n();
+  const workbench = useDatabaseWorkbench(connections, tunnelDeps);
+  const { tabs, activeTab } = workbench;
+  const sqlHistory = useSqlHistory();
+
+  useEffect(() => {
+    if (!tabId) return;
+    workbench.setActiveTabId(tabId);
+    databaseTabStore.markActive(tabId);
+  }, [tabId, workbench]);
+
+  const [schemaWidth, setSchemaWidth] = useState(190);
+  const beginSchemaResize = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startWidth = schemaWidth;
+      const onMove = (move: MouseEvent) => {
+        setSchemaWidth(Math.min(560, Math.max(140, startWidth + (move.clientX - startX))));
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [schemaWidth],
+  );
+
+  const [secondaryTabId, setSecondaryTabId] = useState<string | null>(null);
+  const [splitDirection, setSplitDirection] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [splitRatio, setSplitRatio] = useState(0.5);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const secondaryTab = secondaryTabId ? tabs.find((tab) => tab.id === secondaryTabId) : undefined;
+
+  useEffect(() => {
+    if (secondaryTabId && !tabs.some((tab) => tab.id === secondaryTabId)) setSecondaryTabId(null);
+  }, [tabs, secondaryTabId]);
+
+  const openSecondaryPane = useCallback(
+    async (direction: 'horizontal' | 'vertical') => {
+      const active = workbench.activeTab;
+      if (!active) return;
+      setSplitDirection(direction);
+      const other = tabs.find((tab) => tab.id !== active.id);
+      if (other) {
+        setSecondaryTabId(other.id);
+        return;
+      }
+      const connection = connections.find((entry) => entry.id === active.connectionId);
+      if (!connection) return;
+      const newTabId = await workbench.openTab(connection, { forceNew: true });
+      workbench.setActiveTabId(active.id);
+      setSecondaryTabId(newTabId || null);
+    },
+    [connections, tabs, workbench],
+  );
+
+  const beginSplitResize = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      const rect = splitContainerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const onMove = (move: MouseEvent) => {
+        const next =
+          splitDirection === 'vertical'
+            ? (move.clientY - rect.top) / Math.max(1, rect.height)
+            : (move.clientX - rect.left) / Math.max(1, rect.width);
+        setSplitRatio(Math.min(0.8, Math.max(0.2, next)));
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [splitDirection],
+  );
+
+  if (!activeTab) {
+    return (
+      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+        {t('databases.workbench.noTab')}
+      </div>
+    );
+  }
+
+  const splitControls = (
+    <div className="flex items-center gap-0.5">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
+            aria-label={t('databases.workbench.splitRight')}
+            onClick={() => void openSecondaryPane('horizontal')}
+          >
+            <Columns2 className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t('databases.workbench.splitRight')}</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
+            aria-label={t('databases.workbench.splitDown')}
+            onClick={() => void openSecondaryPane('vertical')}
+          >
+            <Rows2 className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t('databases.workbench.splitDown')}</TooltipContent>
+      </Tooltip>
+      {secondaryTab ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0"
+              aria-label={t('databases.workbench.closeSplit')}
+              onClick={() => setSecondaryTabId(null)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('databases.workbench.closeSplit')}</TooltipContent>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
+
+  const secondaryControls = (
+    <div className="flex items-center gap-1">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button size="sm" variant="ghost" className="h-6 max-w-[220px] gap-1 px-1.5 text-[11px]">
+            <Table2 className="h-3 w-3 shrink-0" />
+            <span className="truncate">{secondaryTab?.title ?? ''}</span>
+            <ChevronDown className="h-3 w-3 shrink-0" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-64 p-1">
+          <div className="max-h-64 overflow-y-auto">
+            {tabs
+              .filter((tab) => tab.id !== activeTab.id)
+              .map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={cn(
+                    'flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-secondary',
+                    tab.id === secondaryTab?.id ? 'bg-secondary/60' : '',
+                  )}
+                  onClick={() => setSecondaryTabId(tab.id)}
+                >
+                  <span className="truncate">{tab.title}</span>
+                </button>
+              ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-6 w-6 p-0"
+        aria-label={t('databases.workbench.closeSplit')}
+        onClick={() => setSecondaryTabId(null)}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+
+  return (
+    <div
+      ref={splitContainerRef}
+      className={cn(
+        'relative flex h-full min-h-0 w-full min-w-0 overflow-hidden bg-background',
+        secondaryTab && splitDirection === 'vertical' ? 'flex-col' : 'flex-row',
+      )}
+    >
+      <div
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+        style={secondaryTab ? { flexBasis: `${splitRatio * 100}%`, flexGrow: 0, flexShrink: 0 } : { flex: '1 1 0%' }}
+      >
+        <DatabaseTabPane
+          tab={activeTab}
+          workbench={workbench}
+          connections={connections}
+          onUpdateConnections={onUpdateConnections}
+          sqlHistory={sqlHistory}
+          schemaWidth={schemaWidth}
+          onSchemaResizeStart={beginSchemaResize}
+          autoFocus
+          headerActions={splitControls}
+        />
+      </div>
+      {secondaryTab ? (
+        <>
+          <div
+            role="separator"
+            aria-orientation={splitDirection === 'vertical' ? 'horizontal' : 'vertical'}
+            aria-label={t('databases.schema.resize')}
+            className={cn(
+              'shrink-0 bg-border/60 hover:bg-primary/40',
+              splitDirection === 'vertical' ? 'h-1 cursor-row-resize' : 'w-1 cursor-col-resize',
+            )}
+            onMouseDown={beginSplitResize}
+          />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <DatabaseTabPane
+              key={secondaryTab.id}
+              tab={secondaryTab}
+              workbench={workbench}
+              connections={connections}
+              onUpdateConnections={onUpdateConnections}
+              sqlHistory={sqlHistory}
+              schemaWidth={schemaWidth}
+              onSchemaResizeStart={beginSchemaResize}
+              headerActions={secondaryControls}
+            />
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+};
+
 
 const ROW_LIMIT_PRESETS = [100, 500, 1000, 2000, 5000];
 
