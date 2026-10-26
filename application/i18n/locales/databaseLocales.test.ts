@@ -22,6 +22,7 @@ const PLACEHOLDER_KEYS: Record<string, string[]> = {
   "databases.testOk": ["{ms}", "{version}"],
   "databases.deleteDescription": ["{label}"],
   "databases.workbench.rowCount": ["{count}"],
+  "databases.workbench.pageOf": ["{page}", "{pages}"],
   "databases.workbench.elapsed": ["{ms}"],
   "databases.workbench.statementOk": ["{command}"],
 };

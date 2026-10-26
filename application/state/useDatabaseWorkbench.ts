@@ -32,6 +32,9 @@ import type { DbConnectionTarget, DbTestConnectionResult } from '../../domain/mo
 export type { DatabaseTunnelDeps } from '../../infrastructure/services/databaseTunnelService';
 export type { DbColumnInfo, DbTableRef } from '../../infrastructure/services/databaseService';
 
+/** Rows fetched for a statement that carries no LIMIT of its own. */
+const FULL_RESULT_ROWS = 10000;
+
 export type DatabaseTabStatus = 'connecting' | 'ready' | 'error';
 
 export interface DatabaseTab {
@@ -332,7 +335,9 @@ export function useDatabaseWorkbench(
           patchTab(tabId, { running: false, error: resolved.error });
           return;
         }
-        const maxRows = options?.maxRows ?? tab.maxRows;
+        // Statements without their own LIMIT load a full page set so the grid
+        // can paginate client-side; tab.maxRows is the page size, not a cap.
+        const maxRows = options?.maxRows ?? FULL_RESULT_ROWS;
         const response = await runDatabaseQuery(resolved.target, sql, { maxRows });
         if (response.ok === true && response.result) {
           patchTab(tabId, {

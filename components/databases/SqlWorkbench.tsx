@@ -8,9 +8,13 @@ import {
   ArrowUpDown,
   Bookmark,
   BookmarkPlus,
+  ChevronLeft,
+  ChevronRight,
   Download,
   History,
   Loader2,
+  Maximize2,
+  Minimize2,
   Play,
   RotateCw,
   Square,
@@ -131,6 +135,54 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
   const [pendingRun, setPendingRun] = useState<{ tabId: string; sql: string; reasons: string[] } | null>(null);
   const [saveQueryOpen, setSaveQueryOpen] = useState(false);
   const [saveQueryName, setSaveQueryName] = useState('');
+  // The workbench is a floating window: keep its size between openings and let
+  // the schema tree be widened independently.
+  const [windowSize, setWindowSize] = useState<{ width: number; height: number } | null>(null);
+  const [maximized, setMaximized] = useState(false);
+  const [schemaWidth, setSchemaWidth] = useState(190);
+  const [pageByTab, setPageByTab] = useState<Record<string, number>>({});
+  const windowRef = useRef<HTMLDivElement | null>(null);
+
+  const beginResize = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      const rect = windowRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startWidth = rect.width;
+      const startHeight = rect.height;
+      const onMove = (move: MouseEvent) => {
+        setMaximized(false);
+        setWindowSize({
+          width: Math.min(window.innerWidth - 24, Math.max(720, startWidth + (move.clientX - startX))),
+          height: Math.min(window.innerHeight - 24, Math.max(420, startHeight + (move.clientY - startY))),
+        });
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [],
+  );
+
+  const beginSchemaResize = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = schemaWidth;
+    const onMove = (move: MouseEvent) => {
+      setSchemaWidth(Math.min(560, Math.max(140, startWidth + (move.clientX - startX))));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [schemaWidth]);
 
   const executeSql = useCallback(
     (tabId: string, sqlOverride: string | undefined) => {
@@ -256,6 +308,34 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
     [widths],
   );
 
+  // Client-side paging: statements without LIMIT fetch a full page set, and the
+  // row-limit selector acts as the page size.
+  const pageSize = activeTab?.maxRows || 1000;
+  const allRows = useMemo(() => activeTab?.result?.rows ?? [], [activeTab?.result]);
+  const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
+  const requestedPage = pageByTab[activeTab?.id ?? ''] ?? 0;
+  const pageIndex = Math.min(Math.max(0, requestedPage), totalPages - 1);
+  const setPage = useCallback(
+    (page: number) => {
+      if (!activeTab) return;
+      setPageByTab((prev) => ({ ...prev, [activeTab.id]: Math.min(Math.max(0, page), totalPages - 1) }));
+    },
+    [activeTab, totalPages],
+  );
+  const pagedResult = useMemo(() => {
+    if (!activeTab?.result) return null;
+    return {
+      ...activeTab.result,
+      rows: allRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+      rowCount: allRows.length,
+    };
+  }, [activeTab?.result, allRows, pageIndex, pageSize]);
+
+  useEffect(() => {
+    if (!activeTabId) return;
+    setPageByTab((prev) => (prev[activeTabId] === 0 ? prev : { ...prev, [activeTabId]: 0 }));
+  }, [activeTabId, activeTab?.result]);
+
   const formatSql = () => {
     if (!activeTab) return;
     const dialect = SQL_DIALECTS[activeTab.kind] ?? 'postgresql';
@@ -269,9 +349,30 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
-      <DialogContent className="flex h-[88vh] w-[94vw] max-w-[1500px] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        ref={windowRef}
+        className="relative flex flex-col gap-0 overflow-hidden p-0"
+        style={
+          maximized
+            ? { width: '96vw', height: '94vh', maxWidth: '96vw' }
+            : windowSize
+              ? { width: windowSize.width, height: windowSize.height, maxWidth: '96vw', maxHeight: '94vh' }
+              : { width: '94vw', height: '88vh', maxWidth: '1500px', maxHeight: '94vh' }
+        }
+      >
         <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-2.5">
-          <DialogTitle className="text-sm">{t('databases.workbench.title')}</DialogTitle>
+          <div className="flex items-center gap-2">
+            <DialogTitle className="text-sm">{t('databases.workbench.title')}</DialogTitle>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto h-6 w-6 p-0"
+              aria-label={maximized ? t('databases.workbench.restore') : t('databases.workbench.maximize')}
+              onClick={() => setMaximized((value) => !value)}
+            >
+              {maximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="flex shrink-0 items-stretch overflow-x-auto border-b border-border/60">
@@ -514,9 +615,17 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
             <div className="flex min-h-0 flex-1">
               <SchemaPanel
                 tab={activeTab}
+                width={schemaWidth}
                 onRefresh={() => void workbench.refreshTables(activeTab.id)}
                 onPreview={(table) => void workbench.previewTable(activeTab.id, table)}
                 t={t}
+              />
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label={t('databases.schema.resize')}
+                className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
+                onMouseDown={beginSchemaResize}
               />
               <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex min-h-0 basis-[38%] flex-col border-b border-border/60">
@@ -552,8 +661,8 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                 </div>
               ) : null}
 
-              {activeTab.result ? (
-                <ResultGrid result={activeTab.result} gridTemplate={gridTemplate} t={t} />
+              {pagedResult ? (
+                <ResultGrid result={pagedResult} gridTemplate={gridTemplate} t={t} />
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                   <ArrowUpDown className="h-5 w-5 text-muted-foreground/60" />
@@ -585,6 +694,46 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
                     count: String(activeTab.result?.rowCount ?? 0),
                   })}
                 </span>
+                {allRows.length > 0 ? (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0"
+                      disabled={pageIndex <= 0}
+                      aria-label={t('databases.workbench.previousPage')}
+                      onClick={() => setPage(pageIndex - 1)}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </Button>
+                    <span className="whitespace-nowrap">
+                      {t('databases.workbench.pageOf', {
+                        page: String(pageIndex + 1),
+                        pages: String(totalPages),
+                      })}
+                    </span>
+                    <Input
+                      className="h-6 w-12 px-1 text-center text-[11px]"
+                      inputMode="numeric"
+                      value={String(pageIndex + 1)}
+                      aria-label={t('databases.workbench.pageNumber')}
+                      onChange={(event) => {
+                        const next = Number(event.target.value.replace(/[^0-9]/g, ''));
+                        if (Number.isFinite(next) && next >= 1) setPage(next - 1);
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0"
+                      disabled={pageIndex >= totalPages - 1}
+                      aria-label={t('databases.workbench.nextPage')}
+                      onClick={() => setPage(pageIndex + 1)}
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : null}
                 {activeTab.result?.truncated ? (
                   <span className="text-amber-600 dark:text-amber-400">
                     {t('databases.workbench.truncated')}
@@ -606,6 +755,12 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
             {t('databases.workbench.noTab')}
           </div>
         )}
+        <div
+          role="separator"
+          aria-label={t('databases.workbench.resize')}
+          className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize rounded-tl bg-border/40 hover:bg-border"
+          onMouseDown={beginResize}
+        />
       </DialogContent>
       <Dialog open={saveQueryOpen} onOpenChange={setSaveQueryOpen}>
         <DialogContent className="sm:max-w-sm">
@@ -652,12 +807,13 @@ export const SqlWorkbench: React.FC<SqlWorkbenchProps> = ({
 
 interface SchemaPanelProps {
   tab: DatabaseTab;
+  width: number;
   onRefresh: () => void;
   onPreview: (table: DbTableRef) => void;
   t: ReturnType<typeof useI18n>['t'];
 }
 
-const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, onRefresh, onPreview, t }) => {
+const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, width, onRefresh, onPreview, t }) => {
   const grouped = useMemo(() => {
     const map = new Map<string, DbTableRef[]>();
     for (const table of tab.tables ?? []) {
@@ -669,7 +825,7 @@ const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, onRefresh, onPreview, t 
   }, [tab.tables]);
 
   return (
-    <div className="flex w-[190px] shrink-0 flex-col border-r border-border/60">
+    <div className="flex shrink-0 flex-col border-r border-border/60" style={{ width }}>
       <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-2 py-1">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {t('databases.schema.title')}
