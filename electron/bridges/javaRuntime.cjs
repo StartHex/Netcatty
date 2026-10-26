@@ -12,6 +12,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const { spawnSync } = require("node:child_process");
 
 const MIN_JAVA_MAJOR = 17;
@@ -70,6 +71,11 @@ function probe(binary) {
   return { ok: true, version: versionLine || "java", major };
 }
 
+/** Homebrew links are symlinks, so treat them as directories too. */
+function isDirLike(entry) {
+  return entry.isDirectory() || entry.isSymbolicLink();
+}
+
 function readDirSafe(dir) {
   try {
     return fs.readdirSync(dir, { withFileTypes: true });
@@ -81,7 +87,7 @@ function readDirSafe(dir) {
 function expandHomeDirs(root, filter) {
   const homes = [];
   for (const entry of readDirSafe(root)) {
-    if (!entry.isDirectory()) continue;
+    if (!isDirLike(entry)) continue;
     if (filter && !filter(entry.name)) continue;
     homes.push(path.join(root, entry.name));
   }
@@ -133,12 +139,16 @@ function bundledJreHomes() {
 
 function defaultHomes() {
   if (process.platform === "darwin") {
-    const homes = expandHomeDirs("/Library/Java/JavaVirtualMachines").map((home) =>
-      path.join(home, "Contents", "Home"),
-    );
+    const homes = [];
+    for (const root of [
+      "/Library/Java/JavaVirtualMachines",
+      path.join(os.homedir(), "Library", "Java", "JavaVirtualMachines"),
+    ]) {
+      homes.push(...expandHomeDirs(root).map((home) => path.join(home, "Contents", "Home")));
+    }
     for (const root of ["/opt/homebrew/opt", "/usr/local/opt"]) {
       for (const entry of readDirSafe(root)) {
-        if (entry.isDirectory() && /^openjdk/.test(entry.name)) {
+        if (isDirLike(entry) && /^openjdk/.test(entry.name)) {
           homes.push(path.join(root, entry.name, "libexec", "openjdk.jdk", "Contents", "Home"));
         }
       }
@@ -183,11 +193,12 @@ function resolveJava(options = {}) {
 
   const tried = [];
   let sawTooOld = null;
-  const candidates = [];
-  if (options.javaPath) candidates.push(options.javaPath);
-  if (options.javaHome) candidates.push(javaBinaryIn(options.javaHome));
-  if (process.env.NETCATTY_JAVA_HOME) candidates.push(javaBinaryIn(process.env.NETCATTY_JAVA_HOME));
-  if (process.env.JAVA_HOME) candidates.push(javaBinaryIn(process.env.JAVA_HOME));
+  const explicit = [];
+  if (options.javaPath) explicit.push(options.javaPath);
+  if (options.javaHome) explicit.push(javaBinaryIn(options.javaHome));
+  if (process.env.NETCATTY_JAVA_HOME) explicit.push(javaBinaryIn(process.env.NETCATTY_JAVA_HOME));
+  if (process.env.JAVA_HOME) explicit.push(javaBinaryIn(process.env.JAVA_HOME));
+  const candidates = [...explicit];
   candidates.push(process.platform === "win32" ? "java.exe" : "java");
   for (const home of defaultHomes()) candidates.push(javaBinaryIn(home));
   for (const home of bundledJreHomes()) candidates.push(javaBinaryIn(home));
@@ -202,7 +213,12 @@ function resolveJava(options = {}) {
       cache.set(key, resolved);
       return resolved;
     }
-    if (result.tooOld) sawTooOld = { path: candidate, version: result.version, major: result.major };
+    if (result.tooOld) {
+      sawTooOld = { path: candidate, version: result.version, major: result.major };
+      // An explicitly configured runtime is authoritative: report it instead of
+      // silently switching to a different Java the user did not pick.
+      if (explicit.includes(candidate)) break;
+    }
   }
   const resolved = {
     ok: false,
@@ -216,4 +232,4 @@ function resolveJava(options = {}) {
   return resolved;
 }
 
-module.exports = { resolveJava, parseJavaMajor, MIN_JAVA_MAJOR };
+module.exports = { resolveJava, parseJavaMajor, isDirLike, MIN_JAVA_MAJOR };

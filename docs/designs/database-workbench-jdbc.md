@@ -616,3 +616,12 @@ JetBrains Toolbox 的 `jbr`、Android Studio 的 jbr）。探测会解析 `java 
 并要求 17+；只找到旧版本时给出「检测到 Java 8，需要 17+」的明确提示，而不是笼统的未找到。
 连接编辑器新增「检测 Java」按钮，命中时回填 java 路径并显示版本。测试见
 `electron/bridges/javaRuntime.test.cjs`。
+
+### 12.8 Mac 上的 Java 可见性（2026-10）
+
+GUI 应用不继承登录 shell 的 PATH，Homebrew 的 `openjdk@21` 因此对应用不可见；
+而 `/usr/bin/java` 只是系统存根。修复三处：探测时把 `~/Library/Java/JavaVirtualMachines`
+也纳入；Homebrew `opt` 下的符号链接按目录处理（此前 `Dirent.isDirectory()` 对 symlink
+返回 false，导致直接跳过）；显式配置的 java 路径若版本过低，直接报错而不是悄悄换一个。
+本机已把 brew 的 JDK 软链到 `~/Library/Java/JavaVirtualMachines/openjdk-21.jdk`，
+使 `/usr/libexec/java_home` 与 `/usr/bin/java` 都能解析到 Java 21。

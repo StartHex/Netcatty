@@ -5,7 +5,7 @@ const { test } = require("node:test");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { resolveJava, parseJavaMajor } = require("./javaRuntime.cjs");
+const { resolveJava, parseJavaMajor, isDirLike } = require("./javaRuntime.cjs");
 
 const posixOnly = process.platform === "win32" ? test.skip : test;
 
@@ -38,4 +38,15 @@ posixOnly("rejects an old runtime and explains why", () => {
   assert.equal(resolved.ok, false);
   assert.equal(resolved.foundButTooOld.major, 8);
   assert.match(resolved.error, /Java 8/);
+});
+
+posixOnly("treats symlinked JDK directories as homes (Homebrew layout)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nc-opt-"));
+  const real = path.join(dir, "Cellar", "openjdk@21", "21.0.11", "libexec", "openjdk.jdk");
+  fs.mkdirSync(real, { recursive: true });
+  const link = path.join(dir, "openjdk@21");
+  fs.symlinkSync(real, link);
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const linked = entries.find((entry) => entry.name === "openjdk@21");
+  assert.equal(isDirLike(linked), true);
 });
