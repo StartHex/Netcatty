@@ -57,6 +57,7 @@ export const enCurlMessages: Messages = {
   'curl.options.verifyTls': 'Verify TLS certificate',
   'curl.options.maxRedirects': 'Max redirects',
   'curl.options.timeout': 'Timeout (ms)',
+  'curl.errors.invalidUrl': 'That URL is not valid.',
   'curl.response.empty': 'Send a request to see the response here.',
   'curl.response.binary': '(binary response, switch to Raw)',
   'curl.response.truncated': 'Truncated',

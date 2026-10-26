@@ -57,6 +57,7 @@ export const ruCurlMessages: Messages = {
   'curl.options.verifyTls': 'Проверять TLS-сертификат',
   'curl.options.maxRedirects': 'Максимум редиректов',
   'curl.options.timeout': 'Таймаут (мс)',
+  'curl.errors.invalidUrl': 'Некорректный URL.',
   'curl.response.empty': 'Отправьте запрос, чтобы увидеть ответ.',
   'curl.response.binary': '(двоичный ответ, см. Raw)',
   'curl.response.truncated': 'Обрезано',

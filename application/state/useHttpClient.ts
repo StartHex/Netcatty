@@ -14,6 +14,7 @@ import {
   type HttpWireWarning,
 } from '../../domain/http/httpWire';
 import { cancelHttpRequest, formatHttpError, sendHttpRequest } from '../../infrastructure/services/httpClientService';
+import { useI18n } from '../i18n/I18nProvider';
 import { curlTabStore, useCurlTabRequest } from './curlTabStore';
 import { useHttpHistory } from './useHttpHistory';
 
@@ -89,6 +90,7 @@ export function useHttpClient({ requests, onUpdateRequests }: UseHttpClientOptio
   const requestsRef = useRef<readonly CurlRequest[]>(requests);
   const hydratedRef = useRef(false);
   const activeTabIdRef = useRef<string | null>(null);
+  const { t } = useI18n();
   const history = useHttpHistory();
 
   tabsRef.current = tabs;
@@ -262,7 +264,7 @@ export function useHttpClient({ requests, onUpdateRequests }: UseHttpClientOptio
       const wireId = makeId('wire');
       const built = buildHttpWireRequest(tab.draft);
       if (!built.ok) {
-        patchTab(tabId, { status: 'error', error: 'That URL is not valid.', response: undefined });
+        patchTab(tabId, { status: 'error', error: t('curl.errors.invalidUrl'), response: undefined });
         return;
       }
       patchTab(tabId, {
@@ -299,7 +301,7 @@ export function useHttpClient({ requests, onUpdateRequests }: UseHttpClientOptio
       });
       history.record({ method: tab.draft.method, url: built.wire.url, status: 0, durationMs: 0 });
     },
-    [history, patchTab],
+    [history, patchTab, t],
   );
 
   const cancel = useCallback((tabId: string) => {

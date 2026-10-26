@@ -57,6 +57,7 @@ export const esCurlMessages: Messages = {
   'curl.options.verifyTls': 'Verificar certificado TLS',
   'curl.options.maxRedirects': 'Máximo de redirecciones',
   'curl.options.timeout': 'Tiempo de espera (ms)',
+  'curl.errors.invalidUrl': 'Esa URL no es válida.',
   'curl.response.empty': 'Envía una solicitud para ver la respuesta.',
   'curl.response.binary': '(respuesta binaria, ver Raw)',
   'curl.response.truncated': 'Truncado',

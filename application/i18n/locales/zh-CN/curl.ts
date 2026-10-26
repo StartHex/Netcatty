@@ -57,6 +57,7 @@ export const zhCNCurlMessages: Messages = {
   'curl.options.verifyTls': '校验 TLS 证书',
   'curl.options.maxRedirects': '最大重定向次数',
   'curl.options.timeout': '超时（毫秒）',
+  'curl.errors.invalidUrl': '这个 URL 不合法。',
   'curl.response.empty': '发送请求后，响应内容会显示在这里。',
   'curl.response.binary': '（二进制响应，请查看 Raw）',
   'curl.response.truncated': '已截断',

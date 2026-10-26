@@ -57,6 +57,7 @@ export const zhTWCurlMessages: Messages = {
   'curl.options.verifyTls': '驗證 TLS 憑證',
   'curl.options.maxRedirects': '最大重新導向次數',
   'curl.options.timeout': '逾時（毫秒）',
+  'curl.errors.invalidUrl': '這個 URL 不合法。',
   'curl.response.empty': '傳送請求後，回應內容會顯示在這裡。',
   'curl.response.binary': '（二進位回應，請查看 Raw）',
   'curl.response.truncated': '已截斷',
