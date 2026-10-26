@@ -18,6 +18,7 @@ import {
   Play,
   RotateCw,
   Rows2,
+  Sparkles,
   Square,
   Table2,
   Trash2,
@@ -43,6 +44,7 @@ import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/Script
 import { buildSqlCompletionEntries } from '../../domain/database/sqlCompletion';
 import { applyWidths, widthScopeKey } from '../../domain/database/columnWidths';
 import { useDatabaseColumnWidthStore } from '../../application/state/useDatabaseColumnWidths';
+import { SqlAssistantDialog } from './SqlAssistantDialog';
 import { useSqlHistory } from '../../application/state/useSqlHistory';
 import type { DatabaseTunnelDeps, DbTableRef } from '../../application/state/useDatabaseWorkbench';
 import {
@@ -301,6 +303,12 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
     setPage(0);
   }, [tab.id, tab.result]);
 
+  const [aiOpen, setAiOpen] = useState(false);
+  const schemaText = useMemo(
+    () => (tab.tables ?? []).slice(0, 80).map((table) => table.name).join(', '),
+    [tab.tables],
+  );
+
   const formatSql = () => {
     const dialect = SQL_DIALECTS[tab.kind] ?? 'postgresql';
     try {
@@ -424,6 +432,14 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
           </Button>
         </TooltipTrigger>
         <TooltipContent>{t('databases.workbench.format')}</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setAiOpen(true)}>
+            <Sparkles className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t('databases.ai.title')}</TooltipContent>
       </Tooltip>
       {tab.transactionOpen ? (
         <>
@@ -728,6 +744,14 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
           executeSql(pendingRun.sql);
           setPendingRun(null);
         }}
+      />
+      <SqlAssistantDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        currentSql={editorRef.current?.getSelectionText() || tab.sql}
+        schemaText={schemaText}
+        dialect={tab.kind}
+        onApply={(sql) => workbench.updateSql(tab.id, sql)}
       />
     </>
   );
