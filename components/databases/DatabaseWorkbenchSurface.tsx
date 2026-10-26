@@ -269,6 +269,12 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
     () => widths.map((width) => `${Math.round(width)}px`).join(' '),
     [widths],
   );
+  // Total grid width drives the horizontal scroller: without it the fixed pixel
+  // columns get clipped by the container and wide result sets cannot be read.
+  const gridWidth = useMemo(
+    () => widths.reduce((total, width) => total + Math.round(width), 0),
+    [widths],
+  );
 
   // Client-side paging: statements without LIMIT fetch a full page set, and the
   // row-limit selector acts as the page size.
@@ -593,7 +599,7 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
                   t={t}
                 />
               ) : pagedResult ? (
-                <ResultGrid result={pagedResult} gridTemplate={gridTemplate} t={t} />
+                <ResultGrid result={pagedResult} gridTemplate={gridTemplate} gridWidth={gridWidth} t={t} />
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                   <ArrowUpDown className="h-5 w-5 text-muted-foreground/60" />
@@ -984,10 +990,12 @@ const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onP
 interface ResultGridProps {
   result: DbQueryResult;
   gridTemplate: string;
+  /** Sum of the fixed column widths; the scroll container uses it as min width. */
+  gridWidth: number;
   t: ReturnType<typeof useI18n>['t'];
 }
 
-const ResultGrid: React.FC<ResultGridProps> = ({ result, gridTemplate, t }) => {
+const ResultGrid: React.FC<ResultGridProps> = ({ result, gridTemplate, gridWidth, t }) => {
   if (result.columns.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
@@ -999,7 +1007,10 @@ const ResultGrid: React.FC<ResultGridProps> = ({ result, gridTemplate, t }) => {
   }
   return (
     <div className="min-h-0 flex-1 overflow-x-auto">
-      <div className="flex min-h-full flex-col" style={{ minWidth: '100%' }}>
+      <div
+        className="flex min-h-full flex-col"
+        style={{ minWidth: '100%', width: gridWidth > 0 ? `${gridWidth}px` : undefined }}
+      >
         <div
           className="sticky top-0 z-10 grid shrink-0 border-b border-border/60 bg-secondary/60"
           style={{ gridTemplateColumns: gridTemplate }}
