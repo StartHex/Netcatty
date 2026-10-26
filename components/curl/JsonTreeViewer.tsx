@@ -14,6 +14,11 @@ interface JsonTreeViewerProps {
   text: string;
   className?: string;
   labels?: JsonTreeLabels;
+  /**
+   * Expand every branch on first render. Very large payloads still start
+   * collapsed past the second level so the first paint stays cheap.
+   */
+  expandByDefault?: boolean;
   /** Copies the JSON for a node; the caller owns clipboard + feedback. */
   onCopyValue?: (text: string) => void;
 }
@@ -31,6 +36,8 @@ interface JsonRowProps {
 
 const INDENT_PX = 14;
 const MAX_LEAF_CHARS = 400;
+/** Above this node count the tree falls back to a shallow initial view. */
+const AUTO_EXPAND_NODE_LIMIT = 1500;
 
 const isBranch = (value: unknown): value is Record<string, unknown> | unknown[] =>
   value !== null && typeof value === 'object';
@@ -130,23 +137,33 @@ const JsonRow: React.FC<JsonRowProps> = ({ label, value, depth, path, collapsedP
   );
 };
 
-export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({ text, className, labels = {}, onCopyValue }) => {
+export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
+  text,
+  className,
+  labels = {},
+  expandByDefault = true,
+  onCopyValue,
+}) => {
   const parsed = useMemo(() => safeParseJson(text), [text]);
-  // Collapsed-by-default paths: every object/array at depth >= 2.
   const initialCollapsed = useMemo(() => {
     const paths = new Set<string>();
-    const walk = (value: unknown, depth: number, path: string) => {
+    let count = 0;
+    const walk = (value: unknown, depth: number, path: string, collapseFrom: number) => {
       if (!isBranch(value)) return;
-      if (depth >= 2) paths.add(path);
-      if (Array.isArray(value)) {
-        value.forEach((item, index) => walk(item, depth + 1, `${path}/${index}`));
-      } else {
-        Object.entries(value as Record<string, unknown>).forEach(([key, item]) => walk(item, depth + 1, `${path}/${key}`));
-      }
+      count += 1;
+      if (depth >= collapseFrom) paths.add(path);
+      const entries = Array.isArray(value)
+        ? value.map((item, index) => [String(index), item] as const)
+        : Object.entries(value as Record<string, unknown>);
+      for (const [key, item] of entries) walk(item, depth + 1, `${path}/${key}`, collapseFrom);
     };
-    walk(parsed, 0, '$');
+    // First pass counts nodes; the collapse depth depends on the payload size.
+    walk(parsed, 0, '$', Number.POSITIVE_INFINITY);
+    const collapseFrom = expandByDefault && count <= AUTO_EXPAND_NODE_LIMIT ? Number.POSITIVE_INFINITY : 2;
+    paths.clear();
+    walk(parsed, 0, '$', collapseFrom);
     return paths;
-  }, [parsed]);
+  }, [expandByDefault, parsed]);
 
   // The body can change while the tab stays mounted, so the collapse state is
   // keyed by the text that produced it.

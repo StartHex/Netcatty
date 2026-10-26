@@ -630,8 +630,9 @@ export const CurlClientSurface: React.FC<{
               </button>
             ))}
           </div>
+          {section === 'body' ? null : (
           <ScrollArea className="min-h-0 flex-1">
-            <div className="p-3">
+            <div className="flex min-h-full flex-col gap-2 p-3">
               {section === 'params' ? (
                 <KeyValueEditor
                   rows={tab.draft.params}
@@ -674,104 +675,7 @@ export const CurlClientSurface: React.FC<{
                 />
               ) : null}
 
-              {section === 'body' ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Select
-                      value={tab.draft.body.kind}
-                      onValueChange={(value) =>
-                        client.patchDraft(tab.id, { body: { ...tab.draft.body, kind: value as HttpBodyKind } })
-                      }
-                    >
-                      <SelectTrigger className="h-9 w-[160px] text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(['none', 'json', 'text', 'form'] as HttpBodyKind[]).map((kind) => (
-                          <SelectItem key={kind} value={kind} className="text-xs">
-                            {t(`curl.body.${kind}`)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {bodyIsJson ? (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9 gap-1 text-xs"
-                          onClick={() => applyJsonTransform(formatJsonText)}
-                        >
-                          <Wand2 size={13} /> {t('curl.body.format')}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-9 gap-1 text-xs"
-                          onClick={() => applyJsonTransform(minifyJsonText)}
-                        >
-                          {t('curl.body.minify')}
-                        </Button>
-                        <div className="flex items-center gap-0.5 rounded border border-border/60 p-0.5">
-                          {(['text', 'tree'] as const).map((view) => (
-                            <button
-                              key={view}
-                              type="button"
-                              onClick={() => setBodyView(view)}
-                              className={cn(
-                                'rounded px-1.5 py-0.5 text-[11px]',
-                                bodyView === view
-                                  ? 'bg-muted text-foreground'
-                                  : 'text-muted-foreground hover:text-foreground',
-                              )}
-                            >
-                              {t(view === 'text' ? 'curl.body.viewText' : 'curl.body.viewTree')}
-                            </button>
-                          ))}
-                        </div>
-                        <Button variant="ghost" size="sm" className="h-9 gap-1 text-xs" onClick={copyBody}>
-                          <Copy size={13} /> {t('curl.response.copy')}
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
-                  {jsonError ? (
-                    <p className="text-[11px] text-destructive">
-                      {t('curl.body.invalidJson', { error: jsonError })}
-                    </p>
-                  ) : null}
-                  {bodyIsJson && bodyView === 'tree' ? (
-                    <div className="min-h-[140px] rounded border border-border/60">
-                      <JsonTreeViewer
-                        text={tab.draft.body.text}
-                        labels={{
-                          expand: t('curl.json.expand'),
-                          collapse: t('curl.json.collapse'),
-                          copyValue: t('curl.json.copyValue'),
-                        }}
-                        onCopyValue={(text) =>
-                          void copyTextWithFeedback(
-                            writeClipboardText,
-                            text,
-                            t('curl.response.copied'),
-                            t('curl.copyFailed'),
-                          )
-                        }
-                      />
-                    </div>
-                  ) : (
-                    <Textarea
-                      value={tab.draft.body.text}
-                      disabled={tab.draft.body.kind === 'none'}
-                      placeholder={t('curl.body.placeholder')}
-                      onChange={(event) =>
-                        client.patchDraft(tab.id, { body: { ...tab.draft.body, text: event.target.value } })
-                      }
-                      className="min-h-[140px] font-mono text-xs"
-                    />
-                  )}
-                </div>
-              ) : null}
+              
 
               {section === 'auth' ? (
                 <div className="max-w-[520px] space-y-2">
@@ -930,6 +834,105 @@ export const CurlClientSurface: React.FC<{
               ) : null}
             </div>
           </ScrollArea>
+          )}
+          {section === 'body' ? (
+                <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={tab.draft.body.kind}
+                      onValueChange={(value) =>
+                        client.patchDraft(tab.id, { body: { ...tab.draft.body, kind: value as HttpBodyKind } })
+                      }
+                    >
+                      <SelectTrigger className="h-9 w-[160px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(['none', 'json', 'text', 'form'] as HttpBodyKind[]).map((kind) => (
+                          <SelectItem key={kind} value={kind} className="text-xs">
+                            {t(`curl.body.${kind}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {bodyIsJson ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-1 text-xs"
+                          onClick={() => applyJsonTransform(formatJsonText)}
+                        >
+                          <Wand2 size={13} /> {t('curl.body.format')}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 gap-1 text-xs"
+                          onClick={() => applyJsonTransform(minifyJsonText)}
+                        >
+                          {t('curl.body.minify')}
+                        </Button>
+                        <div className="flex items-center gap-0.5 rounded border border-border/60 p-0.5">
+                          {(['text', 'tree'] as const).map((view) => (
+                            <button
+                              key={view}
+                              type="button"
+                              onClick={() => setBodyView(view)}
+                              className={cn(
+                                'rounded px-1.5 py-0.5 text-[11px]',
+                                bodyView === view
+                                  ? 'bg-muted text-foreground'
+                                  : 'text-muted-foreground hover:text-foreground',
+                              )}
+                            >
+                              {t(view === 'text' ? 'curl.body.viewText' : 'curl.body.viewTree')}
+                            </button>
+                          ))}
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-9 gap-1 text-xs" onClick={copyBody}>
+                          <Copy size={13} /> {t('curl.response.copy')}
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                  {jsonError ? (
+                    <p className="text-[11px] text-destructive">
+                      {t('curl.body.invalidJson', { error: jsonError })}
+                    </p>
+                  ) : null}
+                  {bodyIsJson && bodyView === 'tree' ? (
+                    <div className="min-h-[200px] flex-1 overflow-auto rounded border border-border/60">
+                      <JsonTreeViewer
+                        text={tab.draft.body.text}
+                        labels={{
+                          expand: t('curl.json.expand'),
+                          collapse: t('curl.json.collapse'),
+                          copyValue: t('curl.json.copyValue'),
+                        }}
+                        onCopyValue={(text) =>
+                          void copyTextWithFeedback(
+                            writeClipboardText,
+                            text,
+                            t('curl.response.copied'),
+                            t('curl.copyFailed'),
+                          )
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <Textarea
+                      value={tab.draft.body.text}
+                      disabled={tab.draft.body.kind === 'none'}
+                      placeholder={t('curl.body.placeholder')}
+                      onChange={(event) =>
+                        client.patchDraft(tab.id, { body: { ...tab.draft.body, text: event.target.value } })
+                      }
+                      className="min-h-[200px] flex-1 resize-none font-mono text-xs"
+                    />
+                  )}
+                </div>
+              ) : null}
         </div>
 
         <ResponsePanel tab={tab} writeClipboard={writeClipboardText} />
