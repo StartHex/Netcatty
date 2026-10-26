@@ -2,6 +2,7 @@
 import React, { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Download, Trash2 } from 'lucide-react';
 import { activeTabStore, toEditorTabId, useIsEditorTabActive } from '../state/activeTabStore';
+import { databaseDisplayTarget } from '../../domain/models/database';
 import { editorTabStore, tabIsDirty } from '../state/editorTabStore';
 import { releaseEditorTabSaveCoordinator, saveEditorTab } from '../state/editorTabSave';
 import { focusEditorInWindow, popOutEditorTab } from '../state/editorWindowClient';
@@ -972,6 +973,19 @@ function AppViewInner({ domains }: AppViewProps) {
               results={quickResults}
               sessions={sessions}
               workspaces={workspaces}
+              databaseTabs={databaseTabs.map((tab) => ({
+                id: toDatabaseTabId(tab.id),
+                title: tab.title,
+                subtitle: tab.kind,
+              }))}
+              databaseConnections={dbConnections.map((connection) => ({
+                id: connection.id,
+                title: connection.label,
+                subtitle: databaseDisplayTarget(connection),
+              }))}
+              onOpenDatabaseConnection={(connectionId) => {
+                databaseTabStore.requestOpen(connectionId);
+              }}
               showSftpTab={showSftpTab}
               onQueryChange={setQuickSearch}
               onSelect={handleHostConnectWithProtocolCheck}

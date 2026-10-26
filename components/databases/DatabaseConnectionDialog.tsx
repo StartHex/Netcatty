@@ -87,10 +87,10 @@ const EMPTY_FORM: FormState = {
   jdbcPresetId: '',
 };
 
-function formFromConnection(connection: DatabaseConnection): FormState {
+export function formFromConnection(connection: DatabaseConnection): FormState {
   return {
     label: connection.label,
-    kind: connection.kind === 'jdbc' ? 'postgresql' : connection.kind,
+    kind: connection.kind,
     host: connection.host ?? '127.0.0.1',
     port: String(databaseEffectivePort(connection) ?? ''),
     database: connection.database ?? '',
@@ -521,27 +521,6 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                   </p>
                 ) : null}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="db-user">{t('databases.form.username')}</Label>
-                  <Input
-                    id="db-user"
-                    value={form.username}
-                    autoComplete="off"
-                    onChange={(event) => update('username', event.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="db-password">{t('databases.form.password')}</Label>
-                  <Input
-                    id="db-password"
-                    type="password"
-                    value={form.password}
-                    autoComplete="new-password"
-                    onChange={(event) => update('password', event.target.value)}
-                  />
-                </div>
-              </div>
             </>
           ) : isSqlite ? (
             <>
@@ -609,17 +588,6 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
               </div>
 
 
-              <div className="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">{t('databases.form.savePassword')}</p>
-                  <p className="text-xs text-muted-foreground">{t('databases.form.savePasswordHint')}</p>
-                </div>
-                <Switch
-                  checked={form.savePassword}
-                  onCheckedChange={(checked) => update('savePassword', checked)}
-                />
-              </div>
-
               <div className="flex items-start justify-between gap-3 rounded-md border border-border/50 px-3 py-2">
                 <div className="space-y-0.5">
                   <p className="text-sm font-medium">{t('databases.form.readOnly')}</p>
@@ -669,6 +637,43 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
               </div>
             </>
           )}
+
+          {!isSqlite ? (
+            <div className="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-2">
+              <div>
+                <p className="text-sm font-medium">{t('databases.form.savePassword')}</p>
+                <p className="text-xs text-muted-foreground">{t('databases.form.savePasswordHint')}</p>
+              </div>
+              <Switch
+                checked={form.savePassword}
+                onCheckedChange={(checked) => update('savePassword', checked)}
+              />
+            </div>
+          ) : null}
+
+          {!isSqlite ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="db-user">{t('databases.form.username')}</Label>
+                <Input
+                  id="db-user"
+                  value={form.username}
+                  autoComplete="off"
+                  onChange={(event) => update('username', event.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="db-password">{t('databases.form.password')}</Label>
+                <Input
+                  id="db-password"
+                  type="password"
+                  value={form.password}
+                  autoComplete="new-password"
+                  onChange={(event) => update('password', event.target.value)}
+                />
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid gap-2">
             <Label htmlFor="db-init-sql">{t('databases.form.initSql')}</Label>

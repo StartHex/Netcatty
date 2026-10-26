@@ -1,4 +1,5 @@
 import {
+  Database,
   Folder,
   FolderLock,
   LayoutGrid,
@@ -37,7 +38,7 @@ type QuickSwitcherItemBase = {
 
 type QuickSwitcherItem = QuickSwitcherItemBase & (
   | { type: "plugin-command"; commandId: string }
-  | { type: "host" | "tab" | "workspace" | "action" | "shell" | "plugin-view" | "quick-connect"; commandId?: never }
+  | { type: "host" | "tab" | "workspace" | "action" | "shell" | "plugin-view" | "quick-connect" | "database-tab" | "database"; commandId?: never }
 );
 
 export function buildPaneMagnificationPaletteAction(
@@ -155,6 +156,11 @@ interface QuickSwitcherProps {
   results: Host[];
   sessions: TerminalSession[];
   workspaces: Workspace[];
+  /** Open database workbench tabs, searchable like terminal tabs. */
+  databaseTabs?: ReadonlyArray<{ id: string; title: string; subtitle?: string }>;
+  /** Saved database connections; selecting one opens the workbench. */
+  databaseConnections?: ReadonlyArray<{ id: string; title: string; subtitle?: string }>;
+  onOpenDatabaseConnection?: (connectionId: string) => void;
   onQueryChange: (value: string) => void;
   onSelect: (host: Host) => void;
   onEditHost?: (host: Host) => void;
@@ -177,6 +183,9 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
   results,
   sessions,
   workspaces,
+  databaseTabs = [],
+  databaseConnections = [],
+  onOpenDatabaseConnection,
   onQueryChange,
   onSelect,
   onEditHost,
@@ -292,6 +301,18 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
     }
     return matched;
   }, [showSftpTab, trimmedQuery]);
+  const filteredDatabaseTabs = useMemo(() => {
+    if (!trimmedQuery) return databaseTabs;
+    return databaseTabs.filter((tab) => matchesSearchQuery(trimmedQuery, tab.title, tab.subtitle ?? '', 'database'));
+  }, [databaseTabs, trimmedQuery]);
+
+  const filteredDatabaseConnections = useMemo(() => {
+    if (!trimmedQuery) return [];
+    return databaseConnections.filter((connection) =>
+      matchesSearchQuery(trimmedQuery, connection.title, connection.subtitle ?? '', 'database'),
+    );
+  }, [databaseConnections, trimmedQuery]);
+
   const filteredOrphanSessions = useMemo(() => {
     if (!trimmedQuery) return orphanSessions;
     return orphanSessions.filter((session) =>
@@ -353,7 +374,9 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
     const hasTabsSection =
       builtInTabs.length > 0
       || filteredOrphanSessions.length > 0
-      || filteredWorkspaces.length > 0;
+      || filteredWorkspaces.length > 0
+      || filteredDatabaseTabs.length > 0
+      || filteredDatabaseConnections.length > 0;
 
     // The address row is the default Enter target only when nothing else matches.
     // Matching hosts and open tabs stay ahead of it.
@@ -376,6 +399,17 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
       });
       filteredWorkspaces.forEach((w) =>
         pushItem({ type: "workspace", id: w.id, data: w }),
+      );
+      filteredDatabaseTabs.forEach((tab) =>
+        pushItem({ type: "database-tab", id: tab.id, title: tab.title }),
+      );
+      filteredDatabaseConnections.forEach((connection) =>
+        pushItem({
+          type: "database",
+          id: connection.id,
+          title: connection.title,
+          altCommand: connection.subtitle,
+        }),
       );
       filteredOrphanSessions.forEach((s) =>
         pushItem({ type: "tab", id: s.id, data: s }),
@@ -413,6 +447,8 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
     };
   }, [
     builtInTabs,
+    filteredDatabaseConnections,
+    filteredDatabaseTabs,
     filteredOrphanSessions,
     filteredShells,
     filteredWorkspaces,
@@ -475,6 +511,14 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
         break;
       case "host":
         onSelect(item.data as Host);
+        break;
+      case "database-tab":
+        onSelectTab(item.id);
+        onClose();
+        break;
+      case "database":
+        onOpenDatabaseConnection?.(item.id);
+        onClose();
         break;
       case "tab":
       case "workspace":
@@ -689,6 +733,29 @@ const QuickSwitcherInner: React.FC<QuickSwitcherProps> = ({
                     <span className="min-w-0 truncate text-sm font-medium">
                       {session?.hostLabel ?? item.id}
                     </span>
+                  </div>
+                );
+              }
+
+              if (item.type === "database-tab" || item.type === "database") {
+                return (
+                  <div
+                    className={rowClass}
+                    onClick={() => {
+                      if (item.type === "database") onOpenDatabaseConnection?.(item.id);
+                      else onSelectTab(item.id);
+                      onClose();
+                    }}
+                  >
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground">
+                      <Database size={16} />
+                    </div>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {item.title ?? item.id}
+                    </span>
+                    {item.type === "database" && item.altCommand ? (
+                      <span className="shrink-0 truncate text-xs text-muted-foreground">{item.altCommand}</span>
+                    ) : null}
                   </div>
                 );
               }
