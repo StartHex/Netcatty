@@ -224,6 +224,23 @@ const LazyCurlClientSurface = lazy(() =>
 );
 
 /**
+ * Full-bleed work surfaces (curl, database) render under the host tree sidebar,
+ * which the app mounts as an absolutely positioned overlay at a higher z-index.
+ * Offsetting the surface's left edge by the live sidebar width keeps both panels
+ * visible side by side instead of the sidebar covering the surface. The width is
+ * 0 while the sidebar is collapsed, so this stays a no-op by default.
+ */
+export function getWorkSurfaceInsetStyle(
+  isActive: boolean,
+  hostTreeLayoutWidth: number,
+): React.CSSProperties {
+  const inset: React.CSSProperties = { left: hostTreeLayoutWidth };
+  return isActive
+    ? inset
+    : { visibility: 'hidden', pointerEvents: 'none', position: 'absolute', zIndex: -1, ...inset };
+}
+
+/**
  * Database workbench surface. Stays mounted while another tab is active so SQL
  * drafts, results and pooled connections survive tab switches (same contract as
  * VaultViewContainer).
@@ -237,9 +254,8 @@ export const DatabaseWorkbenchMount: React.FC<{
 }> = ({ connections, tunnelDeps, onUpdateConnections }) => {
   const activeTabId = useActiveTabId();
   const isActive = isDatabaseTabId(activeTabId);
-  const containerStyle: React.CSSProperties = isActive
-    ? {}
-    : { visibility: 'hidden', pointerEvents: 'none', position: 'absolute', zIndex: -1 };
+  const hostTreeLayoutWidth = useTerminalHostTreeLayoutWidth();
+  const containerStyle = getWorkSurfaceInsetStyle(isActive, hostTreeLayoutWidth);
 
   return (
     <div
@@ -271,9 +287,8 @@ export const CurlClientMount: React.FC<{
 }> = ({ requests, onUpdateRequests }) => {
   const activeTabId = useActiveTabId();
   const isActive = isCurlTabId(activeTabId);
-  const containerStyle: React.CSSProperties = isActive
-    ? {}
-    : { visibility: 'hidden', pointerEvents: 'none', position: 'absolute', zIndex: -1 };
+  const hostTreeLayoutWidth = useTerminalHostTreeLayoutWidth();
+  const containerStyle = getWorkSurfaceInsetStyle(isActive, hostTreeLayoutWidth);
 
   return (
     <div

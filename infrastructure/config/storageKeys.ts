@@ -71,8 +71,12 @@ export const STORAGE_KEY_DB_CONNECTIONS = 'netcatty_db_connections_v1';
 export const STORAGE_KEY_DATABASE_TABS = 'netcatty_database_tabs_v1';
 /** Curl tool: saved HTTP requests (encrypted vault) and per-tab drafts. */
 export const STORAGE_KEY_HTTP_REQUESTS = 'netcatty_http_requests_v1';
+/** Curl tool: every known collection folder path (names are not secret, stored in clear). */
+export const STORAGE_KEY_CURL_FOLDERS = 'netcatty_curl_folders_v1';
 export const STORAGE_KEY_HTTP_TABS = 'netcatty_http_tabs_v1';
 export const STORAGE_KEY_HTTP_HISTORY = 'netcatty_http_history_v1';
+/** Curl tool, device-local: collapsed folder paths in the collection tree. */
+export const STORAGE_KEY_CURL_FOLDER_UI = 'netcatty_curl_folder_ui_v1';
 /** User-registered JDBC driver jars. */
 export const STORAGE_KEY_JDBC_DRIVERS = 'netcatty_jdbc_drivers_v1';
 export const STORAGE_KEY_VAULT_HOSTS_VIEW_MODE = 'netcatty_vault_hosts_view_mode_v1';

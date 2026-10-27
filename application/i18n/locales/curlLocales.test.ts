@@ -20,6 +20,7 @@ const REQUIRED_KEYS = Object.keys(enCurlMessages);
 const PLACEHOLDER_KEYS: Record<string, string[]> = {
   "curl.count": ["{count}"],
   "curl.deleteConfirmMessage": ["{name}"],
+  "curl.folderDeleteMessage": ["{name}"],
   "curl.response.redirects": ["{count}"],
   "curl.body.invalidJson": ["{error}"],
 };

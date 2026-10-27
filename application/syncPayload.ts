@@ -25,6 +25,7 @@ import type {
   SSHKey,
   VaultNote,
 } from '../domain/models';
+import { sanitizeCurlFolders } from '../domain/models/http';
 import {
   CLOUD_SYNC_PAYLOAD_ENTITY_KEYS,
   SYNC_PAYLOAD_ENTITY_KEYS,
@@ -32,6 +33,7 @@ import {
   hasSyncPayloadEntityData,
   reconcileInboundAutoCloseOnExit,
   retainLocalHostLastConnectedAt,
+  sanitizeDatabaseConnectionsForSync,
   sanitizeHostsForSync,
   type SyncPayload,
 } from '../domain/sync';
@@ -164,6 +166,8 @@ export interface SyncableVaultData {
   otpAuthenticators?: OtpAuthenticator[];
   dbConnections?: DatabaseConnection[];
   curlRequests?: CurlRequest[];
+  /** Every known collection folder path, so empty folders survive a sync round-trip. */
+  curlFolders?: string[];
   snippets: Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -1106,8 +1110,12 @@ function buildVaultSyncPayload(
     identities: vault.identities,
     proxyProfiles: vault.proxyProfiles,
     ...(vault.otpAuthenticators?.length ? { otpAuthenticators: vault.otpAuthenticators } : {}),
-    ...(vault.dbConnections?.length ? { dbConnections: vault.dbConnections } : {}),
+    // JDBC jar / JRE paths are absolute paths on this device; never upload them.
+    ...(vault.dbConnections?.length
+      ? { dbConnections: sanitizeDatabaseConnectionsForSync(vault.dbConnections) }
+      : {}),
     ...(vault.curlRequests?.length ? { curlRequests: vault.curlRequests } : {}),
+    ...(vault.curlFolders?.length ? { curlFolders: sanitizeCurlFolders(vault.curlFolders) } : {}),
     snippets: vault.snippets,
     customGroups: vault.customGroups,
     snippetPackages: vault.snippetPackages,
@@ -1198,8 +1206,12 @@ export async function buildCloudSyncPayload(
     identities: vault.identities,
     proxyProfiles: vault.proxyProfiles,
     ...(vault.otpAuthenticators?.length ? { otpAuthenticators: vault.otpAuthenticators } : {}),
-    ...(vault.dbConnections?.length ? { dbConnections: vault.dbConnections } : {}),
+    // JDBC jar / JRE paths are absolute paths on this device; never upload them.
+    ...(vault.dbConnections?.length
+      ? { dbConnections: sanitizeDatabaseConnectionsForSync(vault.dbConnections) }
+      : {}),
     ...(vault.curlRequests?.length ? { curlRequests: vault.curlRequests } : {}),
+    ...(vault.curlFolders?.length ? { curlFolders: sanitizeCurlFolders(vault.curlFolders) } : {}),
     snippets: vault.snippets,
     customGroups: vault.customGroups,
     snippetPackages: vault.snippetPackages,
@@ -1227,6 +1239,8 @@ export function buildLocalVaultPayload(
     ...buildVaultSyncPayload(vault, portForwardingRules),
     // Keep device-local recent-connection timestamps in protective backups.
     hosts: vault.hosts,
+    // Keep device-local JDBC jar / JRE paths in protective backups as well.
+    ...(vault.dbConnections?.length ? { dbConnections: vault.dbConnections } : {}),
     settings: collectLocalBackupSettings(),
     knownHosts: vault.knownHosts,
     // Cloud consent and cloud attachment stripping do not apply to local backups.
@@ -1424,6 +1438,9 @@ async function preparePayloadApply(
   }
   if (sanitizedPayload.noteGroups !== undefined) {
     vaultImport.noteGroups = sanitizedPayload.noteGroups;
+  }
+  if (sanitizedPayload.curlFolders !== undefined) {
+    vaultImport.curlFolders = sanitizeCurlFolders(sanitizedPayload.curlFolders);
   }
   if (options.includeLocalOnlyData && sanitizedPayload.knownHosts !== undefined) {
     vaultImport.knownHosts = sanitizedPayload.knownHosts;

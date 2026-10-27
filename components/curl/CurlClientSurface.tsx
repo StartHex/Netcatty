@@ -36,12 +36,13 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Textarea } from '../ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { toast } from '../ui/toast';
 import { CurlHistoryDialog } from './CurlHistoryDialog';
 import { copyTextWithFeedback, type ClipboardWriter } from './clipboard';
+import { LineNumberedPre, LineNumberedTextarea } from './JsonCodeView';
 import { JsonTreeViewer } from './JsonTreeViewer';
+import { VerticalSplit } from '../ui/resizable-split';
 
 const DEFAULT_PARTS: HttpUrlParts = { scheme: 'https', host: '', port: null, path: '/', query: '' };
 
@@ -395,15 +396,21 @@ const ResponsePanel: React.FC<{ tab: CurlTab; writeClipboard: ClipboardWriter | 
               }
             />
           ) : (
-            <pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs" data-testid="curl-response-body">
-              {decodedBody}
-            </pre>
+            <LineNumberedPre
+              text={decodedBody}
+              className="p-3"
+              containerClassName="h-full"
+              data-testid="curl-response-body"
+            />
           )
         ) : null}
         {section === 'raw' ? (
-          <pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs">
-            {isBinary ? response.bodyBase64 ?? '' : decodedBody}
-          </pre>
+          <LineNumberedPre
+            text={isBinary ? response.bodyBase64 ?? '' : decodedBody}
+            className="p-3"
+            containerClassName="h-full"
+            data-testid="curl-response-raw"
+          />
         ) : null}
         {section === 'headers' ? (
           <div className="p-3 font-mono text-xs">
@@ -613,8 +620,13 @@ export const CurlClientSurface: React.FC<{
         />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-rows-2 divide-y divide-border/60">
-        <div className="flex min-h-0 flex-col">
+      <VerticalSplit
+        className="flex-1"
+        storageKey="netcatty.curl.splitRatio"
+        handleLabel={t('curl.split.resize')}
+        testId="curl-split"
+        top={
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center gap-1 border-b border-border/60 px-3 py-1.5">
             {REQUEST_SECTIONS.map((item) => (
               <button
@@ -921,22 +933,24 @@ export const CurlClientSurface: React.FC<{
                       />
                     </div>
                   ) : (
-                    <Textarea
+                    <LineNumberedTextarea
                       value={tab.draft.body.text}
                       disabled={tab.draft.body.kind === 'none'}
                       placeholder={t('curl.body.placeholder')}
                       onChange={(event) =>
                         client.patchDraft(tab.id, { body: { ...tab.draft.body, text: event.target.value } })
                       }
-                      className="min-h-[200px] flex-1 resize-none font-mono text-xs"
+                      containerClassName="min-h-[200px] flex-1"
+                      className="resize-none"
+                      data-testid="curl-request-body"
                     />
                   )}
                 </div>
               ) : null}
         </div>
-
-        <ResponsePanel tab={tab} writeClipboard={writeClipboardText} />
-      </div>
+        }
+        bottom={<ResponsePanel tab={tab} writeClipboard={writeClipboardText} />}
+      />
       <CurlHistoryDialog
         entry={historyEntry}
         onOpenChange={(open) => {

@@ -34,6 +34,7 @@ import {
   type CloudSyncPayloadEntityKey,
   type SyncPayload,
 } from './sync';
+import { sanitizeCurlFolders } from './models/http';
 import { mergePluginSyncSidecarsThreeWay } from './pluginSyncSidecar';
 import { stripMessageContinuationState, type ForkMessageLike } from './aiSessionFork';
 
@@ -964,6 +965,14 @@ export function mergeSyncPayloads(
     tombstones('snippetPackages'),
     mergeOptions,
   );
+  // Curl folder paths are additive metadata rather than an entity list, so a
+  // three-way merge keeps every path any side has seen instead of tombstoning.
+  // A folder that no longer exists is harmless: it renders empty until pruned.
+  const curlFolders = sanitizeCurlFolders([
+    ...(b.curlFolders ?? []),
+    ...(local.curlFolders ?? []),
+    ...(remote.curlFolders ?? []),
+  ]);
   const baseNoteGroups = b.noteGroups ?? [];
   const noteGroups = mergeStringArrays(
     baseNoteGroups,
@@ -1035,6 +1044,9 @@ export function mergeSyncPayloads(
       : {}),
     ...(base?.curlRequests !== undefined || local.curlRequests !== undefined || remote.curlRequests !== undefined
       ? { curlRequests: curlRequests.merged }
+      : {}),
+    ...(base?.curlFolders !== undefined || local.curlFolders !== undefined || remote.curlFolders !== undefined
+      ? { curlFolders }
       : {}),
     snippets: snippets.merged,
     monitorPanels: monitorPanels.merged,

@@ -23,6 +23,7 @@ import {
   Table2,
   Trash2,
   Eye,
+  CheckCircle2,
   FileCode2,
   Wand2,
   X,
@@ -31,6 +32,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format as formatSqlText } from 'sql-formatter';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { useDatabaseWorkbench, type DatabaseTab } from '../../application/state/useDatabaseWorkbench';
+import { ResultSetTabs } from './ResultSetTabs';
 import { databaseTabStore } from '../../application/state/databaseTabStore';
 import type { DatabaseConnection, DbCellValue, DbQueryResult } from '../../domain/models';
 import { cn } from '../../lib/utils';
@@ -41,6 +43,7 @@ import { FixedSizeVirtualList } from '../ui/FixedSizeVirtualList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/ScriptCodeEditor';
+import { beginSplitDrag, SplitHandle, useSplitRatio } from '../ui/resizable-split';
 import { buildSqlCompletionEntries } from '../../domain/database/sqlCompletion';
 import { applyWidths, widthScopeKey } from '../../domain/database/columnWidths';
 import { useDatabaseColumnWidthStore } from '../../application/state/useDatabaseColumnWidths';
@@ -140,6 +143,8 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
   const { t } = useI18n();
   const columnWidthStore = useDatabaseColumnWidthStore();
   const editorRef = useRef<ScriptCodeEditorHandle | null>(null);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+  const [editorRatio, setEditorRatio] = useSplitRatio('netcatty.db.splitRatio', 0.38);
   const connection = useMemo(
     () => connections.find((entry) => entry.id === tab.connectionId),
     [connections, tab.connectionId],
@@ -561,8 +566,11 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
         className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
         onMouseDown={onSchemaResizeStart}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-    <div className="flex min-h-0 min-w-0 basis-[38%] flex-col border-b border-border/60">
+      <div ref={splitContainerRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 min-w-0 flex-col"
+      style={{ flexBasis: `${editorRatio * 100}%`, flexGrow: 0, flexShrink: 0 }}
+    >
       <ScriptCodeEditor
         value={tab.sql}
         onChange={(value) => workbench.updateSql(tab.id, value)}
@@ -577,6 +585,26 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
         sqlCompletion={sqlCompletionSource}
       />
     </div>
+
+    <SplitHandle
+      label={t('databases.workbench.splitResize')}
+      testId="db-split-handle"
+      ratio={editorRatio}
+      onPointerDown={(event) => beginSplitDrag(event, splitContainerRef.current, setEditorRatio)}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          setEditorRatio(editorRatio - 0.02);
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          setEditorRatio(editorRatio + 0.02);
+        } else if (event.key === 'Home') {
+          event.preventDefault();
+          setEditorRatio(0.38);
+        }
+      }}
+      onDoubleClick={() => setEditorRatio(0.38)}
+    />
 
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {tab.error ? (
@@ -594,6 +622,14 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {tab.resultSets && tab.resultSets.length > 1 ? (
+        <ResultSetTabs
+          resultSets={tab.resultSets}
+          activeIndex={tab.activeResultIndex ?? 0}
+          onSelect={(index) => workbench.setActiveResultIndex(tab.id, index)}
+        />
       ) : null}
 
       {tab.structure ? (
@@ -1291,11 +1327,24 @@ const ResultGrid: React.FC<ResultGridProps> = ({
   const [saving, setSaving] = useState(false);
 
   if (result.columns.length === 0) {
+    const command = result.command || 'OK';
     return (
-      <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-        {result.command
-          ? t('databases.workbench.statementOk', { command: result.command })
-          : t('databases.workbench.noColumns')}
+      <div
+        className="flex flex-1 flex-col items-center justify-center gap-2 text-xs"
+        data-testid="db-statement-summary"
+      >
+        <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          <span>{t('databases.workbench.statementSuccess', { command })}</span>
+        </div>
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <span data-testid="db-statement-rows">
+            {t('databases.workbench.rowsAffected', { count: String(result.rowCount ?? 0) })}
+          </span>
+          {typeof result.durationMs === 'number' ? (
+            <span>{t('databases.workbench.elapsed', { ms: String(result.durationMs) })}</span>
+          ) : null}
+        </div>
       </div>
     );
   }

@@ -279,7 +279,7 @@ function AppViewInner({ domains }: AppViewProps) {
     handleRequestCloseEditorTabRef, handleSessionStatusChange, handleSyncNowManual, handleTerminalDataCapture, handleUpdateHostFromTerminal,
     hostById, hosts, terminalHosts, updateTerminalHosts, hotkeyScheme, identities, importOrReuseKey, isBroadcastEnabled, isComposeSendToAll, onToggleComposeSendTarget, isGlobalBroadcastEnabled, isGlobalComposeSendToAll, onToggleGlobalBroadcast, onToggleGlobalComposeSendTarget, canUseGlobalBroadcast, isCreateWorkspaceOpen, isMacClient, isQuickSwitcherOpen,
     keyBindings, keyboardInteractiveQueue, keys, logViews, managedSources, navigateToSection, openLogView, openNoteRequest, orderedTabsWithEditors, orphanSessions,
-    passphraseQueue, fidoPromptQueue, protocolSelectHost, proxyProfiles, otpAuthenticators, dbConnections, updateDbConnections, jdbcDrivers, updateJdbcDrivers, curlRequests, updateCurlRequests, portForwardingRules, quickResults, quickSearch, removeSessionFromWorkspace, reorderWorkTabs, reorderWorkspaceSessions,
+    passphraseQueue, fidoPromptQueue, protocolSelectHost, proxyProfiles, otpAuthenticators, dbConnections, updateDbConnections, jdbcDrivers, updateJdbcDrivers, curlRequests, updateCurlRequests, curlFolders, updateCurlFolders, portForwardingRules, quickResults, quickSearch, removeSessionFromWorkspace, reorderWorkTabs, reorderWorkspaceSessions,
     resolveEmptyVaultConflict, resolveSessionAppearance, runSnippet, sessionLogsDir, sessionLogsEnabled, sessionLogsFormat, sessionLogsTimestampsEnabled, sessionRenameTarget, sshDebugLogsEnabled,
     sessions, setActiveTabId, setDeepLinkHostDraft, setDraggingSessionId, setEditorWordWrap,
     setNavigateToSection, setTerminalFontFamilyId, setTerminalFontSize, setVaultFocusRequest, updateSessionFontSize, updateSessionRestoreCwd, updateSessionDynamicTitle, updateSessionCodingCliProvider, clearSessionFontSizeOverride,
@@ -674,10 +674,12 @@ function AppViewInner({ domains }: AppViewProps) {
             otpAuthenticators={otpAuthenticators}
             dbConnections={dbConnections}
             curlRequests={curlRequests}
+            curlFolders={curlFolders}
             jdbcDrivers={jdbcDrivers}
             onUpdateJdbcDrivers={updateJdbcDrivers}
             onUpdateDbConnections={updateDbConnections}
             onUpdateCurlRequests={updateCurlRequests}
+            onUpdateCurlFolders={updateCurlFolders}
             snippets={snippets}
             snippetPackages={snippetPackages}
             customGroups={customGroups}

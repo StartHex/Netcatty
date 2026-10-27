@@ -239,6 +239,7 @@ interface VaultViewProps {
   otpAuthenticators: OtpAuthenticator[];
   dbConnections: DatabaseConnection[];
   curlRequests: CurlRequest[];
+  curlFolders?: string[];
   jdbcDrivers: JdbcDriver[];
   onUpdateJdbcDrivers: (drivers: JdbcDriver[]) => void;
   snippets: Snippet[];
@@ -272,6 +273,7 @@ interface VaultViewProps {
   onUpdateOtpAuthenticators: (authenticators: OtpAuthenticator[]) => void;
   onUpdateDbConnections: (connections: DatabaseConnection[]) => void;
   onUpdateCurlRequests: (requests: CurlRequest[]) => void;
+  onUpdateCurlFolders?: (folders: string[]) => void;
   onUpdateSnippets: (snippets: Snippet[]) => void;
   onUpdateSnippetPackages: (pkgs: string[]) => void;
   onUpdateCustomGroups: (
@@ -339,6 +341,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   otpAuthenticators,
   dbConnections,
   curlRequests,
+  curlFolders,
   jdbcDrivers,
   onUpdateJdbcDrivers,
   snippets,
@@ -367,6 +370,7 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
   onUpdateOtpAuthenticators,
   onUpdateDbConnections,
   onUpdateCurlRequests,
+  onUpdateCurlFolders,
   onUpdateSnippets,
   onUpdateSnippetPackages,
   onUpdateCustomGroups,
@@ -1724,10 +1728,12 @@ const VaultViewInner: React.FC<VaultViewProps> = ({
           onUpdateOtpAuthenticators,
           dbConnections,
           curlRequests,
+          curlFolders,
           jdbcDrivers,
           onUpdateJdbcDrivers,
           onUpdateDbConnections,
           onUpdateCurlRequests,
+          onUpdateCurlFolders,
           DatabasesManager,
           CurlCollections,
           DatabaseWorkbenchSurface,
@@ -1858,7 +1864,9 @@ export const vaultViewAreEqual = (
     prev.onUpdateOtpAuthenticators === next.onUpdateOtpAuthenticators &&
     prev.dbConnections === next.dbConnections &&
     prev.curlRequests === next.curlRequests &&
+    prev.curlFolders === next.curlFolders &&
     prev.onUpdateCurlRequests === next.onUpdateCurlRequests &&
+    prev.onUpdateCurlFolders === next.onUpdateCurlFolders &&
     prev.jdbcDrivers === next.jdbcDrivers &&
     prev.onUpdateJdbcDrivers === next.onUpdateJdbcDrivers &&
     prev.onUpdateDbConnections === next.onUpdateDbConnections &&

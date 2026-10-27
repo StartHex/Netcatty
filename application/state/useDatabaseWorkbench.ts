@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DatabaseConnection, DbQueryResult } from '../../domain/models';
 import { buildTablePreviewSql } from '../../domain/database/tablePreview';
+import { splitSqlStatements } from '../../domain/database/sqlStatements';
 import {
   buildDeleteStatement,
   buildUpdateStatement,
@@ -71,6 +72,28 @@ export interface DatabaseTab {
   structure?: { table: DbTableRef; columns: DbColumnInfo[]; loading?: boolean; error?: string };
   /** Set when the current result comes from one table with a usable primary key. */
   editMeta?: { target: EditTarget; columns: DbColumnInfo[] } | null;
+  /**
+   * Set when the last run covered more than one statement: one entry per
+   * statement, in execution order. `result`, `error` and `durationMs` above
+   * mirror the active entry so every existing consumer keeps working.
+   */
+  resultSets?: DatabaseResultSet[];
+  /** Index into `resultSets` whose result is currently displayed. */
+  activeResultIndex?: number;
+}
+
+/** One statement's outcome within a multi-statement run. */
+export interface DatabaseResultSet {
+  /** Statement text that produced this result set. */
+  sql: string;
+  /** 1-based position in the script, used for the result tab label. */
+  index: number;
+  /** 1-based line in the editor where the statement starts. */
+  startLine: number;
+  result?: DbQueryResult;
+  error?: string;
+  errorDetail?: DbBridgeError;
+  durationMs: number;
 }
 
 export interface UseDatabaseWorkbenchResult {
@@ -94,6 +117,8 @@ export interface UseDatabaseWorkbenchResult {
   deleteRow: (tabId: string, rowIndex: number) => Promise<boolean>;
   cancelQuery: (tabId: string) => void;
   reconnect: (tabId: string) => Promise<void>;
+  /** Show one statement's result from the last multi-statement run. */
+  setActiveResultIndex: (tabId: string, index: number) => void;
 }
 
 /**
@@ -490,6 +515,26 @@ export function useDatabaseWorkbench(
     [patchTab, runMutation],
   );
 
+  /** Mirrors one result set of a multi-statement run into the tab fields. */
+  const showResultSet = useCallback(
+    (tabId: string, resultSets: DatabaseResultSet[], index: number) => {
+      const active = resultSets[index] ?? resultSets[0];
+      if (!active) return;
+      patchTab(tabId, {
+        resultSets,
+        activeResultIndex: Math.max(0, Math.min(index, resultSets.length - 1)),
+        result: active.result,
+        error: active.error,
+        errorDetail: active.errorDetail,
+        durationMs: active.durationMs,
+        status: active.error ? 'error' : 'ready',
+        connected: true,
+        editMeta: null,
+      });
+    },
+    [patchTab],
+  );
+
   const runQuery = useCallback(
     async (tabId: string, sqlOverride?: string, options?: { maxRows?: number }) => {
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
@@ -501,11 +546,15 @@ export function useDatabaseWorkbench(
         patchTab(tabId, { error: 'Connection was deleted', errorDetail: undefined });
         return;
       }
+      const statements = splitSqlStatements(sql);
+      if (statements.length === 0) return;
       patchTab(tabId, {
         running: true,
         structure: undefined,
         error: undefined,
         errorDetail: undefined,
+        resultSets: undefined,
+        activeResultIndex: undefined,
       });
       const startedAt = Date.now();
       try {
@@ -517,29 +566,72 @@ export function useDatabaseWorkbench(
         // Statements without their own LIMIT load a full page set so the grid
         // can paginate client-side; tab.maxRows is the page size, not a cap.
         const maxRows = options?.maxRows ?? FULL_RESULT_ROWS;
-        const response = await runDatabaseQuery(resolved.target, sql, { maxRows });
-        if (response.ok === true && response.result) {
-          patchTab(tabId, {
-            running: false,
-            status: 'ready',
-            connected: true,
-            result: response.result,
-            durationMs: Date.now() - startedAt,
-            error: undefined,
-            errorDetail: undefined,
-            editMeta: null,
-          });
-          const editableTable = parseSingleTableQuery(sql);
-          if (editableTable && response.result.columns.length > 0) {
-            void resolveEditMeta(tabId, resolved.target, editableTable);
+
+        if (statements.length === 1) {
+          const statement = statements[0];
+          const response = await runDatabaseQuery(resolved.target, statement.sql, { maxRows });
+          if (response.ok === true && response.result) {
+            patchTab(tabId, {
+              running: false,
+              status: 'ready',
+              connected: true,
+              result: response.result,
+              durationMs: Date.now() - startedAt,
+              error: undefined,
+              errorDetail: undefined,
+              editMeta: null,
+            });
+            const editableTable = parseSingleTableQuery(statement.sql);
+            if (editableTable && response.result.columns.length > 0) {
+              void resolveEditMeta(tabId, resolved.target, editableTable);
+            }
+          } else {
+            const bridgeError = response.ok === false ? response.error : undefined;
+            patchTab(tabId, {
+              running: false,
+              error: formatDatabaseError(bridgeError),
+              errorDetail: bridgeError,
+            });
           }
-        } else {
+          return;
+        }
+
+        // Multi-statement script: the sidecar runs one statement per call, so
+        // execute them in order and keep every result set for the result tabs.
+        // Execution stops at the first failure — later statements usually
+        // depend on the failed one, and a partial script is easier to reason
+        // about than a cascade of follow-up errors.
+        const resultSets: DatabaseResultSet[] = [];
+        let stopReason: string | undefined;
+        for (const statement of statements) {
+          const statementStartedAt = Date.now();
+          const response = await runDatabaseQuery(resolved.target, statement.sql, { maxRows });
+          if (response.ok === true && response.result) {
+            resultSets.push({
+              sql: statement.sql,
+              index: resultSets.length + 1,
+              startLine: statement.startLine,
+              result: response.result,
+              durationMs: Date.now() - statementStartedAt,
+            });
+            continue;
+          }
           const bridgeError = response.ok === false ? response.error : undefined;
-          patchTab(tabId, {
-            running: false,
+          resultSets.push({
+            sql: statement.sql,
+            index: resultSets.length + 1,
+            startLine: statement.startLine,
             error: formatDatabaseError(bridgeError),
             errorDetail: bridgeError,
+            durationMs: Date.now() - statementStartedAt,
           });
+          stopReason = formatDatabaseError(bridgeError);
+          break;
+        }
+        patchTab(tabId, { running: false });
+        showResultSet(tabId, resultSets, 0);
+        if (stopReason) {
+          patchTab(tabId, { error: stopReason, errorDetail: resultSets[resultSets.length - 1]?.errorDetail });
         }
       } catch (error) {
         patchTab(tabId, {
@@ -548,7 +640,16 @@ export function useDatabaseWorkbench(
         });
       }
     },
-    [patchTab, resolveEditMeta, resolveTarget],
+    [patchTab, resolveEditMeta, resolveTarget, showResultSet],
+  );
+
+  const setActiveResultIndex = useCallback(
+    (tabId: string, index: number) => {
+      const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!tab?.resultSets || tab.resultSets.length === 0) return;
+      showResultSet(tabId, tab.resultSets, index);
+    },
+    [showResultSet],
   );
 
   const controlTransaction = useCallback(
@@ -725,5 +826,6 @@ export function useDatabaseWorkbench(
     rollbackTransaction,
     cancelQuery,
     reconnect,
+    setActiveResultIndex,
   };
 }

@@ -40,6 +40,7 @@ import {
 } from '../syncPayload';
 import { commitPluginSidecarsAfterSuccessfulSync } from '../pluginSyncSidecarBridge';
 import { readInterruptedVaultApply } from '../localVaultBackups';
+import { getVaultSnapshot, subscribeVaultSnapshot } from './vaultSnapshotStore';
 import {
   STORAGE_KEY_VAULT_RESTORE_IN_PROGRESS_UNTIL,
   STORAGE_KEY_AI_SESSIONS,
@@ -82,6 +83,7 @@ interface AutoSyncConfig {
   otpAuthenticators?: SyncPayload['otpAuthenticators'];
   dbConnections?: SyncPayload['dbConnections'];
   curlRequests?: SyncPayload['curlRequests'];
+  curlFolders?: string[];
   snippets: SyncPayload['snippets'];
   customGroups: SyncPayload['customGroups'];
   snippetPackages?: SyncPayload['snippetPackages'];
@@ -164,6 +166,7 @@ const getSyncPayloadDataHash = (payload: SyncPayload): string => {
     otpAuthenticators: payload.otpAuthenticators,
     dbConnections: payload.dbConnections,
     curlRequests: payload.curlRequests,
+    curlFolders: payload.curlFolders,
     snippets: payload.snippets,
     customGroups: payload.customGroups,
     snippetPackages: payload.snippetPackages,
@@ -197,6 +200,9 @@ export const useAutoSync = (config: AutoSyncConfig) => {
   // Subscribe so note edits still trigger getSyncSnapshot rebuilds even when
   // App omits notes props (notes live in notesStore, not App render).
   const notesSnapshot = useSyncExternalStore(subscribeNotes, getNotesSnapshot, getNotesSnapshot);
+  // curl folders live in the vault snapshot store, so subscribe here as well:
+  // App does not re-render on folder edits.
+  const vaultSnapshot = useSyncExternalStore(subscribeVaultSnapshot, getVaultSnapshot, getVaultSnapshot);
   const { t } = useI18n();
   const tRef = useRef(t);
   useEffect(() => {
@@ -300,6 +306,7 @@ export const useAutoSync = (config: AutoSyncConfig) => {
       otpAuthenticators: config.otpAuthenticators,
       dbConnections: config.dbConnections,
       curlRequests: config.curlRequests,
+      curlFolders: config.curlFolders ?? ([...vaultSnapshot.curlFolders] as string[]),
       snippets: config.snippets,
       customGroups: config.customGroups,
       snippetPackages: config.snippetPackages,
@@ -318,6 +325,8 @@ export const useAutoSync = (config: AutoSyncConfig) => {
     config.otpAuthenticators,
     config.dbConnections,
     config.curlRequests,
+    config.curlFolders,
+    vaultSnapshot.curlFolders,
     config.snippets,
     config.customGroups,
     config.snippetPackages,

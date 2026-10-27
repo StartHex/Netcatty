@@ -269,3 +269,184 @@ export function redactCurlRequestForSync(request: CurlRequest): CurlRequest {
     },
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Curl collection folders                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A curl folder is a plain `/`-separated path (`"team/users"`). The root folder
+ * is the empty path, which is why `CurlRequest.folder` stays optional and an
+ * empty list entry is normalized away.
+ */
+export const CURL_FOLDER_SEPARATOR = '/';
+
+/** Deeper trees stop being useful in a sidebar; deeper paths are rejected. */
+export const MAX_CURL_FOLDER_SEGMENTS = 6;
+
+function trimFolderSegments(path: string): string[] {
+  return path
+    .split(CURL_FOLDER_SEPARATOR)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0)
+    .slice(0, MAX_CURL_FOLDER_SEGMENTS);
+}
+
+/** Split a folder path into trimmed, non-empty segments (max depth clamped). */
+export function curlFolderSegments(path: unknown): string[] {
+  if (typeof path !== 'string') return [];
+  return trimFolderSegments(path);
+}
+
+/**
+ * Normalize one folder path; returns undefined for the root (empty) path and
+ * for paths that exceed `MAX_CURL_FOLDER_SEGMENTS` (reject rather than truncate).
+ */
+export function sanitizeCurlFolderPath(path: unknown): string | undefined {
+  if (typeof path !== 'string') return undefined;
+  const rawSegments = path
+    .split(CURL_FOLDER_SEPARATOR)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+  if (rawSegments.length > MAX_CURL_FOLDER_SEGMENTS) return undefined;
+  return rawSegments.length > 0 ? rawSegments.join(CURL_FOLDER_SEPARATOR) : undefined;
+}
+
+/** Every ancestor folder path of `path`, excluding `path` itself. */
+export function curlFolderAncestors(path: string): string[] {
+  const segments = curlFolderSegments(path);
+  const ancestors: string[] = [];
+  for (let index = 1; index < segments.length; index += 1) {
+    ancestors.push(segments.slice(0, index).join(CURL_FOLDER_SEPARATOR));
+  }
+  return ancestors;
+}
+
+/**
+ * Sanitize the vault-level folder list: trims segments, drops empty paths and
+ * paths deeper than `MAX_CURL_FOLDER_SEGMENTS`, dedupes, and keeps every parent
+ * path so an empty parent folder still shows up in the tree.
+ */
+export function sanitizeCurlFolders(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const paths = new Set<string>();
+  for (const entry of input) {
+    const path = sanitizeCurlFolderPath(entry);
+    if (!path) continue;
+    paths.add(path);
+    for (const ancestor of curlFolderAncestors(path)) paths.add(ancestor);
+  }
+  return [...paths].sort((left, right) => left.localeCompare(right));
+}
+
+/** Parent folder path, or undefined when the folder sits at the root. */
+export function curlFolderParentPath(path: string): string | undefined {
+  const segments = curlFolderSegments(path);
+  if (segments.length <= 1) return undefined;
+  return segments.slice(0, -1).join(CURL_FOLDER_SEPARATOR);
+}
+
+/** Last path segment (display name) of a folder. */
+export function curlFolderLeafName(path: string): string {
+  const segments = curlFolderSegments(path);
+  return segments[segments.length - 1] ?? '';
+}
+
+/** True when `path` is `ancestor` itself or lives below it. */
+export function curlFolderIsWithin(path: string, ancestor: string): boolean {
+  const target = sanitizeCurlFolderPath(ancestor);
+  const source = sanitizeCurlFolderPath(path);
+  if (!target || !source) return false;
+  return source === target || source.startsWith(`${target}${CURL_FOLDER_SEPARATOR}`);
+}
+
+/**
+ * Join a parent path and a (possibly multi-segment) folder name. Returns
+ * undefined instead of silently truncating when the result exceeds the depth cap.
+ */
+export function curlFolderJoin(parent: string | undefined, name: string): string | undefined {
+  const trimmedName = sanitizeCurlFolderPath(name);
+  if (!trimmedName) return undefined;
+  const parentPath = sanitizeCurlFolderPath(parent);
+  const combined = parentPath ? `${parentPath}${CURL_FOLDER_SEPARATOR}${trimmedName}` : trimmedName;
+  const depth = combined.split(CURL_FOLDER_SEPARATOR).filter((segment) => segment.trim().length > 0).length;
+  if (depth > MAX_CURL_FOLDER_SEGMENTS) return undefined;
+  return sanitizeCurlFolderPath(combined);
+}
+
+/**
+ * Rewrite a single path that lives at or below `from` to the same position below
+ * `to`. Paths outside the subtree are returned unchanged.
+ */
+export function rewriteCurlFolderPath(
+  path: string,
+  from: string,
+  to: string | undefined,
+): string | undefined {
+  const source = sanitizeCurlFolderPath(path);
+  const origin = sanitizeCurlFolderPath(from);
+  if (!source) return undefined;
+  if (!origin || !curlFolderIsWithin(source, origin)) return source;
+  const suffix = source.slice(origin.length);
+  const target = sanitizeCurlFolderPath(to);
+  return sanitizeCurlFolderPath(`${target ?? ''}${suffix}`);
+}
+
+/** Rewrite every folder path in the vault list (rename / reparent a folder). */
+export function rewriteCurlFolders(
+  folders: readonly string[],
+  from: string,
+  to: string | undefined,
+): string[] {
+  return sanitizeCurlFolders(
+    folders.map((folder) => rewriteCurlFolderPath(folder, from, to) ?? ''),
+  );
+}
+
+/** Remove a folder and its whole subtree from the vault folder list. */
+export function removeCurlFolderSubtree(
+  folders: readonly string[],
+  path: string,
+): string[] {
+  const target = sanitizeCurlFolderPath(path);
+  if (!target) return sanitizeCurlFolders(folders);
+  return sanitizeCurlFolders(folders.filter((folder) => !curlFolderIsWithin(folder, target)));
+}
+
+/**
+ * Move a folder under `parent` (undefined = root). The folder keeps its own name;
+ * descendants and requests are rewritten with `rewriteCurlFolderPath`.
+ * Returns undefined when the move is impossible (into itself/descendant, too deep).
+ */
+export function reparentCurlFolderPath(
+  path: string,
+  parent: string | undefined,
+): string | undefined {
+  const source = sanitizeCurlFolderPath(path);
+  if (!source) return undefined;
+  const targetParent = sanitizeCurlFolderPath(parent);
+  if (targetParent && curlFolderIsWithin(targetParent, source)) return undefined;
+  const segments = curlFolderSegments(source);
+  const leaf = segments[segments.length - 1];
+  if (!leaf) return undefined;
+  const next = curlFolderJoin(targetParent, leaf);
+  if (!next || next === source) return undefined;
+  return next;
+}
+
+/** Rewrite `folder` on every request that lives in (or below) the moved folder. */
+export function rewriteCurlRequestFolders(
+  requests: readonly CurlRequest[],
+  from: string,
+  to: string | undefined,
+): CurlRequest[] {
+  let changed = false;
+  const next = requests.map((request) => {
+    if (!request.folder) return request;
+    const folder = rewriteCurlFolderPath(request.folder, from, to);
+    if (!folder || folder === request.folder) return request;
+    changed = true;
+    return { ...request, folder };
+  });
+  return changed ? next : [...requests];
+}

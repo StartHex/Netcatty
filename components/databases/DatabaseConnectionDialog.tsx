@@ -3,7 +3,7 @@
  * section list stays a plain list; the form owns no persistence.
  */
 
-import { FolderOpen, Loader2, Plus, TestTube2, X } from 'lucide-react';
+import { Eye, EyeOff, FolderOpen, Loader2, Plus, TestTube2, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import {
@@ -39,6 +39,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 const KINDS: DatabaseKind[] = ['postgresql', 'mysql', 'mariadb', 'oracle', 'sqlserver', 'sqlite', 'jdbc'];
 const SSL_MODES: DatabaseSslMode[] = ['disable', 'require', 'verify-ca', 'verify-full'];
@@ -173,6 +174,9 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
   const [javaChecking, setJavaChecking] = useState(false);
   const [test, setTest] = useState<TestState>({ status: 'idle' });
   const [showError, setShowError] = useState(false);
+  // Mask the stored password by default; the eye toggle mirrors the SSH host
+  // form so both connection forms behave the same way.
+  const [showPassword, setShowPassword] = useState(false);
   const draftKey = connection ? `connection:${connection.id}` : 'connection:new';
 
   useEffect(() => {
@@ -182,6 +186,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
     setForm(draftCache.get(draftKey) ?? (connection ? formFromConnection(connection) : EMPTY_FORM));
     setTest({ status: 'idle' });
     setShowError(false);
+    setShowPassword(false);
   }, [open, connection, draftKey]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -753,13 +758,37 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="db-password">{t('databases.form.password')}</Label>
-                <Input
-                  id="db-password"
-                  type="password"
-                  value={form.password}
-                  autoComplete="new-password"
-                  onChange={(event) => update('password', event.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    id="db-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={form.password}
+                    autoComplete="new-password"
+                    className="pr-10"
+                    onChange={(event) => update('password', event.target.value)}
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        aria-label={
+                          showPassword
+                            ? t('hostDetails.password.hide')
+                            : t('hostDetails.password.show')
+                        }
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {showPassword
+                        ? t('hostDetails.password.hide')
+                        : t('hostDetails.password.show')}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
             </div>
           ) : null}

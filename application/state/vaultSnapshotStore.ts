@@ -36,6 +36,7 @@ export type VaultSnapshot = {
   dbConnections: readonly DatabaseConnection[];
   jdbcDrivers: readonly JdbcDriver[];
   curlRequests: readonly CurlRequest[];
+  curlFolders: readonly string[];
   snippets: readonly Snippet[];
   snippetPackages: readonly string[];
   customGroups: readonly string[];
@@ -59,6 +60,7 @@ export type VaultSnapshotActions = Pick<
   | 'updateDbConnections'
   | 'updateJdbcDrivers'
   | 'updateCurlRequests'
+  | 'updateCurlFolders'
   | 'updateSnippets'
   | 'updateSnippetPackages'
   | 'updateCustomGroups'
@@ -102,6 +104,7 @@ export const EMPTY_VAULT_SNAPSHOT: VaultSnapshot = Object.freeze({
   dbConnections: EMPTY_DB_CONNECTIONS,
   jdbcDrivers: EMPTY_JDBC_DRIVERS,
   curlRequests: EMPTY_CURL_REQUESTS,
+  curlFolders: EMPTY_STRINGS,
   snippets: EMPTY_SNIPPETS,
   snippetPackages: EMPTY_STRINGS,
   customGroups: EMPTY_STRINGS,

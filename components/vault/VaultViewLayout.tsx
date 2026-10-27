@@ -287,10 +287,12 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
     OtpAuthenticatorsManager,
     dbConnections,
     curlRequests,
+    curlFolders,
     jdbcDrivers,
     onUpdateJdbcDrivers,
     onUpdateDbConnections,
     onUpdateCurlRequests,
+    onUpdateCurlFolders,
     DatabasesManager,
     CurlCollections,
     ProxyProfilesManager,
@@ -1550,7 +1552,12 @@ export function VaultViewLayout({ ctx }: { ctx: VaultViewLayoutContext }) {
             {currentSection === "curl" && (
               <LazyLoadBoundary name="Curl" resetKey="curl">
                 <Suspense fallback={<VaultSectionLoading />}>
-                  <CurlCollections requests={curlRequests} onUpdateRequests={onUpdateCurlRequests} />
+                  <CurlCollections
+                    requests={curlRequests}
+                    onUpdateRequests={onUpdateCurlRequests}
+                    folders={curlFolders}
+                    onUpdateFolders={onUpdateCurlFolders}
+                  />
                 </Suspense>
               </LazyLoadBoundary>
             )}

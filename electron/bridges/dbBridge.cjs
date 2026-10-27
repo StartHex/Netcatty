@@ -50,12 +50,49 @@ function mysqlTypeName(code) {
   return mysqlTypeNames.get(Number(code)) ?? String(code ?? "");
 }
 
+const CTE_STATEMENT_VERBS = new Set(["SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"]);
+const SQL_LEADING_NOISE = /^\s*(?:--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/|\s)*/;
+
+/**
+ * Best-effort command label for a statement that returned no result set, so the
+ * UI can tell an UPDATE apart from a CREATE. Drivers disagree on this: postgres
+ * reports `command` itself, most others leave the caller to infer it.
+ */
+function commandFromSql(sql) {
+  const head = String(sql || "").replace(SQL_LEADING_NOISE, "");
+  const first = /^([a-zA-Z]+)/.exec(head);
+  if (!first) return "OK";
+  const keyword = first[1].toUpperCase();
+  if (keyword !== "WITH") return keyword;
+  // The verb that follows a CTE lives at paren depth 0; the SELECTs inside the
+  // CTE definitions are nested, so scan depth-aware instead of regex-matching.
+  let depth = 0;
+  for (let index = 0; index < head.length; index += 1) {
+    const char = head[index];
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")") {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth !== 0 || index === 0 || /[A-Za-z0-9_$]/.test(head[index - 1])) continue;
+    const word = /^[A-Za-z]+/.exec(head.slice(index));
+    if (!word) continue;
+    const upper = word[0].toUpperCase();
+    if (CTE_STATEMENT_VERBS.has(upper)) return upper;
+    index += word[0].length - 1;
+  }
+  return keyword;
+}
+
 /**
  * Shape a mysql2 query result. mysql2 returns rows (object array) for a single
  * SELECT, an OkPacket object for DML/DDL, and — because multipleStatements is
  * enabled — an array of result sets for multi-statement scripts.
  */
-function shapeMysqlResult(result, fields, maxRows, startedAt) {
+function shapeMysqlResult(result, fields, maxRows, startedAt, sql) {
   const fieldSets = Array.isArray(fields) ? fields : [];
   const multiStatement = Array.isArray(fieldSets[0]);
 
@@ -68,7 +105,7 @@ function shapeMysqlResult(result, fields, maxRows, startedAt) {
         rows: [],
         rowCount: Number(lastResult?.affectedRows ?? 0),
         truncated: false,
-        command: "OK",
+        command: commandFromSql(sql),
         durationMs: Date.now() - startedAt,
       };
     }
@@ -82,7 +119,7 @@ function shapeMysqlResult(result, fields, maxRows, startedAt) {
       rows: [],
       rowCount: Number(result?.affectedRows ?? 0),
       truncated: false,
-      command: "OK",
+      command: commandFromSql(sql),
       durationMs: Date.now() - startedAt,
     };
   }
@@ -398,7 +435,7 @@ function createMysqlSession(target) {
       const instance = await ensure();
       const started = Date.now();
       const [result, fields] = await instance.query(sql);
-      return shapeMysqlResult(result, fields, maxRows, started);
+      return shapeMysqlResult(result, fields, maxRows, started, sql);
     },
     async tables() {
       const instance = await ensure();
@@ -521,7 +558,7 @@ function createOracleSession(target) {
           ? result.rowsAffected
           : rows.length,
         truncated: rows.length >= maxRows,
-        command: "SELECT",
+        command: (result.metaData || []).length > 0 ? "SELECT" : commandFromSql(sql),
         durationMs: Date.now() - started,
       };
     },
@@ -620,7 +657,7 @@ function createSqliteSession(target) {
           rows: [],
           rowCount: Number(info?.changes ?? 0),
           truncated: false,
-          command: "OK",
+          command: commandFromSql(sql),
           durationMs: Date.now() - started,
         };
       }
@@ -774,6 +811,18 @@ function createJdbcSession(target) {
         throw error;
       }
       const started = Date.now();
+      // Statements without a result set (INSERT/UPDATE/DDL) come back as a
+      // `fields.update` tail carrying the driver's update count.
+      if (response.fields?.update === "true") {
+        return {
+          columns: [],
+          rows: [],
+          rowCount: Number(response.fields?.rows || 0),
+          truncated: false,
+          command: commandFromSql(sql),
+          durationMs: Date.now() - started,
+        };
+      }
       const columns = response.columns || [];
       const truncated = response.fields?.truncated === "true";
       const rows = (response.rows || []).map((row) =>
@@ -929,7 +978,7 @@ function createSqlServerSession(target) {
           rows: matrix,
           rowCount: Number.isFinite(rowCount) ? rowCount : matrix.length,
           truncated: matrix.length < collected.length || (rowCount || 0) > matrix.length,
-          command: /^\s*(select|show|with)/i.test(sql) ? "SELECT" : "UPDATE",
+          command: /^\s*(select|show|with)/i.test(sql) ? "SELECT" : commandFromSql(sql),
           durationMs: Date.now() - started,
         });
       });
@@ -1364,6 +1413,7 @@ module.exports = {
     numberOrUndefined,
     shapeMysqlResult,
     mysqlTypeName,
+    commandFromSql,
     sessions,
   },
 };

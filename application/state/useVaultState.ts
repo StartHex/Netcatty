@@ -8,12 +8,15 @@ import {
   sanitizeHost,
 } from "../../domain/host";
 import { isEncryptedCredentialPlaceholder } from "../../domain/credentials";
-import { retainLocalHostLastConnectedAt } from "../../domain/sync";
+import {
+  retainLocalDatabaseConnectionDevicePaths,
+  retainLocalHostLastConnectedAt,
+} from "../../domain/sync";
 import { sanitizeGroupConfig } from "../../domain/groupConfig";
 import {
   sanitizeDatabaseConnections,
 } from "../../domain/models/database";
-import { sanitizeCurlRequests } from "../../domain/models/http";
+import { sanitizeCurlFolders, sanitizeCurlRequests } from "../../domain/models/http";
 import { sanitizeJdbcDrivers } from "../../domain/database/jdbcDrivers";
 import {
   clearOtpAuthenticatorReferences,
@@ -53,6 +56,7 @@ import {
 import {
   STORAGE_KEY_CONNECTION_LOGS,
   STORAGE_KEY_CONNECTION_LOG_TERMINAL_DATA,
+  STORAGE_KEY_CURL_FOLDERS,
   STORAGE_KEY_CONNECTION_LOG_TERMINAL_DATA_REV,
   STORAGE_KEY_GROUP_CONFIGS,
   STORAGE_KEY_GROUPS,
@@ -172,6 +176,7 @@ type ExportableVaultData = {
   jdbcDrivers?: JdbcDriver[];
   dbConnections?: DatabaseConnection[];
   curlRequests?: CurlRequest[];
+  curlFolders?: string[];
   snippets: Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -341,6 +346,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const [otpAuthenticators, setOtpAuthenticators] = useState<OtpAuthenticator[]>([]);
   const [dbConnections, setDbConnections] = useState<DatabaseConnection[]>([]);
   const [curlRequests, setCurlRequests] = useState<CurlRequest[]>([]);
+  const [curlFolders, setCurlFolders] = useState<string[]>([]);
   const [jdbcDrivers, setJdbcDrivers] = useState<JdbcDriver[]>([]);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [customGroups, setCustomGroups] = useState<string[]>([]);
@@ -360,6 +366,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   const otpAuthenticatorsRef = useRef<OtpAuthenticator[]>([]);
   const dbConnectionsRef = useRef<DatabaseConnection[]>([]);
   const curlRequestsRef = useRef<CurlRequest[]>([]);
+  const curlFoldersRef = useRef<string[]>([]);
   const jdbcDriversRef = useRef<JdbcDriver[]>([]);
   const notesRef = useRef<VaultNote[]>([]);
   const notesStorageRef = useRef<VaultNote[]>([]);
@@ -378,6 +385,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
   otpAuthenticatorsRef.current = otpAuthenticators;
   dbConnectionsRef.current = dbConnections;
   curlRequestsRef.current = curlRequests;
+  curlFoldersRef.current = curlFolders;
   jdbcDriversRef.current = jdbcDrivers;
   notesRef.current = notes;
   noteGroupsRef.current = noteGroups;
@@ -958,6 +966,17 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     });
   }, []);
 
+  const updateCurlFolders = useCallback((data: string[]) => {
+    // Folder names are not credential material, so — like note groups — they
+    // live in localStorage in the clear. Empty folders must survive reloads,
+    // which is why the tree keeps a separate folder list next to the requests.
+    const cleaned = sanitizeCurlFolders(data);
+    curlFoldersRef.current = cleaned;
+    setCurlFolders(cleaned);
+    localStorageAdapter.write(STORAGE_KEY_CURL_FOLDERS, cleaned);
+    return Promise.resolve();
+  }, []);
+
   const updateJdbcDrivers = useCallback((data: JdbcDriver[]) => {
     const cleaned = sanitizeJdbcDrivers(data);
     setJdbcDrivers(cleaned);
@@ -1491,6 +1510,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateOtpAuthenticators([]);
     updateDbConnections([]);
     updateCurlRequests([]);
+    updateCurlFolders([]);
     updateJdbcDrivers([]);
     updateSnippets([], { replace: true });
     updateSnippetPackages([]);
@@ -1508,6 +1528,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     updateOtpAuthenticators,
     updateDbConnections,
     updateCurlRequests,
+    updateCurlFolders,
     updateJdbcDrivers,
     updateProxyProfiles,
     updateSnippets,
@@ -1895,6 +1916,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
         );
         const savedNotes = localStorageAdapter.read<VaultNote[]>(STORAGE_KEY_NOTES);
         const savedNoteGroups = localStorageAdapter.read<string[]>(STORAGE_KEY_NOTE_GROUPS);
+        const savedCurlFolders = localStorageAdapter.read<string[]>(STORAGE_KEY_CURL_FOLDERS);
 
         if (savedSnippets) {
           const orderedSnippets = normalizeVaultOrder(savedSnippets);
@@ -1951,6 +1973,14 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
           const cleanedNoteGroups = normalizeNoteGroups(savedNoteGroups);
           setNoteGroups(cleanedNoteGroups);
           localStorageAdapter.write(STORAGE_KEY_NOTE_GROUPS, cleanedNoteGroups);
+        }
+        if (savedCurlFolders) {
+          // Sanitizing pads missing ancestor paths, so folders created by older
+          // builds still render their parents in the tree.
+          const cleanedCurlFolders = sanitizeCurlFolders(savedCurlFolders);
+          curlFoldersRef.current = cleanedCurlFolders;
+          setCurlFolders(cleanedCurlFolders);
+          localStorageAdapter.write(STORAGE_KEY_CURL_FOLDERS, cleanedCurlFolders);
         }
 
         // Load known hosts. Records imported from `~/.ssh/known_hosts` and
@@ -2240,6 +2270,14 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
         return;
       }
 
+      if (key === STORAGE_KEY_CURL_FOLDERS) {
+        const next = safeParse<string[]>(event.newValue) ?? [];
+        const cleaned = sanitizeCurlFolders(next);
+        curlFoldersRef.current = cleaned;
+        setCurlFolders(cleaned);
+        return;
+      }
+
       if (key === STORAGE_KEY_JDBC_DRIVERS) {
         const next = safeParse<JdbcDriver[]>(event.newValue) ?? [];
         ++jdbcDriversWriteVersion.current;
@@ -2499,6 +2537,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       otpAuthenticators,
       dbConnections,
       curlRequests,
+      curlFolders,
       jdbcDrivers,
       snippets,
       customGroups,
@@ -2508,7 +2547,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       knownHosts,
       groupConfigs,
     }),
-    [hosts, keys, identities, proxyProfiles, otpAuthenticators, dbConnections, curlRequests, jdbcDrivers, snippets, customGroups, snippetPackages, notes, noteGroups, knownHosts, groupConfigs],
+    [hosts, keys, identities, proxyProfiles, otpAuthenticators, dbConnections, curlRequests, curlFolders, jdbcDrivers, snippets, customGroups, snippetPackages, notes, noteGroups, knownHosts, groupConfigs],
   );
 
   const importData = useCallback(
@@ -2518,8 +2557,19 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       // Write authenticators before hosts so host references resolve as soon
       // as the restored hosts land.
       if (Array.isArray(payload.otpAuthenticators)) encryptedWrites.push(updateOtpAuthenticators(payload.otpAuthenticators));
-      if (Array.isArray(payload.dbConnections)) encryptedWrites.push(updateDbConnections(payload.dbConnections));
+      if (Array.isArray(payload.dbConnections)) {
+        // `jdbcDriverPaths` / `javaPath` are device-local absolute paths and are
+        // never uploaded. A remote reconciliation still replaces the whole local
+        // array, so re-attach each matching local connection's paths to keep
+        // this device's JDBC setup working. Paths present on the incoming
+        // connection (local backups, legacy snapshots) still win.
+        encryptedWrites.push(updateDbConnections(
+          retainLocalDatabaseConnectionDevicePaths(payload.dbConnections, dbConnectionsRef.current)
+            ?? payload.dbConnections,
+        ));
+      }
       if (Array.isArray(payload.curlRequests)) encryptedWrites.push(updateCurlRequests(payload.curlRequests));
+      if (Array.isArray(payload.curlFolders)) updateCurlFolders(payload.curlFolders);
       if (Array.isArray(payload.jdbcDrivers)) updateJdbcDrivers(payload.jdbcDrivers);
       if (payload.hosts) {
         // Cloud payloads no longer carry `lastConnectedAt` (#2629), but any
@@ -2559,6 +2609,7 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
       updateOtpAuthenticators,
       updateDbConnections,
       updateCurlRequests,
+      updateCurlFolders,
       updateJdbcDrivers,
       updateProxyProfiles,
       updateSnippets,
@@ -2730,9 +2781,11 @@ export const useVaultState = (options?: UseVaultStateOptions) => {
     otpAuthenticators,
     dbConnections,
     curlRequests,
+    curlFolders,
     jdbcDrivers,
     updateJdbcDrivers,
     updateCurlRequests,
+    updateCurlFolders,
     snippets,
     customGroups,
     snippetPackages,

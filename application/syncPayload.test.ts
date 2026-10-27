@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import type { SyncPayload } from "../domain/sync.ts";
-import type { KnownHost } from "../domain/models.ts";
+import type { DatabaseConnection, KnownHost } from "../domain/models.ts";
 import type { SyncableVaultData } from "./syncPayload.ts";
 import { clampTerminalFontSizeValue, parseTerminalFontSizeRecord } from "./state/terminalFontSizeSync.ts";
 import { parseCustomAccentRecord } from "./state/customAccentSync.ts";
@@ -59,7 +59,11 @@ const {
   SYNCABLE_SETTING_STORAGE_KEYS,
 } = await import("./syncPayload.ts");
 const storageKeys = await import("../infrastructure/config/storageKeys.ts");
-const { SYNC_STORAGE_KEYS } = await import("../domain/sync.ts");
+const {
+  SYNC_STORAGE_KEYS,
+  retainLocalDatabaseConnectionDevicePaths,
+  sanitizeDatabaseConnectionsForSync,
+} = await import("../domain/sync.ts");
 const { localStorageAdapter } = await import("../infrastructure/persistence/localStorageAdapter.ts");
 const { readCommandBlocklistSetting } = await import("./state/commandBlocklistSettings.ts");
 
@@ -83,6 +87,21 @@ const vault = (knownHosts: KnownHost[] = [knownHost()]): SyncableVaultData => ({
   noteGroups: [],
   knownHosts,
   groupConfigs: [],
+});
+
+const dbConnection = (overrides: Partial<DatabaseConnection> = {}): DatabaseConnection => ({
+  id: "db-1",
+  label: "Reports",
+  kind: "jdbc",
+  jdbcDriverId: "driver-1",
+  jdbcUrl: "jdbc:postgresql://db.example.com:5432/reports",
+  jdbcDriverClass: "org.postgresql.Driver",
+  jdbcDriverPaths: ["/opt/jdbc/postgresql-42.7.4.jar"],
+  javaPath: "/opt/jre-21",
+  jdbcProperties: { user: "reports" },
+  group: "analytics",
+  tags: ["prod"],
+  ...overrides,
 });
 
 test.beforeEach(() => {
@@ -266,6 +285,112 @@ test("retainLocalHostLastConnectedAt does not invent timestamps for unknown host
   assert.equal(retained?.[0]?.lastConnectedAt, undefined);
 });
 
+test("sync payload builders strip device-local JDBC jar and java paths", () => {
+  const connection = dbConnection();
+  const payload = buildSyncPayload({ ...vault([]), dbConnections: [connection] });
+  const synced = payload.dbConnections?.[0];
+
+  assert.ok(synced);
+  assert.equal("jdbcDriverPaths" in synced, false);
+  assert.equal("javaPath" in synced, false);
+  // Every other connection field must survive the sanitiser.
+  assert.equal(synced.id, "db-1");
+  assert.equal(synced.label, "Reports");
+  assert.equal(synced.kind, "jdbc");
+  assert.equal(synced.jdbcDriverId, "driver-1");
+  assert.equal(synced.jdbcUrl, connection.jdbcUrl);
+  assert.equal(synced.jdbcDriverClass, "org.postgresql.Driver");
+  assert.deepEqual(synced.jdbcProperties, { user: "reports" });
+  assert.equal(synced.group, "analytics");
+  assert.deepEqual(synced.tags, ["prod"]);
+  // The source connection keeps its device-local paths.
+  assert.deepEqual(connection.jdbcDriverPaths, ["/opt/jdbc/postgresql-42.7.4.jar"]);
+  assert.equal(connection.javaPath, "/opt/jre-21");
+});
+
+test("buildCloudSyncPayload strips device-local JDBC paths but keeps sqlitePath", async () => {
+  const sqlite = dbConnection({
+    id: "db-sqlite",
+    label: "Local file",
+    kind: "sqlite",
+    sqlitePath: "/Users/me/data/app.db",
+    jdbcDriverId: undefined,
+    jdbcUrl: undefined,
+    jdbcDriverClass: undefined,
+    jdbcDriverPaths: undefined,
+    javaPath: undefined,
+    jdbcProperties: undefined,
+  });
+  const payload = await buildCloudSyncPayload({
+    ...vault([]),
+    dbConnections: [dbConnection(), sqlite],
+  });
+  const [jdbcSynced, sqliteSynced] = payload.dbConnections ?? [];
+
+  assert.equal("jdbcDriverPaths" in (jdbcSynced ?? {}), false);
+  assert.equal("javaPath" in (jdbcSynced ?? {}), false);
+  assert.equal(jdbcSynced?.jdbcUrl, "jdbc:postgresql://db.example.com:5432/reports");
+  assert.equal(sqliteSynced?.sqlitePath, "/Users/me/data/app.db");
+  assert.equal("jdbcDriverPaths" in (sqliteSynced ?? {}), false);
+});
+
+test("buildLocalVaultPayload keeps device-local JDBC paths for protective backups", () => {
+  const connection = dbConnection();
+  const payload = buildLocalVaultPayload({ ...vault([]), dbConnections: [connection] });
+
+  assert.deepEqual(payload.dbConnections?.[0]?.jdbcDriverPaths, ["/opt/jdbc/postgresql-42.7.4.jar"]);
+  assert.equal(payload.dbConnections?.[0]?.javaPath, "/opt/jre-21");
+});
+
+test("retainLocalDatabaseConnectionDevicePaths restores local paths for matching ids only", () => {
+  const local = dbConnection();
+  const incomingMatch = dbConnection({ label: "Reports (renamed)" });
+  const incomingUnmatched = dbConnection({ id: "db-remote", label: "Remote only" });
+  // Incoming entries carry no device paths, as a cloud payload would.
+  for (const connection of [incomingMatch, incomingUnmatched]) {
+    delete connection.jdbcDriverPaths;
+    delete connection.javaPath;
+  }
+
+  const retained = retainLocalDatabaseConnectionDevicePaths(
+    [incomingMatch, incomingUnmatched],
+    [local],
+  );
+
+  assert.equal(retained?.length, 2);
+  assert.deepEqual(retained?.[0]?.jdbcDriverPaths, ["/opt/jdbc/postgresql-42.7.4.jar"]);
+  assert.equal(retained?.[0]?.javaPath, "/opt/jre-21");
+  assert.equal(retained?.[0]?.label, "Reports (renamed)");
+  assert.equal(retained?.[1]?.jdbcDriverPaths, undefined);
+  assert.equal(retained?.[1]?.javaPath, undefined);
+  assert.notEqual(retained?.[0], incomingMatch);
+});
+
+test("retainLocalDatabaseConnectionDevicePaths keeps incoming paths when present", () => {
+  const incoming = dbConnection({ jdbcDriverPaths: ["/backup/driver.jar"], javaPath: "/backup/jre" });
+  const retained = retainLocalDatabaseConnectionDevicePaths([incoming], [dbConnection()]);
+
+  assert.deepEqual(retained?.[0]?.jdbcDriverPaths, ["/backup/driver.jar"]);
+  assert.equal(retained?.[0]?.javaPath, "/backup/jre");
+});
+
+test("database device-path helpers never mutate their inputs", () => {
+  const connection = dbConnection();
+  const incoming = dbConnection();
+  const local = dbConnection();
+  const connectionSnapshot = JSON.stringify(connection);
+  const incomingSnapshot = JSON.stringify(incoming);
+  const localSnapshot = JSON.stringify(local);
+
+  sanitizeDatabaseConnectionsForSync([connection]);
+  retainLocalDatabaseConnectionDevicePaths([incoming], [local]);
+  buildSyncPayload({ ...vault([]), dbConnections: [connection] });
+
+  assert.equal(JSON.stringify(connection), connectionSnapshot);
+  assert.equal(JSON.stringify(incoming), incomingSnapshot);
+  assert.equal(JSON.stringify(local), localSnapshot);
+});
+
 test("buildSyncPayload includes reusable proxy profiles", () => {
   const proxyProfiles = [
     {
@@ -378,6 +503,40 @@ test("buildCloudSyncPayload includes notes and note groups", async () => {
   assert.equal(payload.notes?.length, 1);
   assert.equal(payload.notes?.[0]?.title, "Runbook");
   assert.deepEqual(payload.noteGroups, ["Ops"]);
+});
+
+test("buildCloudSyncPayload carries curl collection folders, including empty ones", async () => {
+  const payload = await buildCloudSyncPayload({
+    ...vault([]),
+    curlFolders: ["Team/Users", "Archived"],
+  });
+
+  assert.deepEqual(payload.curlFolders, ["Archived", "Team", "Team/Users"]);
+});
+
+test("curl folder sanitizer drops junk paths and pads missing parents", async () => {
+  const payload = await buildCloudSyncPayload({
+    ...vault([]),
+    curlFolders: ["  Team/users  ", "Team/users/admin", "", "   ", "a//b/"],
+  });
+
+  assert.deepEqual(payload.curlFolders, ["a", "a/b", "Team", "Team/users", "Team/users/admin"]);
+});
+
+test("curl folders round-trip through applySyncPayload and are omitted when empty", async () => {
+  const payload = await buildSyncPayload({
+    ...vault([]),
+    curlFolders: ["Team", "Team/Users"],
+  });
+  let imported: Record<string, unknown> | null = null;
+  await applySyncPayload(payload, {
+    importVaultData: (json) => { imported = JSON.parse(json); },
+  });
+
+  assert.deepEqual(imported?.curlFolders, ["Team", "Team/Users"]);
+
+  const emptyPayload = await buildSyncPayload({ ...vault([]), curlFolders: [] });
+  assert.equal("curlFolders" in emptyPayload, false);
 });
 
 test("buildSyncPayload includes AI configuration settings", () => {

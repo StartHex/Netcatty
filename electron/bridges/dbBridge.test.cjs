@@ -8,6 +8,7 @@ const { __test, handlers } = bridge;
 
 const {
   shapeMysqlResult,
+  commandFromSql,
   clampMaxRows,
   clampTimeout,
   toCellValue,
@@ -298,4 +299,21 @@ test("mysql: SELECT honours maxRows truncation", () => {
   assert.equal(result.rows.length, 2);
   assert.equal(result.rowCount, 3);
   assert.equal(result.truncated, true);
+});
+
+test("mysql: DML execution result carries the statement command", () => {
+  const result = shapeMysqlResult({ affectedRows: 3 }, undefined, 100, Date.now(), "UPDATE users SET a = 1");
+  assert.equal(result.command, "UPDATE");
+  assert.equal(result.rowCount, 3);
+  assert.deepEqual(result.rows, []);
+});
+
+test("commandFromSql: labels statements the drivers do not label", () => {
+  assert.equal(commandFromSql("insert into t values (1)"), "INSERT");
+  assert.equal(commandFromSql("  -- a note\n/* b */\nDELETE FROM t"), "DELETE");
+  assert.equal(commandFromSql("create table t (id int)"), "CREATE");
+  assert.equal(commandFromSql("truncate table t;"), "TRUNCATE");
+  assert.equal(commandFromSql("with x as (select 1) update t set a = 1"), "UPDATE");
+  assert.equal(commandFromSql("with x as (select 1) select * from x"), "SELECT");
+  assert.equal(commandFromSql(""), "OK");
 });

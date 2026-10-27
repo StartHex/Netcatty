@@ -279,6 +279,8 @@ export interface SyncPayload {
   otpAuthenticators?: import('./models').OtpAuthenticator[];
   dbConnections?: import('./models').DatabaseConnection[];
   curlRequests?: import('./models').CurlRequest[];
+  /** Every known curl collection folder path (parents included); not an entity list. */
+  curlFolders?: string[];
   snippets: import('./models').Snippet[];
   customGroups: string[];
   snippetPackages?: string[];
@@ -476,6 +478,49 @@ export function retainLocalHostLastConnectedAt(
     const localTs = localById.get(host.id);
     if (localTs == null) return host;
     return { ...host, lastConnectedAt: localTs };
+  });
+}
+
+/**
+ * Strip device-local JDBC paths before any sync comparison or upload.
+ * `jdbcDriverPaths` and `javaPath` are absolute paths pointing at jars / a JRE
+ * on the machine that registered them; another OS or even a different install
+ * directory cannot use them. They stay in local vault storage (and protective
+ * local backups) and are re-attached on import by
+ * `retainLocalDatabaseConnectionDevicePaths`.
+ */
+export function sanitizeDatabaseConnectionsForSync(
+  connections: import('./models').DatabaseConnection[] | undefined,
+): import('./models').DatabaseConnection[] | undefined {
+  if (!connections) return connections;
+  return connections.map((connection) => {
+    const copy = { ...connection };
+    delete copy.jdbcDriverPaths;
+    delete copy.javaPath;
+    return copy;
+  });
+}
+
+/**
+ * Re-attach this device's JDBC jar / JRE paths when an incoming cloud payload
+ * omits them. Incoming paths (local backups, legacy snapshots) still win when
+ * present. Entries without a local id match are left untouched, so a remote
+ * connection is never given another connection's paths.
+ */
+export function retainLocalDatabaseConnectionDevicePaths(
+  incoming: import('./models').DatabaseConnection[] | undefined,
+  local: import('./models').DatabaseConnection[] | undefined,
+): import('./models').DatabaseConnection[] | undefined {
+  if (!incoming) return incoming;
+  if (!local?.length) return incoming;
+  const localById = new Map(local.map((connection) => [connection.id, connection]));
+  return incoming.map((connection) => {
+    const copy = { ...connection };
+    const localConnection = localById.get(connection.id);
+    if (!localConnection) return copy;
+    if (copy.jdbcDriverPaths === undefined) copy.jdbcDriverPaths = localConnection.jdbcDriverPaths;
+    if (copy.javaPath === undefined) copy.javaPath = localConnection.javaPath;
+    return copy;
   });
 }
 
