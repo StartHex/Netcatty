@@ -320,6 +320,7 @@ jobs:
           npm pkg set version="${VERSION}"
 
       - name: Build package
+        shell: bash
         env:
           ELECTRON_BUILDER_PUBLISH: "never"
           # macOS code signing & notarization (only for macOS builds).
