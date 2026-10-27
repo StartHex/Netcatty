@@ -119,14 +119,24 @@ export const SplitHandle: React.FC<SplitHandleProps> = ({
         tabIndex={0}
         data-testid={testId}
         className={cn(
-            'group relative flex h-1 shrink-0 cursor-row-resize items-center justify-center',
-            'bg-border/60 transition-colors hover:bg-primary/50 focus:outline-none',
-            'focus-visible:bg-primary/50 before:absolute before:-top-1.5 before:-bottom-1.5 before:left-0 before:right-0 before:content-[""]',
+            'group relative flex h-1.5 shrink-0 cursor-row-resize items-center justify-center',
+            'bg-transparent transition-colors focus:outline-none',
+            'before:absolute before:-top-1 before:-bottom-1 before:left-0 before:right-0 before:content-[""]',
         )}
         onPointerDown={onPointerDown}
         onKeyDown={onKeyDown}
         onDoubleClick={onDoubleClick}
-    />
+    >
+        {/* A visible grip: an invisible separator looks like a border, so
+            nobody discovers that the panes can be resized. */}
+        <span
+            aria-hidden="true"
+            className={cn(
+                'pointer-events-none w-10 rounded-full bg-border transition-colors',
+                'h-px group-hover:h-[3px] group-hover:bg-primary/70 group-focus-visible:h-[3px] group-focus-visible:bg-primary/70',
+            )}
+        />
+    </div>
 );
 
 export interface VerticalSplitProps {
