@@ -129,6 +129,14 @@ export const CurlCollections: React.FC<{
     setPendingDeleteFolder(null);
   };
 
+  const renameRequest = (requestId: string, name: string) => {
+    const next = name.trim();
+    if (!next) return;
+    void onUpdateRequests(
+      (requests ?? []).map((request) => (request.id === requestId ? { ...request, name: next } : request)),
+    );
+  };
+
   const moveRequest = (requestId: string, folder: string | undefined) => {
     const target = sanitizeCurlFolderPath(folder);
     const current = (requests ?? []).find((request) => request.id === requestId);
@@ -252,6 +260,7 @@ export const CurlCollections: React.FC<{
             onCancelCreateFolder={cancelCreateFolder}
             onCommitCreateFolder={commitCreateFolder}
             onRenameFolder={renameFolder}
+            onRenameRequest={renameRequest}
             onDeleteFolder={setPendingDeleteFolder}
             onMoveRequest={moveRequest}
             onMoveFolder={moveFolder}

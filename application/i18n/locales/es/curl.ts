@@ -99,6 +99,7 @@ export const esCurlMessages: Messages = {
   'curl.folderNamePlaceholder': 'Nombre de la carpeta',
   'curl.folderNewSubfolder': 'Nueva subcarpeta',
   'curl.folderRename': 'Renombrar',
+  'curl.requestRename': 'Renombrar solicitud',
   'curl.folderDelete': 'Eliminar carpeta',
   'curl.folderDeleteTitle': 'Eliminar carpeta',
   'curl.folderDeleteMessage': '¿Eliminar la carpeta "{name}" y sus subcarpetas? Las solicitudes se moverán un nivel arriba.',

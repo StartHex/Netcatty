@@ -99,6 +99,7 @@ export const zhTWCurlMessages: Messages = {
   'curl.folderNamePlaceholder': '目錄名稱',
   'curl.folderNewSubfolder': '新建子目錄',
   'curl.folderRename': '重新命名',
+  'curl.requestRename': '重新命名請求',
   'curl.folderDelete': '刪除目錄',
   'curl.folderDeleteTitle': '刪除目錄',
   'curl.folderDeleteMessage': '刪除目錄「{name}」及其子目錄？其中的請求會移到上一層。',

@@ -99,6 +99,7 @@ export const ruCurlMessages: Messages = {
   'curl.folderNamePlaceholder': 'Имя папки',
   'curl.folderNewSubfolder': 'Новая подпапка',
   'curl.folderRename': 'Переименовать',
+  'curl.requestRename': 'Переименовать запрос',
   'curl.folderDelete': 'Удалить папку',
   'curl.folderDeleteTitle': 'Удалить папку',
   'curl.folderDeleteMessage': 'Удалить папку «{name}» и её подпапки? Запросы внутри будут перемещены на уровень выше.',

@@ -99,6 +99,7 @@ export const enCurlMessages: Messages = {
   'curl.folderNamePlaceholder': 'Folder name',
   'curl.folderNewSubfolder': 'New subfolder',
   'curl.folderRename': 'Rename',
+  'curl.requestRename': 'Rename request',
   'curl.folderDelete': 'Delete folder',
   'curl.folderDeleteTitle': 'Delete folder',
   'curl.folderDeleteMessage': 'Delete folder "{name}" and its subfolders? Requests inside will move up one level.',

@@ -167,6 +167,9 @@ interface CurlFolderTreeContextValue {
   editingFolder: string | null;
   beginRenameFolder: (path: string) => void;
   cancelRenameFolder: () => void;
+  editingRequest: string | null;
+  beginRenameRequest: (id: string) => void;
+  cancelRenameRequest: () => void;
   dragging: CurlDragPayload | null;
   dropTarget: string | null;
   setDropTarget: React.Dispatch<React.SetStateAction<string | null>>;
@@ -179,6 +182,7 @@ interface CurlFolderTreeContextValue {
   onCancelCreateFolder: () => void;
   onStartCreateFolder: (parent: string | undefined) => void;
   onRenameFolder: (path: string, nextPath: string) => void;
+  onRenameRequest: (id: string, name: string) => void;
   onDeleteFolder: (path: string) => void;
   onMoveRequest: (requestId: string, folder: string | undefined) => void;
   onMoveFolder: (path: string, parent: string | undefined) => void;
@@ -254,6 +258,7 @@ const RequestRow: React.FC<{ request: CurlRequest; depth: number }> = ({ request
   const { t } = useI18n();
   const context = useCurlFolderTreeContext();
   const isDragging = context.dragging?.kind === 'request' && context.dragging.id === request.id;
+  const isEditing = context.editingRequest === request.id;
 
   return (
     <div
@@ -286,10 +291,36 @@ const RequestRow: React.FC<{ request: CurlRequest; depth: number }> = ({ request
           {request.method}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{request.name || request.url}</span>
-          <span className="block truncate font-mono text-[11px] text-muted-foreground">{request.url}</span>
+          {isEditing ? (
+            <InlineNameInput
+              defaultValue={request.name ?? ''}
+              placeholder={request.url}
+              onCommit={(value) => {
+                const next = value.trim();
+                if (next && next !== request.name) context.onRenameRequest(request.id, next);
+                context.cancelRenameRequest();
+              }}
+              onCancel={context.cancelRenameRequest}
+            />
+          ) : (
+            <>
+              <span className="block truncate text-sm font-medium">{request.name || request.url}</span>
+              <span className="block truncate font-mono text-[11px] text-muted-foreground">{request.url}</span>
+            </>
+          )}
         </span>
       </button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+        aria-label={t('curl.requestRename')}
+        data-testid={`curl-request-rename-${request.id}`}
+        data-no-drag="true"
+        onClick={() => context.beginRenameRequest(request.id)}
+      >
+        <Pencil size={14} />
+      </Button>
       <Button
         variant="ghost"
         size="icon"
@@ -524,6 +555,7 @@ export interface CurlFolderTreeProps {
   onCancelCreateFolder: () => void;
   onCommitCreateFolder: (name: string, parent: string | undefined) => void;
   onRenameFolder: (path: string, nextPath: string) => void;
+  onRenameRequest: (id: string, name: string) => void;
   onDeleteFolder: (path: string) => void;
   onMoveRequest: (requestId: string, folder: string | undefined) => void;
   onMoveFolder: (path: string, parent: string | undefined) => void;
@@ -540,6 +572,7 @@ export const CurlFolderTree: React.FC<CurlFolderTreeProps> = ({
   onCancelCreateFolder,
   onCommitCreateFolder,
   onRenameFolder,
+  onRenameRequest,
   onDeleteFolder,
   onMoveRequest,
   onMoveFolder,
@@ -549,6 +582,7 @@ export const CurlFolderTree: React.FC<CurlFolderTreeProps> = ({
   const { t } = useI18n();
   const { collapsed, toggleCollapsed, setCollapsed } = useCurlFolderCollapse();
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
+  const [editingRequest, setEditingRequest] = useState<string | null>(null);
   const [dragging, setDragging] = useState<CurlDragPayload | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [pulseFolder, setPulseFolder] = useState<string | null>(null);
@@ -630,6 +664,9 @@ export const CurlFolderTree: React.FC<CurlFolderTreeProps> = ({
     editingFolder,
     beginRenameFolder: (path: string) => setEditingFolder(path),
     cancelRenameFolder: () => setEditingFolder(null),
+    editingRequest,
+    beginRenameRequest: (id: string) => setEditingRequest(id),
+    cancelRenameRequest: () => setEditingRequest(null),
     dragging,
     dropTarget,
     setDropTarget,
@@ -642,6 +679,7 @@ export const CurlFolderTree: React.FC<CurlFolderTreeProps> = ({
     onCancelCreateFolder,
     onStartCreateFolder,
     onRenameFolder,
+    onRenameRequest,
     onDeleteFolder,
     onMoveRequest,
     onMoveFolder,
@@ -656,6 +694,7 @@ export const CurlFolderTree: React.FC<CurlFolderTreeProps> = ({
     dropOnFolder,
     dropTarget,
     editingFolder,
+    editingRequest,
     endDrag,
     onCancelCreateFolder,
     onCommitCreateFolder,
@@ -665,6 +704,7 @@ export const CurlFolderTree: React.FC<CurlFolderTreeProps> = ({
     onMoveRequest,
     onOpenRequest,
     onRenameFolder,
+    onRenameRequest,
     onStartCreateFolder,
     pulseFolder,
     setCollapsed,

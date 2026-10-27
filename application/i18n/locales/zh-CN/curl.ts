@@ -99,6 +99,7 @@ export const zhCNCurlMessages: Messages = {
   'curl.folderNamePlaceholder': '目录名称',
   'curl.folderNewSubfolder': '新建子目录',
   'curl.folderRename': '重命名',
+  'curl.requestRename': '重命名请求',
   'curl.folderDelete': '删除目录',
   'curl.folderDeleteTitle': '删除目录',
   'curl.folderDeleteMessage': '删除目录「{name}」及其子目录？其中的请求会移到上一级。',
