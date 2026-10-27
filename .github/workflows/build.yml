@@ -322,13 +322,26 @@ jobs:
       - name: Build package
         env:
           ELECTRON_BUILDER_PUBLISH: "never"
-          # macOS code signing & notarization (only for macOS builds)
-          CSC_LINK: ${{ matrix.name == 'macos' && secrets.MAC_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.name == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ matrix.name == 'macos' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ matrix.name == 'macos' && secrets.APPLE_TEAM_ID || '' }}
-        run: npm run ${{ matrix.pack_script }}
+          # macOS code signing & notarization (only for macOS builds).
+          # These are exported conditionally below: an *empty* CSC_LINK makes
+          # electron-builder treat the project directory as a certificate file
+          # and fail with "… not a file".
+          MAC_CSC_LINK: ${{ matrix.name == 'macos' && secrets.MAC_CSC_LINK || '' }}
+          MAC_CSC_KEY_PASSWORD: ${{ matrix.name == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          MAC_APPLE_ID: ${{ matrix.name == 'macos' && secrets.APPLE_ID || '' }}
+          MAC_APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          MAC_APPLE_TEAM_ID: ${{ matrix.name == 'macos' && secrets.APPLE_TEAM_ID || '' }}
+        run: |
+          if [ -n "${MAC_CSC_LINK:-}" ]; then
+            export CSC_LINK="$MAC_CSC_LINK"
+            export CSC_KEY_PASSWORD="${MAC_CSC_KEY_PASSWORD:-}"
+          fi
+          if [ -n "${MAC_APPLE_ID:-}" ]; then
+            export APPLE_ID="$MAC_APPLE_ID"
+            export APPLE_APP_SPECIFIC_PASSWORD="${MAC_APPLE_APP_SPECIFIC_PASSWORD:-}"
+            export APPLE_TEAM_ID="${MAC_APPLE_TEAM_ID:-}"
+          fi
+          npm run ${{ matrix.pack_script }}
 
       - name: Test tray panel layout
         run: npm run test:tray-panel-layout
