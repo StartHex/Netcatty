@@ -8,7 +8,6 @@ import {
   ArrowDown,
   ArrowUp,
   Columns2,
-  Copy,
   Search,
   ArrowUpDown,
   Bookmark,
@@ -34,6 +33,7 @@ import {
   X,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { format as formatSqlText } from 'sql-formatter';
 import { useI18n } from '../../application/i18n/I18nProvider';
 import { useDatabaseWorkbench, type DatabaseTab } from '../../application/state/useDatabaseWorkbench';
@@ -414,12 +414,11 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
     });
   }, []);
 
-  const copySelectedColumns = useCallback(() => {
+  /** Copy the given columns (all columns when the list is empty) as TSV. */
+  const copyColumns = useCallback((columnIndexes: number[]) => {
     if (!tab.result) return;
     const columns = tab.result.columns;
-    const targets = selectedColumns.length > 0 && selectedColumns.length < columns.length
-      ? selectedColumns
-      : columns.map((_, index) => index);
+    const targets = columnIndexes.length > 0 ? columnIndexes : columns.map((_, index) => index);
     // Copy in the order the grid shows: sorted when a sort is active.
     const rows = sort ? orderedSourceIndexes.map((index) => allRows[index] ?? []) : allRows;
     const text = columnsToTsv(columns, [...rows], targets);
@@ -430,7 +429,22 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
       t('databases.workbench.copiedRows', { count: String(rows.length) }),
       t('curl.copyFailed'),
     );
-  }, [allRows, orderedSourceIndexes, selectedColumns, sort, t, tab.result, writeClipboardText]);
+  }, [allRows, orderedSourceIndexes, sort, t, tab.result, writeClipboardText]);
+
+  /** Copy a single row as TSV across every column. */
+  const copyRow = useCallback((sourceIndex: number) => {
+    if (!tab.result) return;
+    const row = allRows[sourceIndex];
+    if (!row) return;
+    const text = columnsToTsv(tab.result.columns, [row], []);
+    if (!text) return;
+    void copyTextWithFeedback(
+      writeClipboardText,
+      text,
+      t('databases.workbench.copiedRow'),
+      t('curl.copyFailed'),
+    );
+  }, [allRows, t, tab.result, writeClipboardText]);
 
   const copyCell = useCallback(
     (text: string) => {
@@ -837,18 +851,6 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
                 </>
               ) : null}
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 gap-1 px-1.5 text-[11px]"
-              onClick={copySelectedColumns}
-              title={t('databases.workbench.copyColumnsHint')}
-            >
-              <Copy className="h-3 w-3" />
-              {selectedColumns.length > 0
-                ? t('databases.workbench.copySelectedColumns', { count: String(selectedColumns.length) })
-                : t('databases.workbench.copyAllColumns')}
-            </Button>
             {selectedColumns.length > 0 ? (
               <Button
                 size="sm"
@@ -892,6 +894,8 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
             onSelectColumn={toggleColumn}
             highlight={highlight}
             onCopyCell={copyCell}
+            onCopyColumns={copyColumns}
+            onCopyRow={copyRow}
           />
         </>
       ) : (
@@ -1551,6 +1555,10 @@ interface ResultGridProps {
   /** Cell the search jumped to, highlighted in place. */
   highlight?: { sourceIndex: number; columnIndex: number } | null;
   onCopyCell?: (text: string) => void;
+  /** Copy the given columns (empty list = every column) through the context menu. */
+  onCopyColumns?: (columnIndexes: number[]) => void;
+  /** Copy one row (every column) through the context menu. */
+  onCopyRow?: (sourceIndex: number) => void;
 }
 
 const ACTION_COLUMN_WIDTH = 32;
@@ -1571,11 +1579,35 @@ const ResultGrid: React.FC<ResultGridProps> = ({
   onSelectColumn,
   highlight,
   onCopyCell,
+  onCopyColumns,
+  onCopyRow,
 }) => {
   const [editing, setEditing] = useState<{ sourceIndex: number; cell: number; draft: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ sourceIndex: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [menu, setMenu] = useState<
+    { x: number; y: number; columnIndex: number | null; sourceIndex: number | null } | null
+  >(null);
   const listRef = useRef<FixedSizeVirtualListHandle | null>(null);
+
+  // A context menu that survives scrolls would point at the wrong row.
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenu(null);
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('resize', close);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [menu]);
 
   // Jump to the highlighted row whenever the search moves to a new page.
   useEffect(() => {
@@ -1616,6 +1648,22 @@ const ResultGrid: React.FC<ResultGridProps> = ({
     else toast.error(t('databases.workbench.rowUpdateFailed'));
   };
 
+  const runMenuAction = (action: 'cell' | 'row' | 'column' | 'all') => {
+    if (!menu) return;
+    if (action === 'cell' && menu.sourceIndex !== null && menu.columnIndex !== null) {
+      const row = rows.find((entry) => entry.sourceIndex === menu.sourceIndex);
+      const value = row?.cells[menu.columnIndex];
+      if (value !== null && value !== undefined) onCopyCell?.(String(value));
+    } else if (action === 'row' && menu.sourceIndex !== null) {
+      onCopyRow?.(menu.sourceIndex);
+    } else if (action === 'column' && menu.columnIndex !== null) {
+      onCopyColumns?.(selectedColumns.length > 0 ? [...selectedColumns] : [menu.columnIndex]);
+    } else if (action === 'all') {
+      onCopyColumns?.([]);
+    }
+    setMenu(null);
+  };
+
   const commitDelete = async () => {
     if (!pendingDelete || !onDeleteRow) {
       setPendingDelete(null);
@@ -1631,9 +1679,10 @@ const ResultGrid: React.FC<ResultGridProps> = ({
 
   return (
     <>
-      <div className="min-h-0 w-full min-w-0 flex-1 overflow-x-auto [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-background [&::-webkit-scrollbar-thumb]:bg-clip-padding [&::-webkit-scrollbar-track]:bg-transparent">
+      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-background [&::-webkit-scrollbar-thumb]:bg-clip-padding [&::-webkit-scrollbar-track]:bg-transparent">
         <div
-          className="flex min-h-full flex-col"
+          className="flex min-h-0 flex-1 flex-col"
           style={{ minWidth: '100%', width: width > 0 ? `${width}px` : undefined }}
         >
           <div
@@ -1656,6 +1705,12 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                       ? `${column.name} · ${column.type}`
                       : `${column.name} — ${t('databases.workbench.sortHint')}`
                   }
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    // Right-clicking a header picks that column so "Copy" has a target.
+                    if (!selectedColumns.includes(index)) onSelectColumn?.(index, false);
+                    setMenu({ x: event.clientX, y: event.clientY, columnIndex: index, sourceIndex: null });
+                  }}
                 >
                   <button
                     type="button"
@@ -1777,6 +1832,15 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                         isMatch && 'bg-amber-400/30 ring-1 ring-inset ring-amber-500/70',
                       )}
                       title={cellText(value)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setMenu({
+                          x: event.clientX,
+                          y: event.clientY,
+                          columnIndex: cellIndex,
+                          sourceIndex: row.sourceIndex,
+                        });
+                      }}
                       onDoubleClick={() => {
                         if (!editable || !onUpdateCell || saving) return;
                         setEditing({ sourceIndex: row.sourceIndex, cell: cellIndex, draft: cellText(value) });
@@ -1794,7 +1858,59 @@ const ResultGrid: React.FC<ResultGridProps> = ({
             )}
           />
         </div>
+        </div>
       </div>
+      {menu ? createPortal(
+        <div
+          role="menu"
+          className="fixed z-50 min-w-[168px] rounded-md border border-border/70 bg-popover p-1 text-xs shadow-lg"
+          style={{
+            left: Math.min(menu.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 190),
+            top: Math.min(menu.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 140),
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {menu.sourceIndex !== null && menu.columnIndex !== null ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center rounded px-2 py-1.5 text-left hover:bg-secondary"
+                onClick={() => runMenuAction('cell')}
+              >
+                {t('databases.workbench.contextCopyCell')}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center rounded px-2 py-1.5 text-left hover:bg-secondary"
+                onClick={() => runMenuAction('row')}
+              >
+                {t('databases.workbench.contextCopyRow')}
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center rounded px-2 py-1.5 text-left hover:bg-secondary"
+            onClick={() => runMenuAction('column')}
+          >
+            {selectedColumns.length > 1
+              ? t('databases.workbench.contextCopyColumns', { count: String(selectedColumns.length) })
+              : t('databases.workbench.contextCopyColumn')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center rounded px-2 py-1.5 text-left hover:bg-secondary"
+            onClick={() => runMenuAction('all')}
+          >
+            {t('databases.workbench.contextCopyAll')}
+          </button>
+        </div>,
+        document.body,
+      ) : null}
       <ConfirmDialog
         open={pendingDelete !== null}
         title={t('databases.workbench.deleteRowTitle')}
