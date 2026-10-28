@@ -32,6 +32,12 @@ const PLACEHOLDER_KEYS: Record<string, string[]> = {
   "databases.transfer.exported": ["{count}"],
   "databases.transfer.exportFailed": ["{error}"],
   "databases.transfer.imported": ["{added}", "{updated}"],
+  "databases.workbench.sortByColumn": ["{column}"],
+  "databases.workbench.searchSelectedHint": ["{count}"],
+  "databases.workbench.searchPosition": ["{index}", "{total}"],
+  "databases.workbench.copySelectedColumns": ["{count}"],
+  "databases.workbench.copiedRows": ["{count}"],
+  "databases.workbench.exportFailed": ["{error}"],
 };
 
 test("database messages exist in every bundled locale", () => {

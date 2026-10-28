@@ -1361,6 +1361,7 @@ async function readSqlFile(rawPath) {
 }
 
 const MAX_TEXT_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_BINARY_FILE_BYTES = 64 * 1024 * 1024;
 
 /** Saves a text file the renderer produced (exports, DDL dumps). */
 async function saveTextFile(payload) {
@@ -1382,6 +1383,32 @@ async function saveTextFile(payload) {
   }
 }
 
+/**
+ * Saves a binary export (xlsx and friends). The renderer hands over base64
+ * because IPC serialises strings, and main converts it back to bytes.
+ */
+async function saveBinaryFile(payload) {
+  const { defaultName, base64 } = payload || {};
+  if (typeof base64 !== "string" || base64.length === 0) {
+    return { ok: false, error: "nothing-to-save" };
+  }
+  const buffer = Buffer.from(base64, "base64");
+  if (buffer.byteLength > MAX_BINARY_FILE_BYTES) {
+    return { ok: false, error: "too-large" };
+  }
+  try {
+    const { dialog } = require("electron");
+    const result = await dialog.showSaveDialog({
+      defaultPath: typeof defaultName === "string" ? defaultName : undefined,
+    });
+    if (result.canceled || !result.filePath) return { ok: true, canceled: true };
+    await fs.promises.writeFile(result.filePath, buffer);
+    return { ok: true, path: result.filePath };
+  } catch (error) {
+    return { ok: false, error: error?.message || "write-failed" };
+  }
+}
+
 function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:test", (_event, target) => handlers.test(target));
   ipcMain.handle("netcatty:db:connect", (_event, target) => handlers.connect(target));
@@ -1394,6 +1421,7 @@ function registerDbHandlers(ipcMain) {
   ipcMain.handle("netcatty:db:dispose", () => handlers.dispose());
   ipcMain.handle("netcatty:db:read-sql-file", (_event, payload) => readSqlFile(payload));
   ipcMain.handle("netcatty:db:save-text-file", (_event, payload) => saveTextFile(payload));
+  ipcMain.handle("netcatty:db:save-binary-file", (_event, payload) => saveBinaryFile(payload));
   ipcMain.handle("netcatty:db:driver-classes", (_event, payload) => driverClassesFromJar(payload));
   ipcMain.handle("netcatty:db:java-runtime", (_event, payload) => javaRuntimeInfo(payload));
 }
@@ -1402,6 +1430,7 @@ module.exports = {
   registerDbHandlers,
   handlers,
   readSqlFile,
+  saveBinaryFile,
   __test: {
     clampMaxRows,
     clampTimeout,

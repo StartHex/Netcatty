@@ -82,3 +82,14 @@ test('reports the 1-based start line of each statement', () => {
 test('unterminated quote does not throw', () => {
   assert.deepEqual(sqlTexts("SELECT 'abc"), ["SELECT 'abc"]);
 });
+
+test('statementAtLine returns the statement under the caret', async () => {
+  const { statementAtLine } = await import('./sqlStatements');
+  const script = 'select 1;\nselect 2,\n  3;\n\nselect 4;';
+  assert.equal(statementAtLine(script, 1), 'select 1');
+  assert.equal(statementAtLine(script, 2), 'select 2,\n  3');
+  assert.equal(statementAtLine(script, 3), 'select 2,\n  3');
+  assert.equal(statementAtLine(script, 5), 'select 4');
+  assert.equal(statementAtLine(script, 4), '');
+  assert.equal(statementAtLine('select 42', 99), 'select 42');
+});

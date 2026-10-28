@@ -237,7 +237,20 @@ export function getWorkSurfaceInsetStyle(
   const inset: React.CSSProperties = { left: hostTreeLayoutWidth };
   return isActive
     ? inset
-    : { visibility: 'hidden', pointerEvents: 'none', position: 'absolute', zIndex: -1, ...inset };
+    : {
+        visibility: 'hidden',
+        pointerEvents: 'none',
+        position: 'absolute',
+        zIndex: -1,
+        // `visibility: hidden` still keeps the subtree in the render tree, so a
+        // database pane with a Monaco editor and a result grid kept paying for
+        // paint and style work on every host-tab switch (very noticeable on
+        // Windows). `content-visibility: hidden` skips that work entirely while
+        // keeping React state, drafts and scroll positions alive.
+        contentVisibility: 'hidden',
+        contain: 'strict',
+        ...inset,
+      };
 }
 
 /**

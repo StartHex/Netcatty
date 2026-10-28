@@ -172,6 +172,17 @@ export async function saveDatabaseTextFile(
   return { ok: true, path: response.path, canceled: response.canceled };
 }
 
+/** Saves a binary export (xlsx) through the native save dialog. */
+export async function saveDatabaseBinaryFile(
+  defaultName: string,
+  base64: string,
+): Promise<{ ok: true; path?: string; canceled?: boolean } | { ok: false; error: string }> {
+  const response = await bridge()?.dbSaveBinaryFile?.({ defaultName, base64 });
+  if (!response) return { ok: false, error: 'No response from database bridge' };
+  if (response.ok !== true) return { ok: false, error: response.error ?? 'write-failed' };
+  return { ok: true, path: response.path, canceled: response.canceled };
+}
+
 /** Driver classes declared by a JDBC jar (META-INF/services/java.sql.Driver). */
 export async function readJdbcDriverClasses(jarPath: string): Promise<string[]> {
   try {

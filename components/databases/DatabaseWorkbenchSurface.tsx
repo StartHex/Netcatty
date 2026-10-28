@@ -5,12 +5,17 @@
 
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
   Columns2,
+  Copy,
+  Search,
   ArrowUpDown,
   Bookmark,
   BookmarkPlus,
   ChevronDown,
   ChevronLeft,
+  ChevronUp,
   ChevronRight,
   Download,
   History,
@@ -39,7 +44,7 @@ import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { FixedSizeVirtualList } from '../ui/FixedSizeVirtualList';
+import { FixedSizeVirtualList, type FixedSizeVirtualListHandle } from '../ui/FixedSizeVirtualList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { ScriptCodeEditor, type ScriptCodeEditorHandle } from '../scripts/ScriptCodeEditor';
@@ -57,8 +62,18 @@ import {
   suggestExportFileName,
 } from '../../domain/database/sqlResultExport';
 import { classifySqlSafety } from '../../domain/database/sqlSafety';
+import { statementAtLine } from '../../domain/database/sqlStatements';
+import {
+  columnsToTsv,
+  findResultMatches,
+  sortResultRows,
+  type ResultSort,
+} from '../../domain/database/resultGrid';
+import { xlsxBase64 } from '../../domain/database/xlsx';
+import { copyTextWithFeedback } from '../curl/clipboard';
+import { useClipboardBackend } from '../../application/state/useClipboardBackend';
 import { filterTables } from '../../domain/database/tableFilter';
-import { readSqlFile } from '@/infrastructure/services/databaseService.ts';
+import { readSqlFile, saveDatabaseBinaryFile } from '@/infrastructure/services/databaseService.ts';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { toast } from '../ui/toast';
@@ -153,6 +168,12 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
   const [saveQueryOpen, setSaveQueryOpen] = useState(false);
   const [saveQueryName, setSaveQueryName] = useState('');
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState<ResultSort | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedColumns, setSelectedColumns] = useState<number[]>([]);
+  const [matchCursor, setMatchCursor] = useState(0);
+  const [highlight, setHighlight] = useState<{ sourceIndex: number; columnIndex: number } | null>(null);
+  const { writeClipboardText } = useClipboardBackend();
 
   const executeSql = useCallback(
     (sqlOverride: string | undefined) => {
@@ -163,30 +184,58 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
   );
 
   const runActiveQuery = useCallback(() => {
-    const selection = editorRef.current?.getSelectionText()?.trim();
+    const editor = editorRef.current;
+    const selection = editor?.getSelectionText()?.trim();
     const hasSelection = Boolean(selection && selection.length > 0);
-    const sql = hasSelection ? selection! : tab.sql;
-    const trimmed = sql.trim();
-    if (!trimmed) return;
-    const safety = classifySqlSafety(trimmed);
+    // With a selection, run exactly that (it may hold several statements);
+    // otherwise run the statement under the caret instead of the whole script.
+    const statement = hasSelection
+      ? selection!
+      : statementAtLine(editor?.getValue() || tab.sql, editor?.getCursorLine() ?? 1) ||
+        (editor?.getCursorLineText() ?? '').trim();
+    const sql = (statement || tab.sql).trim();
+    if (!sql) return;
+    const safety = classifySqlSafety(sql);
     if (connection?.readOnly && safety.risk !== 'read') {
       toast.error(t('databases.workbench.readOnlyBlocked'));
       return;
     }
     if (safety.risk === 'destructive') {
-      setPendingRun({ sql: trimmed, reasons: safety.reasons });
+      setPendingRun({ sql, reasons: safety.reasons });
       return;
     }
-    executeSql(hasSelection ? selection : undefined);
-  }, [connection?.readOnly, tab.sql, executeSql, t]);
+    if (hasSelection) {
+      executeSql(sql);
+      return;
+    }
+    // Running just the caret statement must not replace the editor content, so
+    // pass it as the override rather than the whole document.
+    sqlHistory.record(tab.connectionId, sql);
+    void workbench.runQuery(tab.id, sql);
+  }, [connection?.readOnly, tab.connectionId, tab.id, tab.sql, executeSql, sqlHistory, t, workbench]);
 
   const downloadResult = useCallback(
-    (format: 'csv' | 'json' | 'sql') => {
+    async (format: 'csv' | 'json' | 'sql' | 'xlsx') => {
       const result = tab.result;
       if (!result) return;
       const dialect = SQL_DIALECTS[tab.kind] ?? 'postgresql';
       const tableMatch = /\bfrom\s+([\w."`]+)/i.exec(tab.sql);
       const tableName = tableMatch ? tableMatch[1].replace(/["`]/g, '') : 'result';
+
+      if (format === 'xlsx') {
+        const fileName = suggestExportFileName(tab.title || tableName, 'xlsx', Date.now());
+        const saved = await saveDatabaseBinaryFile(
+          fileName,
+          xlsxBase64({ name: tableName || 'Result', columns: result.columns, rows: result.rows }),
+        );
+        if (saved.ok === false) {
+          toast.error(t('databases.workbench.exportFailed', { error: saved.error }));
+          return;
+        }
+        if (!saved.canceled) toast.success(t('databases.workbench.exportSaved'));
+        return;
+      }
+
       const payload =
         format === 'csv'
           ? resultToCsv(result)
@@ -204,7 +253,7 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
       anchor.click();
       URL.revokeObjectURL(url);
     },
-    [tab],
+    [t, tab],
   );
 
   const openSqlFile = useCallback(async () => {
@@ -295,18 +344,108 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
   const allRows = useMemo(() => tab.result?.rows ?? [], [tab.result]);
   const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
   const pageIndex = Math.min(Math.max(0, page), totalPages - 1);
-  const pagedResult = useMemo(() => {
-    if (!tab.result) return null;
-    return {
-      ...tab.result,
-      rows: allRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
-      rowCount: allRows.length,
-    };
-  }, [tab.result, allRows, pageIndex, pageSize]);
+
+  // Sorting and search run over the whole fetched result, which is what makes
+  // both work across page boundaries.
+  const orderedSourceIndexes = useMemo(
+    () => sortResultRows(allRows, sort),
+    [allRows, sort],
+  );
+  const orderedRows = useMemo(
+    () => orderedSourceIndexes.map((sourceIndex) => ({ cells: allRows[sourceIndex] ?? [], sourceIndex })),
+    [allRows, orderedSourceIndexes],
+  );
+  const pagedRows = useMemo(
+    () => orderedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
+    [orderedRows, pageIndex, pageSize],
+  );
+  const matches = useMemo(
+    () => findResultMatches(allRows, selectedColumns, searchQuery),
+    [allRows, selectedColumns, searchQuery],
+  );
+  const activeMatch = matches.length > 0 ? matches[Math.min(matchCursor, matches.length - 1)] : null;
+  // Display position of each source row, so match jumps land on the right page
+  // even while a sort reorders the grid.
+  const positionBySource = useMemo(() => {
+    const positions = new Map<number, number>();
+    orderedSourceIndexes.forEach((sourceIndex, position) => positions.set(sourceIndex, position));
+    return positions;
+  }, [orderedSourceIndexes]);
 
   useEffect(() => {
     setPage(0);
   }, [tab.id, tab.result]);
+
+  // Sorting changes row order, so go back to the first page.
+  useEffect(() => {
+    setPage(0);
+  }, [sort]);
+
+  // Keep the cursor inside the match list when the query or scope changes.
+  useEffect(() => {
+    setMatchCursor(0);
+  }, [searchQuery, selectedColumns]);
+
+  // Follow the active match: switch to its page and highlight the cell.
+  useEffect(() => {
+    if (!activeMatch) {
+      setHighlight(null);
+      return;
+    }
+    setHighlight({ sourceIndex: activeMatch.rowIndex, columnIndex: activeMatch.columnIndex });
+    const position = positionBySource.get(activeMatch.rowIndex) ?? activeMatch.rowIndex;
+    setPage(Math.floor(position / pageSize));
+  }, [activeMatch, pageSize, positionBySource]);
+
+  const toggleSort = useCallback((columnIndex: number) => {
+    setSort((current) => {
+      if (!current || current.columnIndex !== columnIndex) return { columnIndex, direction: 'asc' };
+      if (current.direction === 'asc') return { columnIndex, direction: 'desc' };
+      return null;
+    });
+  }, []);
+
+  const toggleColumn = useCallback((columnIndex: number, additive: boolean) => {
+    setSelectedColumns((current) => {
+      if (!additive) return current.length === 1 && current[0] === columnIndex ? [] : [columnIndex];
+      return current.includes(columnIndex)
+        ? current.filter((entry) => entry !== columnIndex)
+        : [...current, columnIndex];
+    });
+  }, []);
+
+  const copySelectedColumns = useCallback(() => {
+    if (!tab.result) return;
+    const columns = tab.result.columns;
+    const targets = selectedColumns.length > 0 && selectedColumns.length < columns.length
+      ? selectedColumns
+      : columns.map((_, index) => index);
+    // Copy in the order the grid shows: sorted when a sort is active.
+    const rows = sort ? orderedSourceIndexes.map((index) => allRows[index] ?? []) : allRows;
+    const text = columnsToTsv(columns, [...rows], targets);
+    if (!text) return;
+    void copyTextWithFeedback(
+      writeClipboardText,
+      text,
+      t('databases.workbench.copiedRows', { count: String(rows.length) }),
+      t('curl.copyFailed'),
+    );
+  }, [allRows, orderedSourceIndexes, selectedColumns, sort, t, tab.result, writeClipboardText]);
+
+  const copyCell = useCallback(
+    (text: string) => {
+      void copyTextWithFeedback(writeClipboardText, text, t('databases.workbench.cellCopied'), t('curl.copyFailed'));
+    },
+    [t, writeClipboardText],
+  );
+
+  const goToMatch = useCallback(
+    (delta: number) => {
+      if (matches.length === 0) return;
+      setMatchCursor((current) => (current + delta + matches.length) % matches.length);
+    },
+    [matches.length],
+  );
 
   const [aiOpen, setAiOpen] = useState(false);
   const schemaText = useMemo(
@@ -524,7 +663,7 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground px-2 py-1">
             {t('databases.workbench.exportTitle')}
           </div>
-          {(['csv', 'json', 'sql'] as const).map((format) => (
+          {(['csv', 'json', 'sql', 'xlsx'] as const).map((format) => (
             <button
               key={format}
               type="button"
@@ -642,23 +781,119 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
           }}
           t={t}
         />
-      ) : pagedResult ? (
-        <ResultGrid
-          result={pagedResult}
-          columnWidths={widths}
-          onResizeColumn={(index, width) => {
-            const column = tab.result?.columns[index];
-            if (!column || !widthScope) return;
-            columnWidthStore.setWidth(widthScope, column.name, width);
-          }}
-          t={t}
-          editable={Boolean(tab.editMeta) && !connection?.readOnly}
-          rowOffset={pageIndex * pageSize}
-          onUpdateCell={(rowIndex, column, value) =>
-            workbench.updateCell(tab.id, rowIndex, column, value)
-          }
-          onDeleteRow={(rowIndex) => workbench.deleteRow(tab.id, rowIndex)}
-        />
+      ) : tab.result && tab.result.columns.length > 0 ? (
+        <>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 px-3 py-1.5 text-[11px]">
+            <div className="flex min-w-0 items-center gap-1 rounded border border-border/60 px-1.5">
+              <Search className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <input
+                className="h-5 min-w-0 flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/70"
+                style={{ width: 180 }}
+                value={searchQuery}
+                placeholder={
+                  selectedColumns.length > 0
+                    ? t('databases.workbench.searchSelectedHint', { count: String(selectedColumns.length) })
+                    : t('databases.workbench.searchPlaceholder')
+                }
+                aria-label={t('databases.workbench.searchPlaceholder')}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    goToMatch(event.shiftKey ? -1 : 1);
+                  } else if (event.key === 'Escape') {
+                    setSearchQuery('');
+                  }
+                }}
+              />
+              {searchQuery.trim() ? (
+                <>
+                  <span className="whitespace-nowrap tabular-nums text-muted-foreground">
+                    {matches.length > 0
+                      ? t('databases.workbench.searchPosition', {
+                          index: String(Math.min(matchCursor + 1, matches.length)),
+                          total: String(matches.length),
+                        })
+                      : t('databases.workbench.searchNoMatch')}
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-muted-foreground hover:bg-muted disabled:opacity-40"
+                    aria-label={t('databases.workbench.searchPrevious')}
+                    disabled={matches.length === 0}
+                    onClick={() => goToMatch(-1)}
+                  >
+                    <ChevronUp className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-muted-foreground hover:bg-muted disabled:opacity-40"
+                    aria-label={t('databases.workbench.searchNext')}
+                    disabled={matches.length === 0}
+                    onClick={() => goToMatch(1)}
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </>
+              ) : null}
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 gap-1 px-1.5 text-[11px]"
+              onClick={copySelectedColumns}
+              title={t('databases.workbench.copyColumnsHint')}
+            >
+              <Copy className="h-3 w-3" />
+              {selectedColumns.length > 0
+                ? t('databases.workbench.copySelectedColumns', { count: String(selectedColumns.length) })
+                : t('databases.workbench.copyAllColumns')}
+            </Button>
+            {selectedColumns.length > 0 ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-1.5 text-[11px]"
+                onClick={() => setSelectedColumns([])}
+              >
+                {t('databases.workbench.clearColumnSelection')}
+              </Button>
+            ) : null}
+            {sort ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 gap-1 px-1.5 text-[11px]"
+                onClick={() => setSort(null)}
+              >
+                {sort.direction === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                {t('databases.workbench.clearSort')}
+              </Button>
+            ) : null}
+          </div>
+          <ResultGrid
+            columns={tab.result.columns}
+            rows={pagedRows}
+            columnWidths={widths}
+            onResizeColumn={(index, width) => {
+              const column = tab.result?.columns[index];
+              if (!column || !widthScope) return;
+              columnWidthStore.setWidth(widthScope, column.name, width);
+            }}
+            t={t}
+            editable={Boolean(tab.editMeta) && !connection?.readOnly}
+            onUpdateCell={(rowIndex, column, value) =>
+              workbench.updateCell(tab.id, rowIndex, column, value)
+            }
+            onDeleteRow={(rowIndex) => workbench.deleteRow(tab.id, rowIndex)}
+            sort={sort}
+            onToggleSort={toggleSort}
+            selectedColumns={selectedColumns}
+            onSelectColumn={toggleColumn}
+            highlight={highlight}
+            onCopyCell={copyCell}
+          />
+        </>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
           <ArrowUpDown className="h-5 w-5 text-muted-foreground/60" />
@@ -1294,59 +1529,64 @@ const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onP
 };
 
 interface ResultGridProps {
-  result: DbQueryResult;
+  columns: DbQueryResult['columns'];
+  /** Rows for the current page, already ordered/sliced, with their source index. */
+  rows: readonly { cells: DbCellValue[]; sourceIndex: number }[];
   /** Resolved pixel width per rendered column (after manual overrides). */
   columnWidths: number[];
   t: ReturnType<typeof useI18n>['t'];
   /** In-place editing is only offered when the row has a usable primary key. */
   editable?: boolean;
-  /** Index of the first visible row inside the full result set. */
-  rowOffset?: number;
-  onUpdateCell?: (rowIndex: number, column: string, value: string | null) => Promise<boolean>;
-  onDeleteRow?: (rowIndex: number) => Promise<boolean>;
+  onUpdateCell?: (sourceIndex: number, column: string, value: string | null) => Promise<boolean>;
+  onDeleteRow?: (sourceIndex: number) => Promise<boolean>;
   /** Fired while dragging a header divider; width is already in pixels. */
   onResizeColumn?: (index: number, width: number) => void;
   onResizeCommit?: () => void;
+  /** Active sort column, applied to the whole result (not just this page). */
+  sort?: ResultSort | null;
+  onToggleSort?: (columnIndex: number) => void;
+  /** Columns picked for copy/export; clicking a header with a modifier toggles it. */
+  selectedColumns?: readonly number[];
+  onSelectColumn?: (columnIndex: number, additive: boolean) => void;
+  /** Cell the search jumped to, highlighted in place. */
+  highlight?: { sourceIndex: number; columnIndex: number } | null;
+  onCopyCell?: (text: string) => void;
 }
 
 const ACTION_COLUMN_WIDTH = 32;
 
 const ResultGrid: React.FC<ResultGridProps> = ({
-  result,
+  columns,
+  rows,
   columnWidths,
   t,
   editable = false,
-  rowOffset = 0,
   onUpdateCell,
   onDeleteRow,
   onResizeColumn,
   onResizeCommit,
+  sort,
+  onToggleSort,
+  selectedColumns = [],
+  onSelectColumn,
+  highlight,
+  onCopyCell,
 }) => {
-  const [editing, setEditing] = useState<{ row: number; cell: number; draft: string } | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<{ row: number } | null>(null);
+  const [editing, setEditing] = useState<{ sourceIndex: number; cell: number; draft: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ sourceIndex: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  const listRef = useRef<FixedSizeVirtualListHandle | null>(null);
 
-  if (result.columns.length === 0) {
-    const command = result.command || 'OK';
-    return (
-      <div
-        className="flex flex-1 flex-col items-center justify-center gap-2 text-xs"
-        data-testid="db-statement-summary"
-      >
-        <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          <span>{t('databases.workbench.statementSuccess', { command })}</span>
-        </div>
-        <div className="flex items-center gap-3 text-muted-foreground">
-          <span data-testid="db-statement-rows">
-            {t('databases.workbench.rowsAffected', { count: String(result.rowCount ?? 0) })}
-          </span>
-          {typeof result.durationMs === 'number' ? (
-            <span>{t('databases.workbench.elapsed', { ms: String(result.durationMs) })}</span>
-          ) : null}
-        </div>
-      </div>
-    );
+  // Jump to the highlighted row whenever the search moves to a new page.
+  useEffect(() => {
+    if (!highlight) return;
+    const index = rows.findIndex((entry) => entry.sourceIndex === highlight.sourceIndex);
+    if (index < 0) return;
+    listRef.current?.scrollToIndex(index, 'center');
+  }, [highlight, rows]);
+
+  if (columns.length === 0) {
+    return null;
   }
 
   const template = [editable ? `${ACTION_COLUMN_WIDTH}px` : null, ...columnWidths.map((entry) => `${Math.round(entry)}px`)]
@@ -1359,8 +1599,9 @@ const ResultGrid: React.FC<ResultGridProps> = ({
       setEditing(null);
       return;
     }
-    const column = result.columns[editing.cell];
-    const original = result.rows[editing.row]?.[editing.cell];
+    const column = columns[editing.cell];
+    const row = rows.find((entry) => entry.sourceIndex === editing.sourceIndex);
+    const original = row?.cells[editing.cell];
     const draft = editing.draft;
     const next = draft === '' && (original === null || original === undefined) ? null : draft;
     if (String(original ?? '') === String(next ?? '')) {
@@ -1368,7 +1609,7 @@ const ResultGrid: React.FC<ResultGridProps> = ({
       return;
     }
     setSaving(true);
-    const applied = await onUpdateCell(rowOffset + editing.row, column.name, next);
+    const applied = await onUpdateCell(editing.sourceIndex, column.name, next);
     setSaving(false);
     setEditing(null);
     if (applied) toast.success(t('databases.workbench.rowUpdated'));
@@ -1381,7 +1622,7 @@ const ResultGrid: React.FC<ResultGridProps> = ({
       return;
     }
     setSaving(true);
-    const applied = await onDeleteRow(rowOffset + pendingDelete.row);
+    const applied = await onDeleteRow(pendingDelete.sourceIndex);
     setSaving(false);
     setPendingDelete(null);
     if (applied) toast.success(t('databases.workbench.rowDeleted'));
@@ -1400,44 +1641,78 @@ const ResultGrid: React.FC<ResultGridProps> = ({
             style={{ gridTemplateColumns: template }}
           >
             {editable ? <div className="px-1 py-1.5" /> : null}
-            {result.columns.map((column, index) => (
-              <div
-                key={`${column.name}-${index}`}
-                className="group/head relative truncate px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-                title={column.type ? `${column.name} · ${column.type}` : column.name}
-              >
-                {column.name}
-                {onResizeColumn ? (
-                  <span
-                    role="separator"
-                    aria-orientation="vertical"
-                    className="absolute -right-0.5 top-0 h-full w-1.5 cursor-col-resize select-none bg-transparent hover:bg-primary/40"
-                    onPointerDown={(event) => {
-                      event.preventDefault();
-                      const startX = event.clientX;
-                      const startWidth = columnWidths[index] ?? MIN_COLUMN_WIDTH;
-                      const target = event.currentTarget;
-                      target.setPointerCapture(event.pointerId);
-                      const move = (moveEvent: PointerEvent) => {
-                        onResizeColumn(index, startWidth + (moveEvent.clientX - startX));
-                      };
-                      const up = () => {
-                        target.removeEventListener('pointermove', move);
-                        target.removeEventListener('pointerup', up);
-                        target.removeEventListener('pointercancel', up);
-                        onResizeCommit?.();
-                      };
-                      target.addEventListener('pointermove', move);
-                      target.addEventListener('pointerup', up);
-                      target.addEventListener('pointercancel', up);
+            {columns.map((column, index) => {
+              const isSorted = sort?.columnIndex === index;
+              const selected = selectedColumns.includes(index);
+              return (
+                <div
+                  key={`${column.name}-${index}`}
+                  className={cn(
+                    'group/head relative flex min-w-0 items-center gap-1 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide',
+                    selected ? 'bg-primary/10 text-foreground' : 'text-muted-foreground',
+                  )}
+                  title={
+                    column.type
+                      ? `${column.name} · ${column.type}`
+                      : `${column.name} — ${t('databases.workbench.sortHint')}`
+                  }
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-1 rounded px-0.5 text-left uppercase tracking-wide hover:text-foreground"
+                    aria-label={t('databases.workbench.sortByColumn', { column: column.name })}
+                    onClick={(event) => {
+                      if (event.metaKey || event.ctrlKey || event.shiftKey) {
+                        event.preventDefault();
+                        onSelectColumn?.(index, true);
+                        return;
+                      }
+                      onToggleSort?.(index);
                     }}
-                  />
-                ) : null}
-              </div>
-            ))}
+                  >
+                    <span className="truncate">{column.name}</span>
+                    {isSorted ? (
+                      sort?.direction === 'desc' ? (
+                        <ArrowDown className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                      ) : (
+                        <ArrowUp className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                      )
+                    ) : null}
+                    {selected ? <CheckCircle2 className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" /> : null}
+                  </button>
+                  {onResizeColumn ? (
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      className="absolute -right-0.5 top-0 h-full w-1.5 cursor-col-resize select-none bg-transparent hover:bg-primary/40"
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        const startX = event.clientX;
+                        const startWidth = columnWidths[index] ?? MIN_COLUMN_WIDTH;
+                        const target = event.currentTarget;
+                        target.setPointerCapture(event.pointerId);
+                        const move = (moveEvent: PointerEvent) => {
+                          onResizeColumn(index, startWidth + (moveEvent.clientX - startX));
+                        };
+                        const up = () => {
+                          target.removeEventListener('pointermove', move);
+                          target.removeEventListener('pointerup', up);
+                          target.removeEventListener('pointercancel', up);
+                          onResizeCommit?.();
+                        };
+                        target.addEventListener('pointermove', move);
+                        target.addEventListener('pointerup', up);
+                        target.addEventListener('pointercancel', up);
+                      }}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
           <FixedSizeVirtualList
-            items={result.rows}
+            ref={listRef}
+            items={rows as { cells: DbCellValue[]; sourceIndex: number }[]}
             itemHeight={28}
             className="min-h-0 flex-1"
             getItemKey={(_row, index) => String(index)}
@@ -1457,14 +1732,17 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                       className="h-5 w-5 p-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                       aria-label={t('databases.workbench.deleteRow')}
                       disabled={saving}
-                      onClick={() => setPendingDelete({ row: rowIndex })}
+                      onClick={() => setPendingDelete({ sourceIndex: row.sourceIndex })}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
                 ) : null}
-                {row.map((value, cellIndex) => {
-                  const isEditing = editing?.row === rowIndex && editing?.cell === cellIndex;
+                {row.cells.map((value, cellIndex) => {
+                  const isEditing =
+                    editing?.sourceIndex === row.sourceIndex && editing?.cell === cellIndex;
+                  const isMatch =
+                    highlight?.sourceIndex === row.sourceIndex && highlight?.columnIndex === cellIndex;
                   if (isEditing) {
                     return (
                       <input
@@ -1495,17 +1773,17 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                         value !== null && 'cursor-pointer hover:bg-secondary/40',
                         value === null && 'italic text-muted-foreground/70',
                         typeof value === 'number' && 'text-right tabular-nums',
+                        selectedColumns.includes(cellIndex) && 'bg-primary/5',
+                        isMatch && 'bg-amber-400/30 ring-1 ring-inset ring-amber-500/70',
                       )}
                       title={cellText(value)}
                       onDoubleClick={() => {
                         if (!editable || !onUpdateCell || saving) return;
-                        setEditing({ row: rowIndex, cell: cellIndex, draft: cellText(value) });
+                        setEditing({ sourceIndex: row.sourceIndex, cell: cellIndex, draft: cellText(value) });
                       }}
                       onClick={() => {
                         if (value === null) return;
-                        void navigator.clipboard?.writeText(String(value)).then(() => {
-                          toast.success(t('databases.workbench.cellCopied'));
-                        });
+                        onCopyCell?.(String(value));
                       }}
                     >
                       {cellText(value)}

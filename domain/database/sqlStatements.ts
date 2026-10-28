@@ -189,3 +189,23 @@ export function splitSqlStatements(input: string): SqlStatement[] {
   push(input.length);
   return statements;
 }
+
+/**
+ * Statement that contains a caret line (1-based), or the trimmed line itself
+ * when the caret sits in whitespace between statements. This is what Cmd/Ctrl+Enter
+ * runs when there is no selection: the statement under the cursor, not the whole
+ * script.
+ */
+export function statementAtLine(input: string, line: number): string {
+  const target = Number.isFinite(line) && line > 0 ? Math.floor(line) : 1;
+  const statements = splitSqlStatements(input);
+  for (const statement of statements) {
+    const lineCount = statement.sql.split('\n').length;
+    if (target >= statement.startLine && target < statement.startLine + lineCount) {
+      return statement.sql;
+    }
+  }
+  if (statements.length === 1) return statements[0].sql;
+  const lines = input.split('\n');
+  return (lines[target - 1] ?? '').trim();
+}

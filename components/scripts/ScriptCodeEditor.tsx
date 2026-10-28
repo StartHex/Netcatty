@@ -46,6 +46,12 @@ export interface ScriptCodeEditorHandle {
   focus: () => void;
   /** Return the selected text, or an empty string when nothing is selected. */
   getSelectionText: () => string;
+  /** Full document text, used to resolve the statement around the caret. */
+  getValue: () => string;
+  /** 1-based line the caret sits on; 1 when the editor is not ready. */
+  getCursorLine: () => number;
+  /** Text of the caret line, used as a fallback when splitting finds nothing. */
+  getCursorLineText: () => string;
 }
 
 export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptCodeEditorProps>(({
@@ -83,6 +89,18 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
       const model = editor?.getModel();
       if (!editor || !selection || !model || selection.isEmpty()) return '';
       return model.getValueInRange(selection);
+    },
+    getValue: () => editorRef.current?.getModel()?.getValue() ?? '',
+    getCursorLine: () => {
+      const position = editorRef.current?.getPosition();
+      return position?.lineNumber ?? 1;
+    },
+    getCursorLineText: () => {
+      const editor = editorRef.current;
+      const model = editor?.getModel();
+      const line = editor?.getPosition()?.lineNumber;
+      if (!model || !line) return '';
+      return model.getLineContent(line);
     },
   }), []);
 
