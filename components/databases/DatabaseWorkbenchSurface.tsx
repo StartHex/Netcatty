@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  Check,
   Columns2,
   Search,
   ArrowUpDown,
@@ -896,6 +897,7 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
             onCopyCell={copyCell}
             onCopyColumns={copyColumns}
             onCopyRow={copyRow}
+            onClearSelection={() => setSelectedColumns([])}
           />
         </>
       ) : (
@@ -1559,6 +1561,8 @@ interface ResultGridProps {
   onCopyColumns?: (columnIndexes: number[]) => void;
   /** Copy one row (every column) through the context menu. */
   onCopyRow?: (sourceIndex: number) => void;
+  /** Drops the column selection from the context menu. */
+  onClearSelection?: () => void;
 }
 
 const ACTION_COLUMN_WIDTH = 32;
@@ -1581,6 +1585,7 @@ const ResultGrid: React.FC<ResultGridProps> = ({
   onCopyCell,
   onCopyColumns,
   onCopyRow,
+  onClearSelection,
 }) => {
   const [editing, setEditing] = useState<{ sourceIndex: number; cell: number; draft: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ sourceIndex: number } | null>(null);
@@ -1707,11 +1712,36 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                   }
                   onContextMenu={(event) => {
                     event.preventDefault();
-                    // Right-clicking a header picks that column so "Copy" has a target.
-                    if (!selectedColumns.includes(index)) onSelectColumn?.(index, false);
                     setMenu({ x: event.clientX, y: event.clientY, columnIndex: index, sourceIndex: null });
                   }}
                 >
+                  <button
+                    type="button"
+                    aria-label={
+                      selected
+                        ? t('databases.workbench.deselectColumn', { column: column.name })
+                        : t('databases.workbench.selectColumn', { column: column.name })
+                    }
+                    aria-pressed={selected}
+                    title={
+                      selected
+                        ? t('databases.workbench.deselectColumn', { column: column.name })
+                        : t('databases.workbench.selectColumn', { column: column.name })
+                    }
+                    className={cn(
+                      'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border',
+                      selected
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border/70 text-transparent hover:border-primary/70 group-hover/head:opacity-100 opacity-0',
+                    )}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onSelectColumn?.(index, true);
+                    }}
+                  >
+                    <Check className="h-2.5 w-2.5" aria-hidden="true" />
+                  </button>
                   <button
                     type="button"
                     className="flex min-w-0 flex-1 items-center gap-1 rounded px-0.5 text-left uppercase tracking-wide hover:text-foreground"
@@ -1900,6 +1930,19 @@ const ResultGrid: React.FC<ResultGridProps> = ({
               ? t('databases.workbench.contextCopyColumns', { count: String(selectedColumns.length) })
               : t('databases.workbench.contextCopyColumn')}
           </button>
+          {menu.sourceIndex === null && menu.columnIndex !== null ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center rounded px-2 py-1.5 text-left hover:bg-secondary"
+              onClick={() => {
+                if (menu.columnIndex !== null) onCopyColumns?.([menu.columnIndex]);
+                setMenu(null);
+              }}
+            >
+              {t('databases.workbench.contextCopyThisColumn')}
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"
@@ -1908,6 +1951,37 @@ const ResultGrid: React.FC<ResultGridProps> = ({
           >
             {t('databases.workbench.contextCopyAll')}
           </button>
+          {menu.columnIndex !== null ? (
+            <>
+              <div className="my-1 h-px bg-border/70" />
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center rounded px-2 py-1.5 text-left hover:bg-secondary"
+                onClick={() => {
+                  if (menu.columnIndex !== null) onSelectColumn?.(menu.columnIndex, true);
+                  setMenu(null);
+                }}
+              >
+                {selectedColumns.includes(menu.columnIndex)
+                  ? t('databases.workbench.deselectMenu')
+                  : t('databases.workbench.selectMenu')}
+              </button>
+              {selectedColumns.length > 0 ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center rounded px-2 py-1.5 text-left hover:bg-secondary"
+                  onClick={() => {
+                    onClearSelection?.();
+                    setMenu(null);
+                  }}
+                >
+                  {t('databases.workbench.clearColumnSelection')}
+                </button>
+              ) : null}
+            </>
+          ) : null}
         </div>,
         document.body,
       ) : null}

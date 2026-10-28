@@ -1,6 +1,6 @@
 import Editor, { loader, type Monaco, type OnMount, useMonaco } from '@monaco-editor/react';
 import { Loader2 } from 'lucide-react';
-import React, { useCallback, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useClipboardBackend } from '@/application/state/useClipboardBackend';
 import {
   buildMonacoPasteEdits,
@@ -74,6 +74,9 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
   const { readClipboardText: readClipboardTextFromBridge } = useClipboardBackend();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const completionDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const layoutDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  /** X offset where Monaco renders text (gutter width + padding). */
+  const [contentLeft, setContentLeft] = useState<number | null>(null);
   const onSubmitShortcutRef = useRef(onSubmitShortcut);
   onSubmitShortcutRef.current = onSubmitShortcut;
   const sqlCompletionRef = useRef(sqlCompletion);
@@ -107,6 +110,8 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
   useEffect(() => () => {
     completionDisposableRef.current?.dispose();
     completionDisposableRef.current = null;
+    layoutDisposableRef.current?.dispose();
+    layoutDisposableRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -180,7 +185,16 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
         });
       },
     );
-    requestAnimationFrame(() => editor.layout());
+    // Track the content origin so the placeholder sits exactly where text starts,
+    // whatever the line-number gutter width turns out to be.
+    const syncContentLeft = () => setContentLeft(editor.getLayoutInfo().contentLeft);
+    syncContentLeft();
+    layoutDisposableRef.current?.dispose();
+    layoutDisposableRef.current = editor.onDidLayoutChange(syncContentLeft);
+    requestAnimationFrame(() => {
+      editor.layout();
+      syncContentLeft();
+    });
     if (autoFocus) editor.focus();
   }, [autoFocus, language, onSubmitShortcut]);
 
@@ -222,7 +236,8 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
       {placeholder && !value ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute left-[52px] top-2 z-10 font-mono text-[13px] text-muted-foreground"
+          className="pointer-events-none absolute z-10 font-mono text-[13px] leading-[19px] text-muted-foreground"
+          style={{ left: contentLeft ?? 52, top: 8 }}
         >
           {placeholder}
         </span>

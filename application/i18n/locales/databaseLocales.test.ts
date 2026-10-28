@@ -36,6 +36,8 @@ const PLACEHOLDER_KEYS: Record<string, string[]> = {
   "databases.workbench.searchSelectedHint": ["{count}"],
   "databases.workbench.searchPosition": ["{index}", "{total}"],
   "databases.workbench.copySelectedColumns": ["{count}"],
+  "databases.workbench.selectColumn": ["{column}"],
+  "databases.workbench.deselectColumn": ["{column}"],
   "databases.workbench.copiedRows": ["{count}"],
   "databases.workbench.exportFailed": ["{error}"],
 };
