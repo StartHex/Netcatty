@@ -23,6 +23,7 @@ export const ruDatabaseMessages: Messages = {
   'databases.schema.loading': 'Загрузка таблиц…',
   'databases.schema.empty': 'Нет таблиц',
   'databases.schema.searchPlaceholder': 'Поиск таблиц…',
+  'databases.searchClear': 'Очистить поиск',
   'databases.schema.noMatches': 'Нет подходящих таблиц',
   'databases.structure.searchPlaceholder': 'Поиск столбцов…',
   'databases.schema.preview': 'Просмотр строк',

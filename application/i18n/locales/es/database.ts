@@ -23,6 +23,7 @@ export const esDatabaseMessages: Messages = {
   'databases.schema.loading': 'Cargando tablas…',
   'databases.schema.empty': 'Sin tablas',
   'databases.schema.searchPlaceholder': 'Buscar tablas…',
+  'databases.searchClear': 'Borrar búsqueda',
   'databases.schema.noMatches': 'No hay tablas coincidentes',
   'databases.structure.searchPlaceholder': 'Buscar columnas…',
   'databases.schema.preview': 'Ver filas',

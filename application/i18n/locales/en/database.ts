@@ -23,6 +23,7 @@ export const enDatabaseMessages: Messages = {
   'databases.schema.loading': 'Loading tables…',
   'databases.schema.empty': 'No tables',
   'databases.schema.searchPlaceholder': 'Search tables…',
+  'databases.searchClear': 'Clear search',
   'databases.schema.noMatches': 'No matching tables',
   'databases.structure.searchPlaceholder': 'Search columns…',
   'databases.schema.preview': 'Preview rows',

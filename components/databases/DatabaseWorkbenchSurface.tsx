@@ -821,6 +821,20 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
                   }
                 }}
               />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  aria-label={t('databases.searchClear')}
+                  title={t('databases.searchClear')}
+                  className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setMatchCursor(0);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              ) : null}
               {searchQuery.trim() ? (
                 <>
                   <span className="whitespace-nowrap tabular-nums text-muted-foreground">
@@ -1277,6 +1291,36 @@ export const DatabaseWorkbenchSurface: React.FC<DatabaseWorkbenchSurfaceProps> =
 };
 
 
+/** Text input with an inline clear button, used by the schema and structure filters. */
+const ClearableInput: React.FC<{
+  className?: string;
+  placeholder: string;
+  value: string;
+  clearLabel: string;
+  onChange: (value: string) => void;
+}> = ({ className, placeholder, value, clearLabel, onChange }) => (
+  <div className="relative">
+    <Input
+      className={cn(className, value ? 'pr-7' : undefined)}
+      placeholder={placeholder}
+      value={value}
+      aria-label={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+    />
+    {value ? (
+      <button
+        type="button"
+        aria-label={clearLabel}
+        title={clearLabel}
+        className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={() => onChange('')}
+      >
+        <X className="h-3 w-3" />
+      </button>
+    ) : null}
+  </div>
+);
+
 const ROW_LIMIT_PRESETS = [100, 500, 1000, 2000, 5000];
 
 /**
@@ -1398,12 +1442,12 @@ const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, width, onRefresh, onPrev
         </Tooltip>
       </div>
       <div className="shrink-0 px-1 pt-1">
-        <Input
+        <ClearableInput
           className="h-6 text-[11px]"
           placeholder={t('databases.schema.searchPlaceholder')}
           value={tableQuery}
-          aria-label={t('databases.schema.searchPlaceholder')}
-          onChange={(event) => setTableQuery(event.target.value)}
+          clearLabel={t('databases.searchClear')}
+          onChange={setTableQuery}
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1">
@@ -1488,13 +1532,15 @@ const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onP
         <span className="text-[11px] text-muted-foreground">
           {t('databases.structure.title')}
         </span>
-        <Input
-          className="ml-2 h-6 w-40 text-[11px]"
-          placeholder={t('databases.structure.searchPlaceholder')}
-          value={columnQuery}
-          aria-label={t('databases.structure.searchPlaceholder')}
-          onChange={(event) => setColumnQuery(event.target.value)}
-        />
+        <div className="ml-2 w-40">
+          <ClearableInput
+            className="h-6 text-[11px]"
+            placeholder={t('databases.structure.searchPlaceholder')}
+            value={columnQuery}
+            clearLabel={t('databases.searchClear')}
+            onChange={setColumnQuery}
+          />
+        </div>
         <div className="ml-auto flex items-center gap-1">
           <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={onPreview}>
             <Play className="mr-1 h-3 w-3" />

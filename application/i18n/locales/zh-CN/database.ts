@@ -23,6 +23,7 @@ export const zhCNDatabaseMessages: Messages = {
   'databases.schema.loading': '正在加载表…',
   'databases.schema.empty': '没有表',
   'databases.schema.searchPlaceholder': '搜索表…',
+  'databases.searchClear': '清空搜索',
   'databases.schema.noMatches': '没有匹配的表',
   'databases.structure.searchPlaceholder': '搜索列…',
   'databases.schema.preview': '预览数据',

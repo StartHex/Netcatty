@@ -23,6 +23,7 @@ export const zhTNDatabaseMessages: Messages = {
   'databases.schema.loading': '正在載入表…',
   'databases.schema.empty': '沒有表',
   'databases.schema.searchPlaceholder': '搜尋資料表…',
+  'databases.searchClear': '清除搜尋',
   'databases.schema.noMatches': '沒有符合的資料表',
   'databases.structure.searchPlaceholder': '搜尋欄位…',
   'databases.schema.preview': '預覽資料',
