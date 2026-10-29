@@ -688,6 +688,29 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
               </div>
 
 
+
+
+
+              <div className="grid gap-2">
+                <Label>{t('databases.form.sslMode')}</Label>
+                <Select value={form.sslMode} onValueChange={(value) => update('sslMode', value as DatabaseSslMode)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SSL_MODES.map((mode) => (
+                      <SelectItem key={mode} value={mode}>
+                        {t(`databases.sslMode.${mode}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+
+          {!isSqlite ? (
+            <>
               {supportsEncoding ? (
                 <div className="grid gap-2">
                   <Label htmlFor="db-encoding">{t('databases.form.encoding')}</Label>
@@ -710,7 +733,6 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                   <p className="text-xs text-muted-foreground">{t('databases.form.encodingHint')}</p>
                 </div>
               ) : null}
-
               <div className="flex items-start justify-between gap-3 rounded-md border border-border/50 px-3 py-2">
                 <div className="space-y-0.5">
                   <p className="text-sm font-medium">{t('databases.form.readOnly')}</p>
@@ -721,7 +743,6 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                   onCheckedChange={(checked) => update('readOnly', checked)}
                 />
               </div>
-
               <div className="grid gap-2">
                 <Label>{t('databases.form.sshHost')}</Label>
                 <Select
@@ -742,24 +763,8 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                 </Select>
                 <p className="text-xs text-muted-foreground">{t('databases.form.sshHostHint')}</p>
               </div>
-
-              <div className="grid gap-2">
-                <Label>{t('databases.form.sslMode')}</Label>
-                <Select value={form.sslMode} onValueChange={(value) => update('sslMode', value as DatabaseSslMode)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SSL_MODES.map((mode) => (
-                      <SelectItem key={mode} value={mode}>
-                        {t(`databases.sslMode.${mode}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </>
-          )}
+          ) : null}
 
           {!isSqlite ? (
             <div className="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-2">
