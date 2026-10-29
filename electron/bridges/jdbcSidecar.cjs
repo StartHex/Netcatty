@@ -8,6 +8,7 @@
  */
 
 const path = require("node:path");
+const os = require("node:os");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
 const { resolveJava } = require("./javaRuntime.cjs");
@@ -133,10 +134,18 @@ class JdbcSidecar {
         error: "JDBC 支撑包未安装（缺少 netcatty-jdbc-sidecar.jar）。",
       };
     }
-    this.child = spawn(this.java.path, ["-jar", jar], {
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
+    // The JVM is an opaque black box: keep a crash report on disk and stop
+    // mis-decoding non-UTF8 driver messages.
+    const errorFile = path.join(os.tmpdir(), `nc-jdbc-hs_err_${process.pid}_%p.log`);
+    this.child = spawn(
+      this.java.path,
+      ["-Dfile.encoding=UTF-8", `-XX:ErrorFile=${errorFile}`, "-jar", jar],
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+      },
+    );
+    this.errorFilePattern = errorFile;
     this.child.stdout.setEncoding("utf8");
     this.child.stderr.setEncoding("utf8");
     this.child.stdout.on("data", (chunk) => this.onData(chunk));
@@ -146,7 +155,7 @@ class JdbcSidecar {
       this.stderrTail = `${this.stderrTail || ""}${chunk}`.slice(-2000);
       if (process.env.NETCATTY_DEBUG_JDBC) process.stderr.write(`[jdbc] ${chunk}`);
     });
-    this.child.on("exit", (code) => this.onExit(code));
+    this.child.on("exit", (code, signal) => this.onExit(code, signal));
     return new Promise((resolve) => {
       this.readyResolve = resolve;
       setTimeout(() => resolve({ ok: false, code: "sidecar-timeout", error: "JDBC 进程启动超时。" }), 15000);
@@ -203,11 +212,16 @@ class JdbcSidecar {
     });
   }
 
-  onExit(code) {
+  onExit(code, signal) {
+    this.crashSignal = signal || null;
+    if (typeof this.options.onExit === "function") {
+      try { this.options.onExit({ code, signal }); } catch { /* ignore */ }
+    }
     const detail = (this.stderrTail || "").trim();
+    const cause = signal ? `signal ${signal}` : `code ${code}`;
     const message = detail
-      ? `JDBC 进程已退出 (code ${code})：${detail.split(/\r?\n/).slice(-3).join(" ")}`
-      : `JDBC 进程已退出 (code ${code})`;
+      ? `JDBC 进程已退出 (${cause})：${detail.split(/\r?\n/).slice(-3).join(" ")}`
+      : `JDBC 进程已退出 (${cause})`;
     const error = {
       ok: false,
       error: { message, code: "sidecar-exit" },

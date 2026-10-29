@@ -1668,6 +1668,9 @@ interface ResultGridProps {
 
 const ACTION_COLUMN_WIDTH = 32;
 const ROW_NUMBER_WIDTH = 44;
+const ROW_NUMBER_ITEM_HEIGHT = 28;
+// The gutter mirrors the list viewport; render a generous window and clip it.
+const ROW_NUMBER_WINDOW = 60;
 
 const ResultGrid: React.FC<ResultGridProps> = ({
   columns,
@@ -1693,6 +1696,7 @@ const ResultGrid: React.FC<ResultGridProps> = ({
   const [editing, setEditing] = useState<{ sourceIndex: number; cell: number; draft: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ sourceIndex: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [listScrollTop, setListScrollTop] = useState(0);
   const [menu, setMenu] = useState<
     { x: number; y: number; columnIndex: number | null; sourceIndex: number | null } | null
   >(null);
@@ -1794,14 +1798,14 @@ const ResultGrid: React.FC<ResultGridProps> = ({
 
   return (
     <>
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-background [&::-webkit-scrollbar-thumb]:bg-clip-padding [&::-webkit-scrollbar-track]:bg-transparent">
         <div
           className="flex min-h-0 flex-1 flex-col"
           style={{ minWidth: '100%', width: width > 0 ? `${width}px` : undefined }}
         >
           <div
-            className="sticky top-0 z-10 grid shrink-0 border-b border-border/60 bg-secondary/60"
+            className="sticky top-0 z-10 grid h-7 shrink-0 border-b border-border/60 bg-secondary/60"
             style={{ gridTemplateColumns: template }}
           >
             <div
@@ -1914,7 +1918,8 @@ const ResultGrid: React.FC<ResultGridProps> = ({
           <FixedSizeVirtualList
             ref={listRef}
             items={rows as { cells: DbCellValue[]; sourceIndex: number }[]}
-            itemHeight={28}
+            itemHeight={ROW_NUMBER_ITEM_HEIGHT}
+            onScroll={setListScrollTop}
             className="min-h-0 flex-1"
             getItemKey={(_row, index) => String(index)}
             renderItem={(row, rowIndex) => (
@@ -2025,6 +2030,28 @@ const ResultGrid: React.FC<ResultGridProps> = ({
             )}
           />
         </div>
+        </div>
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-11 border-r border-border/60 bg-background">
+          <div className="h-7 border-b border-border/60 bg-secondary/60" />
+          <div className="relative h-[calc(100%-1.75rem)] overflow-hidden">
+            {Array.from({ length: ROW_NUMBER_WINDOW }, (_unused, offset) => {
+              const visibleIndex = Math.floor(listScrollTop / ROW_NUMBER_ITEM_HEIGHT) + offset;
+              if (visibleIndex < 0 || visibleIndex >= rows.length) return null;
+              return (
+                <div
+                  key={visibleIndex}
+                  className="absolute left-0 right-0 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/60"
+                  style={{
+                    top: visibleIndex * ROW_NUMBER_ITEM_HEIGHT - listScrollTop,
+                    height: ROW_NUMBER_ITEM_HEIGHT,
+                    lineHeight: `${ROW_NUMBER_ITEM_HEIGHT}px`,
+                  }}
+                >
+                  {rowNumberStart + visibleIndex + 1}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
       <Dialog open={Boolean(preview)} onOpenChange={(open) => { if (!open) setPreview(null); }}>

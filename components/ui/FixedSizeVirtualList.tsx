@@ -24,6 +24,8 @@ interface FixedSizeVirtualListProps<T> {
   overscan?: number;
   getItemKey: (item: T, index: number) => string;
   renderItem: (item: T, index: number) => React.ReactNode;
+  /** Fired with the container scrollTop so callers can mirror the viewport. */
+  onScroll?: (scrollTop: number) => void;
 }
 
 function FixedSizeVirtualListInner<T>(
@@ -35,6 +37,7 @@ function FixedSizeVirtualListInner<T>(
     overscan = DEFAULT_OVERSCAN,
     getItemKey,
     renderItem,
+    onScroll,
   }: FixedSizeVirtualListProps<T>,
   ref: React.ForwardedRef<FixedSizeVirtualListHandle>,
 ) {
@@ -103,12 +106,14 @@ function FixedSizeVirtualListInner<T>(
         container.scrollTop = itemBottom - container.clientHeight;
       }
       setScrollTop(container.scrollTop);
+      onScroll?.(container.scrollTop);
     },
-  }), [itemHeight, items.length]);
+  }), [itemHeight, items.length, onScroll]);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(event.currentTarget.scrollTop);
-  }, []);
+    onScroll?.(event.currentTarget.scrollTop);
+  }, [onScroll]);
 
   return (
     <div

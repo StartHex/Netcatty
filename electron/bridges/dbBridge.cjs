@@ -715,9 +715,14 @@ function createSqliteSession(target) {
 function createJdbcSession(target) {
   const { JdbcSidecar } = require("./jdbcSidecar.cjs");
   const { listJavaCandidates } = require("./javaRuntime.cjs");
-  let sidecar = new JdbcSidecar({ javaPath: target.javaPath });
-  const connId = "conn-1";
   let connecting = null;
+  // A JVM crash used to leave `connecting` resolved, so every later query
+  // reported sidecar-exit without ever restarting the sidecar.
+  let sidecar = new JdbcSidecar({
+    javaPath: target.javaPath,
+    onExit: () => { connecting = null; },
+  });
+  const connId = "conn-1";
   // x86_64-only driver libraries cannot load into an arm64 JVM. Remember which
   // runtime worked (or failed) so retries do not reopen a doomed process.
   const rejectedJava = new Set();
@@ -793,6 +798,17 @@ function createJdbcSession(target) {
     }
   };
 
+  const requestWithRestart = async (method, params) => {
+    await ensure();
+    let response = await sidecar.request(method, params);
+    if (!response.ok && response.error?.code === "sidecar-exit") {
+      connecting = null;
+      await ensure();
+      response = await sidecar.request(method, params);
+    }
+    return response;
+  };
+
   const ensure = async () => {
     if (!connecting) {
       connecting = (async () => connectWithFallback())();
@@ -812,8 +828,7 @@ function createJdbcSession(target) {
       return version ? `${product} ${version}` : product;
     },
     async query(sql, { maxRows }) {
-      await ensure();
-      const response = await sidecar.request("QUERY", { connId, sql, maxRows });
+      const response = await requestWithRestart("QUERY", { connId, sql, maxRows });
       if (!response.ok) {
         const error = new Error(response.error?.message || "JDBC query failed");
         error.code = response.error?.code || "jdbc-error";
@@ -848,8 +863,7 @@ function createJdbcSession(target) {
       };
     },
     async execute(sql) {
-      await ensure();
-      const response = await sidecar.request("UPDATE", { connId, sql });
+      const response = await requestWithRestart("UPDATE", { connId, sql });
       if (!response.ok) {
         const error = new Error(response.error?.message || "JDBC statement failed");
         error.code = response.error?.code || "jdbc-error";
