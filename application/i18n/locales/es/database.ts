@@ -160,6 +160,7 @@ export const esDatabaseMessages: Messages = {
   'databases.workbench.previewCell': 'Ver contenido completo',
   'databases.workbench.previewChars': '{count} caracteres',
   'databases.workbench.previewTitle': 'Contenido completo de la celda',
+  'databases.workbench.rowNumber': 'Número de fila',
   'databases.workbench.exportFailed': 'Error al exportar: {error}',
   'databases.workbench.exportSaved': 'Resultado exportado',
   'databases.workbench.editHint': 'Doble clic en una celda para editar; el icono de papelera elimina la fila',

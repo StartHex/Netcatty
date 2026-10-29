@@ -15,6 +15,7 @@ import {
 } from '../../domain/models';
 import type { PortForwardingRule } from '../../domain/models/portForwarding';
 import type { Host, Identity, KnownHost, SSHKey, TerminalSettings } from '../../domain/models';
+import { parseJdbcEndpoint, rewriteJdbcUrlEndpoint } from '../../domain/database/jdbcUrl';
 import { startPortForward, stopPortForward } from './portForwardingService';
 
 export interface DatabaseTunnelDeps {
@@ -59,13 +60,28 @@ function buildRule(connection: DatabaseConnection, ruleId: string, remotePort: n
 
 export const hasDatabaseTunnel = (connectionId: string): boolean => tunnels.has(connectionId);
 
+/**
+ * The host/port a connection dials. JDBC connections usually keep both inside
+ * `jdbcUrl`, so fall back to parsing it before the kind defaults.
+ */
+function resolveRemoteEndpoint(connection: DatabaseConnection): { host: string; port: number } {
+  const jdbc = connection.kind === 'jdbc' && connection.jdbcUrl
+    ? parseJdbcEndpoint(connection.jdbcUrl)
+    : null;
+  const port = databaseEffectivePort(connection)
+    ?? jdbc?.port
+    ?? DATABASE_DEFAULT_PORTS[connection.kind];
+  return { host: connection.host || jdbc?.host || '127.0.0.1', port };
+}
+
 export async function ensureDatabaseTunnel(
   connection: DatabaseConnection,
   deps: DatabaseTunnelDeps,
 ): Promise<{ ok: true; host: string; port: number } | { ok: false; error: string }> {
-  const remotePort = databaseEffectivePort(connection) ?? DATABASE_DEFAULT_PORTS[connection.kind];
+  const remote = resolveRemoteEndpoint(connection);
+  const remotePort = remote.port;
   if (!connection.sshHostId) {
-    return { ok: true, host: connection.host ?? '127.0.0.1', port: remotePort };
+    return { ok: true, host: remote.host, port: remotePort };
   }
   const existing = tunnels.get(connection.id);
   if (existing) return { ok: true, host: existing.host, port: existing.port };
@@ -119,5 +135,9 @@ export function applyDatabaseTunnel(
   tunnel: { host: string; port: number } | null,
 ): DbConnectionTarget {
   if (!tunnel) return target;
-  return { ...target, host: tunnel.host, port: tunnel.port };
+  // JDBC drivers read host/port from the URL, so rewrite it as well.
+  const jdbcUrl = target.jdbcUrl
+    ? rewriteJdbcUrlEndpoint(target.jdbcUrl, tunnel.host, tunnel.port)
+    : undefined;
+  return { ...target, host: tunnel.host, port: tunnel.port, ...(jdbcUrl ? { jdbcUrl } : {}) };
 }

@@ -25,11 +25,15 @@ test('substring matching is case-insensitive', () => {
   assert.equal(matchesTableQuery('USER_ORDERS', 'orders'), true);
 });
 
-test('subsequence matching keeps fuzzy queries useful', () => {
-  assert.equal(matchesTableQuery('user_orders', 'usro'), true);
+test('matching is a plain substring test, not a fuzzy subsequence', () => {
+  assert.equal(matchesTableQuery('user_orders', 'orders'), true);
+  assert.equal(matchesTableQuery('user_orders', 'usro'), false);
   assert.equal(matchesTableQuery('user_orders', 'zzz'), false);
+  // Users expect "sms" to mean "contains sms", not "contains s...m...s".
+  assert.equal(matchesTableQuery('CF_DYNAMIC_MSISDN', 'sms'), false);
+  assert.equal(matchesTableQuery('SMS_BILL', 'sms'), true);
   assert.deepEqual(
-    filterTables(tables, 'usr').map((table) => table.name),
+    filterTables(tables, 'user').map((table) => table.name),
     ['users', 'user_orders'],
   );
 });

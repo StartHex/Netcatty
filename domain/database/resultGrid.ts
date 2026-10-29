@@ -70,24 +70,19 @@ export function sortResultRows(
   });
 }
 
-/** Case-insensitive subsequence test: `abc` matches `a-b-c`. */
-function isSubsequence(haystack: string, needle: string): boolean {
-  if (needle.length === 0) return true;
-  if (needle.length > haystack.length) return false;
-  let cursor = 0;
-  for (let index = 0; index < haystack.length && cursor < needle.length; index += 1) {
-    if (haystack[index] === needle[cursor]) cursor += 1;
-  }
-  return cursor === needle.length;
-}
-
+/**
+ * Case-insensitive substring match for result cells.
+ *
+ * This used to fall back to an in-order subsequence match so that `bmg`
+ * matched `BalanceManagement`, but that also made `sms` match unrelated values
+ * such as `CF_DYNAMIC_MSISDN`. Filtering means "contains this", so only the
+ * contiguous substring counts now.
+ */
 export function cellMatchesQuery(value: DbCellValue, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return false;
   if (value === null || value === undefined) return false;
-  const haystack = String(value).toLowerCase();
-  if (haystack.includes(needle)) return true;
-  return isSubsequence(haystack, needle);
+  return String(value).toLowerCase().includes(needle);
 }
 
 /**

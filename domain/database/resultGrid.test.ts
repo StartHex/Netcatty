@@ -41,9 +41,10 @@ test('sortResultRows without a spec keeps the original order', () => {
   assert.deepEqual(sortResultRows(rows, null), [0, 1, 2, 3]);
 });
 
-test('cellMatchesQuery supports substring and subsequence matching', () => {
+test('cellMatchesQuery is a substring test, not a fuzzy subsequence', () => {
   assert.equal(cellMatchesQuery('BalanceManagement', 'manage'), true);
-  assert.equal(cellMatchesQuery('BalanceManagement', 'bmgt'), true);
+  assert.equal(cellMatchesQuery('BalanceManagement', 'bmgt'), false);
+  assert.equal(cellMatchesQuery('CF_DYNAMIC_MSISDN', 'sms'), false);
   assert.equal(cellMatchesQuery('BalanceManagement', 'zzz'), false);
   assert.equal(cellMatchesQuery(null, 'a'), false);
   assert.equal(cellMatchesQuery('abc', '   '), false);

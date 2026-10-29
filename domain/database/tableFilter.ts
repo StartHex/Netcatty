@@ -1,20 +1,14 @@
 /**
- * Fuzzy matching for the schema tree. Tables are matched by a case-insensitive
- * substring, or — when the characters are not contiguous — by an in-order
- * subsequence (so "usrord" still finds "user_orders").
+ * Case-insensitive substring match for the schema tree.
+ *
+ * The previous implementation fell back to an in-order subsequence match, which
+ * made "sms" hit unrelated names such as `OCSAPP_MVNE.CF_DYNAMIC_MSISDN` and
+ * made the filter feel broken. Users expect "filter by this substring".
  */
 export function matchesTableQuery(name: string, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  const haystack = name.toLowerCase();
-  if (haystack.includes(needle)) return true;
-  let cursor = 0;
-  for (const char of needle) {
-    const found = haystack.indexOf(char, cursor);
-    if (found === -1) return false;
-    cursor = found + 1;
-  }
-  return true;
+  return name.toLowerCase().includes(needle);
 }
 
 export function filterTables<T extends { name: string }>(tables: readonly T[], query: string): T[] {

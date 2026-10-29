@@ -912,6 +912,7 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
             onCopyColumns={copyColumns}
             onCopyRow={copyRow}
             onClearSelection={() => setSelectedColumns([])}
+            rowNumberStart={pageIndex * pageSize}
           />
         </>
       ) : (
@@ -1609,9 +1610,12 @@ interface ResultGridProps {
   onCopyRow?: (sourceIndex: number) => void;
   /** Drops the column selection from the context menu. */
   onClearSelection?: () => void;
+  /** 1-based number of the first row on this page (keeps numbers stable across pages). */
+  rowNumberStart?: number;
 }
 
 const ACTION_COLUMN_WIDTH = 32;
+const ROW_NUMBER_WIDTH = 44;
 
 const ResultGrid: React.FC<ResultGridProps> = ({
   columns,
@@ -1632,6 +1636,7 @@ const ResultGrid: React.FC<ResultGridProps> = ({
   onCopyColumns,
   onCopyRow,
   onClearSelection,
+  rowNumberStart = 0,
 }) => {
   const [editing, setEditing] = useState<{ sourceIndex: number; cell: number; draft: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ sourceIndex: number } | null>(null);
@@ -1673,10 +1678,16 @@ const ResultGrid: React.FC<ResultGridProps> = ({
     return null;
   }
 
-  const template = [editable ? `${ACTION_COLUMN_WIDTH}px` : null, ...columnWidths.map((entry) => `${Math.round(entry)}px`)]
+  const template = [
+    `${ROW_NUMBER_WIDTH}px`,
+    editable ? `${ACTION_COLUMN_WIDTH}px` : null,
+    ...columnWidths.map((entry) => `${Math.round(entry)}px`),
+  ]
     .filter(Boolean)
     .join(' ');
-  const width = columnWidths.reduce((total, entry) => total + Math.round(entry), 0) + (editable ? ACTION_COLUMN_WIDTH : 0);
+  const width = columnWidths.reduce((total, entry) => total + Math.round(entry), 0)
+    + ROW_NUMBER_WIDTH
+    + (editable ? ACTION_COLUMN_WIDTH : 0);
 
   const commitEdit = async () => {
     if (!editing || !onUpdateCell) {
@@ -1741,6 +1752,12 @@ const ResultGrid: React.FC<ResultGridProps> = ({
             className="sticky top-0 z-10 grid shrink-0 border-b border-border/60 bg-secondary/60"
             style={{ gridTemplateColumns: template }}
           >
+            <div
+              className="px-2 py-1.5 text-right text-[11px] font-semibold tabular-nums text-muted-foreground/60"
+              title={t('databases.workbench.rowNumber')}
+            >
+              #
+            </div>
             {editable ? <div className="px-1 py-1.5" /> : null}
             {columns.map((column, index) => {
               const isSorted = sort?.columnIndex === index;
@@ -1856,6 +1873,9 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                 )}
                 style={{ gridTemplateColumns: template }}
               >
+                <div className="select-none px-2 text-right text-[11px] tabular-nums text-muted-foreground/60">
+                  {rowNumberStart + rowIndex + 1}
+                </div>
                 {editable ? (
                   <div className="flex items-center justify-center">
                     <Button
@@ -1898,13 +1918,14 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                     );
                   }
                   const text = cellText(value);
-                  const isLong = text.length > 60 || text.includes('\n');
+                  // Any non-empty cell can be previewed; long values just need it most.
+                  const canPreview = value !== null && value !== undefined;
                   return (
                     <div
                       key={cellIndex}
                       className={cn(
                         'group/cell relative truncate px-3 font-mono',
-                        isLong && 'pr-7',
+                        canPreview && 'pr-7',
                         value !== null && 'cursor-pointer hover:bg-secondary/40',
                         value === null && 'italic text-muted-foreground/70',
                         typeof value === 'number' && 'text-right tabular-nums',
@@ -1931,7 +1952,7 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                       }}
                     >
                       {text}
-                      {isLong ? (
+                      {canPreview ? (
                         <button
                           type="button"
                           aria-label={t('databases.workbench.previewCell')}

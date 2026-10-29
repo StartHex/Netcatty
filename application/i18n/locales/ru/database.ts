@@ -160,6 +160,7 @@ export const ruDatabaseMessages: Messages = {
   'databases.workbench.previewCell': 'Показать полностью',
   'databases.workbench.previewChars': 'Символов: {count}',
   'databases.workbench.previewTitle': 'Полное содержимое ячейки',
+  'databases.workbench.rowNumber': 'Номер строки',
   'databases.workbench.exportFailed': 'Ошибка экспорта: {error}',
   'databases.workbench.exportSaved': 'Результат экспортирован',
   'databases.workbench.editHint': 'Двойной щелчок по ячейке — правка, корзина — удаление строки',

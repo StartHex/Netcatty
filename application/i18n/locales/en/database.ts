@@ -160,6 +160,7 @@ export const enDatabaseMessages: Messages = {
   'databases.workbench.previewCell': 'View full content',
   'databases.workbench.previewChars': '{count} characters',
   'databases.workbench.previewTitle': 'Full cell content',
+  'databases.workbench.rowNumber': 'Row number',
   'databases.workbench.exportFailed': 'Export failed: {error}',
   'databases.workbench.exportSaved': 'Result exported',
   'databases.workbench.editHint': 'Double-click a cell to edit; the trash icon deletes the row',

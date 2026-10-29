@@ -160,6 +160,7 @@ export const zhCNDatabaseMessages: Messages = {
   'databases.workbench.previewCell': '查看完整内容',
   'databases.workbench.previewChars': '{count} 个字符',
   'databases.workbench.previewTitle': '单元格完整内容',
+  'databases.workbench.rowNumber': '行号',
   'databases.workbench.exportFailed': '导出失败：{error}',
   'databases.workbench.exportSaved': '结果已导出',
   'databases.workbench.editHint': '双击单元格编辑，垃圾桶图标删除该行',

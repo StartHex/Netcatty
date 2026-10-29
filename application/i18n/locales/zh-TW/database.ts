@@ -160,6 +160,7 @@ export const zhTNDatabaseMessages: Messages = {
   'databases.workbench.previewCell': '檢視完整內容',
   'databases.workbench.previewChars': '{count} 個字元',
   'databases.workbench.previewTitle': '儲存格完整內容',
+  'databases.workbench.rowNumber': '行號',
   'databases.workbench.exportFailed': '匯出失敗：{error}',
   'databases.workbench.exportSaved': '結果已匯出',
   'databases.workbench.editHint': '雙擊儲存格編輯，垃圾桶圖示刪除該列',
