@@ -1639,6 +1639,7 @@ const ResultGrid: React.FC<ResultGridProps> = ({
   const [menu, setMenu] = useState<
     { x: number; y: number; columnIndex: number | null; sourceIndex: number | null } | null
   >(null);
+  const [preview, setPreview] = useState<{ columnIndex: number; value: string } | null>(null);
   const listRef = useRef<FixedSizeVirtualListHandle | null>(null);
 
   // A context menu that survives scrolls would point at the wrong row.
@@ -1896,18 +1897,21 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                       />
                     );
                   }
+                  const text = cellText(value);
+                  const isLong = text.length > 60 || text.includes('\n');
                   return (
                     <div
                       key={cellIndex}
                       className={cn(
-                        'truncate px-3 font-mono',
+                        'group/cell relative truncate px-3 font-mono',
+                        isLong && 'pr-7',
                         value !== null && 'cursor-pointer hover:bg-secondary/40',
                         value === null && 'italic text-muted-foreground/70',
                         typeof value === 'number' && 'text-right tabular-nums',
                         selectedColumns.includes(cellIndex) && 'bg-primary/5',
                         isMatch && 'bg-amber-400/30 ring-1 ring-inset ring-amber-500/70',
                       )}
-                      title={cellText(value)}
+                      title={text}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         setMenu({
@@ -1926,7 +1930,21 @@ const ResultGrid: React.FC<ResultGridProps> = ({
                         onCopyCell?.(String(value));
                       }}
                     >
-                      {cellText(value)}
+                      {text}
+                      {isLong ? (
+                        <button
+                          type="button"
+                          aria-label={t('databases.workbench.previewCell')}
+                          title={t('databases.workbench.previewCell')}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-background/80 p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/cell:opacity-100"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPreview({ columnIndex: cellIndex, value: text });
+                          }}
+                        >
+                          <Eye className="h-3 w-3" />
+                        </button>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -1936,6 +1954,41 @@ const ResultGrid: React.FC<ResultGridProps> = ({
         </div>
         </div>
       </div>
+      <Dialog open={Boolean(preview)} onOpenChange={(open) => { if (!open) setPreview(null); }}>
+        <DialogContent className="flex max-h-[80vh] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+              {preview ? columns[preview.columnIndex]?.name ?? t('databases.workbench.previewTitle') : t('databases.workbench.previewTitle')}
+              <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                {t('databases.workbench.previewChars', { count: String(preview?.value.length ?? 0) })}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto rounded border border-border/60 bg-muted/30 p-2">
+            <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">
+              {preview?.value ?? ''}
+            </pre>
+          </div>
+          <DialogFooter className="shrink-0 gap-2 border-t border-border/60 pt-3">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => {
+                if (!preview) return;
+                onCopyCell?.(preview.value);
+              }}
+            >
+              <Check className="mr-1 h-3 w-3" />
+              {t('databases.workbench.contextCopyCell')}
+            </Button>
+            <Button size="sm" className="h-7 text-xs" onClick={() => setPreview(null)}>
+              {t('common.close')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {menu ? createPortal(
         <div
           role="menu"
@@ -1956,6 +2009,23 @@ const ResultGrid: React.FC<ResultGridProps> = ({
               >
                 {t('databases.workbench.contextCopyCell')}
               </button>
+              {menu.columnIndex !== null && menu.sourceIndex !== null ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center rounded px-2 py-1.5 text-left hover:bg-secondary"
+                  onClick={() => {
+                    const target = rows.find((row) => row.sourceIndex === menu.sourceIndex);
+                    setPreview({
+                      columnIndex: menu.columnIndex as number,
+                      value: cellText(target?.cells[menu.columnIndex] ?? null),
+                    });
+                    setMenu(null);
+                  }}
+                >
+                  {t('databases.workbench.previewCell')}
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"

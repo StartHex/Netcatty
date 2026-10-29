@@ -274,6 +274,10 @@ export const DatabaseWorkbenchMount: React.FC<{
     <div
       className={cn('absolute inset-0', isActive ? 'z-20' : '')}
       data-inactive-app-surface={isActive ? undefined : 'true'}
+      // `inert` also keeps the hidden surface out of focus order and the a11y
+      // tree, which avoids extra work when the user tabs back to a host.
+      inert={isActive ? undefined : true}
+      aria-hidden={isActive ? undefined : true}
       style={containerStyle}
     >
       <LazyLoadBoundary name="Database workbench" resetKey="database">

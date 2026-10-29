@@ -39,6 +39,7 @@ const PLACEHOLDER_KEYS: Record<string, string[]> = {
   "databases.workbench.selectColumn": ["{column}"],
   "databases.workbench.deselectColumn": ["{column}"],
   "databases.workbench.copiedRows": ["{count}"],
+  "databases.workbench.previewChars": ["{count}"],
   "databases.workbench.exportFailed": ["{error}"],
 };
 
