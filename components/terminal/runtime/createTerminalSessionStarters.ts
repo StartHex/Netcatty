@@ -480,7 +480,7 @@ export const createTerminalSessionStarters = (ctx: TerminalSessionStartersContex
         authMethod: jumpAuth.authMethod,
         requiresMfa: !!jumpHost.requiresMfa,
         password: jumpPassword,
-        ...connectionTotpFields(jumpHost),
+        ...connectionTotpFields(jumpHost, { menuAutoSubmit: ctx.terminalSettings?.autoAnswerOtpMenu !== false }),
         privateKey: resolveBridgePrivateKeyMaterial(jumpKey, {
           forceAgent: jumpAgentAuth.useSshAgent === true && !jumpKey?.certificate,
         }),
@@ -708,7 +708,7 @@ export const createTerminalSessionStarters = (ctx: TerminalSessionStartersContex
           requiresMfa: !!ctx.host.requiresMfa,
           port: ctx.host.port || 22,
           password: attempt.password,
-          ...connectionTotpFields(ctx.host),
+          ...connectionTotpFields(ctx.host, { menuAutoSubmit: ctx.terminalSettings?.autoAnswerOtpMenu !== false }),
           sftpReuseOptions: sftpReuseOptions?.password || sftpReuseOptions?.username !== effectiveUsername
             ? undefined
             : sftpReuseOptions,

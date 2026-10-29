@@ -635,6 +635,8 @@ export const ruCoreMessages: Messages = {
   'settings.terminal.behavior.rightClick.fullscreenMenu': 'Показывать меню поверх полноэкранных приложений',
   'settings.terminal.behavior.rightClick.fullscreenMenu.desc':
     'Показывать контекстное меню, даже когда tmux, vim или другие полноэкранные приложения перехватывают мышь. Когда выключено, правый щелчок передаётся приложению (Shift+правый щелчок всё равно открывает меню).',
+  'settings.terminal.behavior.otpMenuAutoSubmit': 'Автовыбор OTP в меню шлюза',
+  'settings.terminal.behavior.otpMenuAutoSubmit.desc': 'Если баннер предлагает «1) OTP 2) SMS», пункт OTP выбирается автоматически. Отключите, чтобы выбирать вручную.',
   'settings.terminal.behavior.autoCloseOnExit': 'Автоматически закрывать терминал при выходе',
   'settings.terminal.behavior.autoCloseOnExit.desc':
     'Разрешить автоматическое закрытие вкладок и окон терминала после завершения сеанса. Отключите, чтобы сохранять их после любого выхода.',

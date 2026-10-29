@@ -51,3 +51,25 @@ test("terminal behavior settings expose disconnected notice mode", () => {
   assert.match(terminalMarkup, /settings\.terminal\.behavior\.disconnectedNotice\.terminal/);
   assert.match(dialogMarkup, /settings\.terminal\.behavior\.disconnectedNotice\.dialog/);
 });
+
+test("terminal behavior settings expose the OTP menu auto-pick toggle", () => {
+  const markup = renderSettings(true);
+  assert.match(
+    markup,
+    /settings\.terminal\.behavior\.otpMenuAutoSubmit[\s\S]*?role="switch" aria-checked="true"/,
+  );
+});
+
+test("terminal behavior settings can disable the OTP menu auto-pick", () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(TerminalBehaviorSettings, {
+      t: (key: string) => key,
+      terminalSettings: normalizeTerminalSettings({ autoCloseOnExit: true, autoAnswerOtpMenu: false }),
+      updateTerminalSetting: () => {},
+    }),
+  );
+  assert.match(
+    markup,
+    /settings\.terminal\.behavior\.otpMenuAutoSubmit[\s\S]*?role="switch" aria-checked="false"/,
+  );
+});

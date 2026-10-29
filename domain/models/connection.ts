@@ -164,6 +164,8 @@ export interface HostTotpConfig {
   autoSubmit?: boolean;
   /** Extra RE2 regular expression matched against the KI prompt. */
   promptPattern?: string;
+  /** Auto-pick the OTP entry on numbered menus (default true). */
+  menuAutoSubmit?: boolean;
 }
 
 /** OTP variant. Only TOTP is generated today; HOTP stays reserved. */

@@ -49,6 +49,17 @@ export const TerminalBehaviorSettings: React.FC<TerminalBehaviorSettingsProps> =
       <SectionHeader title={t("settings.terminal.section.behavior")} />
       <div className="space-y-0 divide-y divide-border rounded-lg border bg-card px-4">
         <SettingRow
+          anchorId="terminal-otp-menu-auto-submit"
+          label={t("settings.terminal.behavior.otpMenuAutoSubmit")}
+          description={t("settings.terminal.behavior.otpMenuAutoSubmit.desc")}
+        >
+          <Toggle
+            checked={terminalSettings.autoAnswerOtpMenu !== false}
+            onChange={(v) => updateTerminalSetting("autoAnswerOtpMenu", v)}
+          />
+        </SettingRow>
+
+        <SettingRow
           anchorId="terminal-auto-close-on-exit"
           label={t("settings.terminal.behavior.autoCloseOnExit")}
           description={t("settings.terminal.behavior.autoCloseOnExit.desc")}

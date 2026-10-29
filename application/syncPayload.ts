@@ -287,7 +287,7 @@ interface SyncPayloadImporters {
 /** Terminal settings keys that are safe to sync (platform-agnostic). */
 const SYNCABLE_TERMINAL_KEYS = [
   'startupCommandDelayMs',
-  'scrollback', 'drawBoldInBrightColors', 'terminalEmulationType',
+  'scrollback', 'drawBoldInBrightColors', 'autoAnswerOtpMenu', 'terminalEmulationType',
   'fontLigatures', 'fontSmoothing', 'fontWeight', 'fontWeightBold', 'fallbackFont',
   'linePadding', 'cursorShape', 'cursorBlink', 'cursorBarWidth', 'highlightCursorLine', 'minimumContrastRatio',
   'altAsMeta', 'optionArrowWordJump', 'shiftEnterNewlineEnabled', 'shiftEnterNewlineText',

@@ -684,6 +684,8 @@ Highlight the focused split pane:
   'settings.terminal.behavior.rightClick.fullscreenMenu': 'Show menu over fullscreen apps',
   'settings.terminal.behavior.rightClick.fullscreenMenu.desc':
     'Show the context menu even when tmux, vim or other fullscreen apps take over the mouse. When off, right-click is passed to the app (Shift+Right-Click still opens the menu).',
+  'settings.terminal.behavior.otpMenuAutoSubmit': 'Auto-pick the OTP option on bastion menus',
+  'settings.terminal.behavior.otpMenuAutoSubmit.desc': 'When a login banner asks "1) OTP 2) SMS", the OTP entry is chosen automatically. Turn this off to pick it yourself.',
   'settings.terminal.behavior.autoCloseOnExit': 'Auto-close terminal on exit',
   'settings.terminal.behavior.autoCloseOnExit.desc':
     'Allow terminal tabs and windows to close automatically after session exit. Turn this off to keep them open after every exit.',

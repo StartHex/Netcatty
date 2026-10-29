@@ -74,6 +74,8 @@ export interface TerminalSettings {
   // Rendering
   scrollback: number; // Number of lines kept in buffer
   drawBoldInBrightColors: boolean; // Draw bold text in bright colors
+  /** Auto-pick the OTP entry on numbered bastion menus (`1) OTP 2) SMS`). */
+  autoAnswerOtpMenu: boolean;
   terminalEmulationType: TerminalEmulationType; // Terminal emulation type (TERM env var)
   startupCommandDelayMs: number; // Delay (ms) after connect before sending the startup command; also used between multiple lines
 
@@ -533,6 +535,7 @@ export function isLegacyDefaultShiftEnterNewlineText(value: unknown): boolean {
 const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   scrollback: DEFAULT_TERMINAL_SCROLLBACK,
   drawBoldInBrightColors: true,
+  autoAnswerOtpMenu: true,
   terminalEmulationType: 'xterm-256color',
   startupCommandDelayMs: 600,
   fontLigatures: true,

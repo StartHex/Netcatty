@@ -320,6 +320,8 @@ export const zhTWTerminalMessages: Messages = {
   'settings.terminal.behavior.rightClick.fullscreenMenu': '在全螢幕應用中也顯示選單',
   'settings.terminal.behavior.rightClick.fullscreenMenu.desc':
     '即使 tmux、vim 等全螢幕應用接管了滑鼠，也顯示右鍵選單。關閉時右鍵會交給應用處理（Shift+右鍵仍可開啟選單）。',
+  'settings.terminal.behavior.otpMenuAutoSubmit': '堡壘機選單自動選 OTP',
+  'settings.terminal.behavior.otpMenuAutoSubmit.desc': '登入提示出現「1) OTP 2) SMS」時自動選擇 OTP 項；關掉後由你自己選。',
   'settings.terminal.behavior.autoCloseOnExit': '結束後自動關閉終端',
   'settings.terminal.behavior.autoCloseOnExit.desc': '允許終端分頁和視窗在工作階段結束後自動關閉。關閉此項後，無論結束結果如何都會保留。',
   'settings.terminal.behavior.disconnectedNotice': '連線中斷時',

@@ -90,7 +90,7 @@ test("a non-matching prompt does not consume the one TOTP auto-submit", () => {
     sender,
     sessionId: "session-2",
     hostname: "jumpserver.example",
-    totp: TOTP,
+    totp: { ...TOTP, menuAutoSubmit: false },
     now: () => 15_000,
   });
 
@@ -139,6 +139,50 @@ test("legacy JumpServer and PAM prompts auto-submit, and a later mismatch opens 
   });
   assert.equal(invoke(fresh, "Verification code: ")?.[0]?.length, 8);
   assert.equal(invoke(fresh, "Password:"), null);
+  assert.equal(sent.length, 1);
+  drainPendingRequests(sent);
+});
+
+test("numbered bastion menu auto-picks the OTP entry without a TOTP secret", () => {
+  const { sender, sent } = createSender();
+  const handler = createKeyboardInteractiveHandler({
+    sender,
+    sessionId: "session-menu",
+    hostname: "bastion.example",
+    totp: { uri: "", menuAutoSubmit: true },
+  });
+
+  assert.deepEqual(
+    invoke(handler, "请选择验证方式：\n1) OTP 动态口令\n2) SMS 短信验证码"),
+    ["1"],
+  );
+  assert.equal(sent.length, 0);
+});
+
+test("OTP menu auto-pick can be disabled per connection", () => {
+  const { sender, sent } = createSender();
+  const handler = createKeyboardInteractiveHandler({
+    sender,
+    sessionId: "session-menu-off",
+    hostname: "bastion.example",
+    totp: { uri: "", menuAutoSubmit: false },
+  });
+
+  assert.equal(invoke(handler, "1) OTP 动态口令\n2) SMS 短信验证码"), null);
+  assert.equal(sent.length, 1);
+  drainPendingRequests(sent);
+});
+
+test("menus without an OTP entry still prompt for SMS", () => {
+  const { sender, sent } = createSender();
+  const handler = createKeyboardInteractiveHandler({
+    sender,
+    sessionId: "session-menu-sms",
+    hostname: "bastion.example",
+    totp: { uri: "", menuAutoSubmit: true },
+  });
+
+  assert.equal(invoke(handler, "1) SMS 短信验证码\n2) 语音验证"), null);
   assert.equal(sent.length, 1);
   drainPendingRequests(sent);
 });

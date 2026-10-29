@@ -12,7 +12,7 @@ const { exec } = childProcess;
 const { utils: sshUtils } = require("ssh2");
 const systemSshAgent = require("./systemSshAgent.cjs");
 const keyboardInteractiveHandler = require("./keyboardInteractiveHandler.cjs");
-const { planTotpAutoSubmit } = require("../../domain/totp.shared.cjs");
+const { planTotpAutoSubmit, planOtpMenuAutoSubmit } = require("../../domain/totp.shared.cjs");
 const passphraseHandler = require("./passphraseHandler.cjs");
 const {
   normalizePrivateKeyForSsh2,
@@ -2395,6 +2395,7 @@ function createKeyboardInteractiveHandler(options) {
   // TOTP is independent of the password fast-path: a PAM password prompt and
   // a later verification-code prompt share this handler. Submit at most once.
   let totpAutoSubmitted = false;
+  let otpMenuAutoSubmitted = false;
 
   return (name, instructions, instructionsLang, prompts, finish) => {
     console.log(`${logPrefix} ${hostname} keyboard-interactive auth requested`, {
@@ -2484,6 +2485,18 @@ function createKeyboardInteractiveHandler(options) {
         } else {
           submitCode();
         }
+        return;
+      }
+    }
+
+    // Bastions that greet with `1) OTP  2) SMS` should not need the manual pick.
+    if (!otpMenuAutoSubmitted) {
+      const menuPlan = planOtpMenuAutoSubmit({ prompts, autoSubmit: totp?.menuAutoSubmit });
+      if (menuPlan.action === "submit") {
+        otpMenuAutoSubmitted = true;
+        console.log(`${logPrefix} Auto-selecting OTP menu entry ${menuPlan.choice}`);
+        try { onAutoFill?.("otp-menu"); } catch (err) { console.warn(`${logPrefix} onAutoFill callback threw`, err); }
+        try { finish(menuPlan.responses); } catch { console.warn(`${logPrefix} OTP menu finish threw`); }
         return;
       }
     }

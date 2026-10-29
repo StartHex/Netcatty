@@ -684,6 +684,8 @@ Resalta el panel dividido enfocado:
   'settings.terminal.behavior.rightClick.fullscreenMenu': 'Mostrar menú sobre aplicaciones en pantalla completa',
   'settings.terminal.behavior.rightClick.fullscreenMenu.desc':
     'Muestra el menú contextual incluso cuando tmux, vim u otras aplicaciones en pantalla completa toman el control del mouse. Cuando está desactivado, el clic derecho se pasa a la aplicación (Shift+Clic derecho sigue abriendo el menú).',
+  'settings.terminal.behavior.otpMenuAutoSubmit': 'Elegir OTP automáticamente en menús',
+  'settings.terminal.behavior.otpMenuAutoSubmit.desc': 'Si el banner pide «1) OTP 2) SMS», se elige la opción OTP. Desactívelo para elegirla usted.',
   'settings.terminal.behavior.autoCloseOnExit': 'Cerrar la terminal automáticamente al salir',
   'settings.terminal.behavior.autoCloseOnExit.desc':
     'Permite que las pestañas y ventanas de terminal se cierren automáticamente después de que la sesión termina. Desactívalo para mantenerlas abiertas después de cada salida.',
