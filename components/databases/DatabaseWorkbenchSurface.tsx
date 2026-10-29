@@ -74,9 +74,14 @@ import { xlsxBase64 } from '../../domain/database/xlsx';
 import { copyTextWithFeedback } from '../curl/clipboard';
 import { useClipboardBackend } from '../../application/state/useClipboardBackend';
 import { filterTables } from '../../domain/database/tableFilter';
+import {
+  DATABASE_ENCODINGS,
+  currentDatabaseEncoding,
+} from '../../domain/database/encoding';
 import { readSqlFile, saveDatabaseBinaryFile } from '@/infrastructure/services/databaseService.ts';
 import { netcattyBridge } from '@/infrastructure/services/netcattyBridge.ts';
 import { ConfirmDialog } from '../ui/confirm-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from '../ui/toast';
 
 const SQL_DIALECTS: Record<string, 'postgresql' | 'mysql' | 'mariadb' | 'plsql' | 'sqlite'> = {
@@ -468,6 +473,16 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
     [tab.tables],
   );
 
+  // Mirror the statement being executed into the editor as a line highlight.
+  useEffect(() => {
+    const executing = tab.executingStatement ?? null;
+    if (!executing) {
+      editorRef.current?.highlightLines(null);
+      return;
+    }
+    editorRef.current?.highlightLines(executing.startLine, executing.endLine);
+  }, [tab.executingStatement]);
+
   const formatSql = () => {
     const dialect = SQL_DIALECTS[tab.kind] ?? 'postgresql';
     try {
@@ -476,6 +491,14 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
     } catch {
       // Formatting is best-effort; leave the statement untouched on parse errors.
     }
+  };
+
+  const changeEncoding = async (value: string) => {
+    if (!connection) return;
+    onUpdateConnections?.((prev) =>
+      prev.map((entry) => (entry.id === connection.id ? { ...entry, clientEncoding: value } : entry)),
+    );
+    await workbench.setEncoding(tab.id, value);
   };
 
   return (
@@ -488,7 +511,36 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
           {t('databases.workbench.beginTransaction')}
         </span>
       ) : null}
-      <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
+      {tab.executingStatement ? (
+        <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+          {t('databases.workbench.statementProgress', {
+            index: tab.executingStatement.index,
+            total: tab.executingStatement.total,
+          })}
+        </span>
+      ) : null}
+      {currentDatabaseEncoding(tab.kind, tab.clientEncoding ?? connection?.clientEncoding) ? (
+        <Select
+          value={currentDatabaseEncoding(tab.kind, tab.clientEncoding ?? connection?.clientEncoding) ?? ''}
+          onValueChange={(value) => void changeEncoding(value)}
+        >
+          <SelectTrigger
+            className="ml-auto h-6 w-[116px] text-[11px]"
+            aria-label={t('databases.workbench.encoding')}
+            title={t('databases.workbench.encodingHint')}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DATABASE_ENCODINGS.map((encoding) => (
+              <SelectItem key={encoding} value={encoding} className="text-xs">
+                {encoding}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+      <span className={cn('truncate font-mono text-[11px] text-muted-foreground', currentDatabaseEncoding(tab.kind, tab.clientEncoding ?? connection?.clientEncoding) ? '' : 'ml-auto')}>
         {tab.serverVersion ?? ''}
       </span>
     </div>

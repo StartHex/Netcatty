@@ -26,6 +26,7 @@ import {
   applyJdbcPresetTemplate,
   findJdbcPreset,
 } from '../../domain/database/jdbcPresets';
+import { DATABASE_ENCODINGS, supportsClientEncoding } from '../../domain/database/encoding';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -76,6 +77,7 @@ interface FormState {
   jdbcDriverId: string;
   javaPath: string;
   jdbcPresetId: string;
+  clientEncoding: string;
   group: string;
   colorTag: DatabaseColorTag;
 }
@@ -101,6 +103,7 @@ const EMPTY_FORM: FormState = {
   jdbcDriverId: '',
   javaPath: '',
   jdbcPresetId: '',
+  clientEncoding: '',
   group: '',
   colorTag: 'none',
 };
@@ -127,6 +130,7 @@ export function formFromConnection(connection: DatabaseConnection): FormState {
     jdbcDriverId: connection.jdbcDriverId ?? '',
     javaPath: connection.javaPath ?? '',
     jdbcPresetId: '',
+    clientEncoding: connection.clientEncoding ?? '',
     group: connection.group ?? '',
     colorTag: connection.colorTag ?? 'none',
   };
@@ -218,6 +222,7 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
 
   const isSqlite = form.kind === 'sqlite';
   const isJdbc = form.kind === 'jdbc';
+  const supportsEncoding = supportsClientEncoding(form.kind);
 
   const registeredDriver = useMemo(
     () => jdbcDrivers.find((driver) => driver.id === form.jdbcDriverId),
@@ -257,10 +262,11 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
             : undefined
         : undefined,
       javaPath: isJdbc ? form.javaPath.trim() || undefined : undefined,
+      clientEncoding: supportsEncoding ? form.clientEncoding || undefined : undefined,
       group: form.group.trim() || undefined,
       colorTag: form.colorTag === 'none' ? undefined : form.colorTag,
     });
-  }, [connection, form, isJdbc, isSqlite, registeredDriver]);
+  }, [connection, form, isJdbc, isSqlite, registeredDriver, supportsEncoding]);
 
   const labelError = !draft.label;
   const targetError = isSqlite
@@ -681,6 +687,29 @@ export const DatabaseConnectionDialog: React.FC<DatabaseConnectionDialogProps> =
                 />
               </div>
 
+
+              {supportsEncoding ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="db-encoding">{t('databases.form.encoding')}</Label>
+                  <Select
+                    value={form.clientEncoding || '__default__'}
+                    onValueChange={(value) => update('clientEncoding', value === '__default__' ? '' : value)}
+                  >
+                    <SelectTrigger id="db-encoding">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__default__">{t('databases.form.encodingDefault')}</SelectItem>
+                      {DATABASE_ENCODINGS.map((encoding) => (
+                        <SelectItem key={encoding} value={encoding}>
+                          {encoding}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t('databases.form.encodingHint')}</p>
+                </div>
+              ) : null}
 
               <div className="flex items-start justify-between gap-3 rounded-md border border-border/50 px-3 py-2">
                 <div className="space-y-0.5">

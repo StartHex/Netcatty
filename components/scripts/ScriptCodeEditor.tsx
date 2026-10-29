@@ -52,6 +52,11 @@ export interface ScriptCodeEditorHandle {
   getCursorLine: () => number;
   /** Text of the caret line, used as a fallback when splitting finds nothing. */
   getCursorLineText: () => string;
+  /**
+   * Highlight a 1-based, inclusive line range (the statement being executed).
+   * Pass null to clear the highlight.
+   */
+  highlightLines: (fromLine: number | null, toLine?: number) => void;
 }
 
 export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptCodeEditorProps>(({
@@ -75,6 +80,7 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const completionDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const layoutDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const decorationIdsRef = useRef<string[]>([]);
   /** X offset where Monaco renders text (gutter width + padding). */
   const [contentLeft, setContentLeft] = useState<number | null>(null);
   const onSubmitShortcutRef = useRef(onSubmitShortcut);
@@ -104,6 +110,28 @@ export const ScriptCodeEditor = React.forwardRef<ScriptCodeEditorHandle, ScriptC
       const line = editor?.getPosition()?.lineNumber;
       if (!model || !line) return '';
       return model.getLineContent(line);
+    },
+    highlightLines: (fromLine: number | null, toLine?: number) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      if (fromLine === null) {
+        decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, []);
+        return;
+      }
+      const last = Math.max(fromLine, toLine ?? fromLine);
+      decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, [
+        {
+          range: { startLineNumber: fromLine, startColumn: 1, endLineNumber: last, endColumn: 1 },
+          options: {
+            isWholeLine: true,
+            className: 'sql-running-line',
+            linesDecorationsClassName: 'sql-running-line-gutter',
+          },
+        },
+      ]);
+      const visible = editor.getVisibleRanges();
+      const inView = visible.some((range) => fromLine <= range.endLineNumber && last >= range.startLineNumber);
+      if (!inView) editor.revealLineInCenter(fromLine);
     },
   }), []);
 

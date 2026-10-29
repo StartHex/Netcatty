@@ -72,6 +72,10 @@ export interface DatabaseTab {
   structure?: { table: DbTableRef; columns: DbColumnInfo[]; loading?: boolean; error?: string };
   /** Set when the current result comes from one table with a usable primary key. */
   editMeta?: { target: EditTarget; columns: DbColumnInfo[] } | null;
+  /** Per-tab charset override, applied on top of the connection setting. */
+  clientEncoding?: string;
+  /** Multi-statement runs expose which statement is on the wire right now. */
+  executingStatement?: { index: number; total: number; startLine: number; endLine: number } | null;
   /**
    * Set when the last run covered more than one statement: one entry per
    * statement, in execution order. `result`, `error` and `durationMs` above
@@ -115,6 +119,8 @@ export interface UseDatabaseWorkbenchResult {
   clearStructure: (tabId: string) => void;
   updateCell: (tabId: string, rowIndex: number, column: string, value: string | null) => Promise<boolean>;
   deleteRow: (tabId: string, rowIndex: number) => Promise<boolean>;
+  /** Swap the client charset: drops the session and re-runs the current SQL. */
+  setEncoding: (tabId: string, encoding: string) => Promise<void>;
   cancelQuery: (tabId: string) => void;
   reconnect: (tabId: string) => Promise<void>;
   /** Show one statement's result from the last multi-statement run. */
@@ -177,13 +183,23 @@ export function useDatabaseWorkbench(
   const resolveTarget = useCallback(
     async (
       connection: DatabaseConnection,
+      encodingOverride?: string,
     ): Promise<{ ok: true; target: DbConnectionTarget } | { ok: false; error: string }> => {
       const base = databaseConnectionTarget(connection);
+      const withEncoding = encodingOverride
+        ? { ...base, clientEncoding: encodingOverride }
+        : base;
       const deps = tunnelDepsRef.current;
-      if (!connection.sshHostId || !deps) return { ok: true, target: base };
-      const tunnel = await ensureDatabaseTunnel(connection, deps);
+      if (!connection.sshHostId || !deps) return { ok: true, target: withEncoding };
+      const tunnel = await ensureDatabaseTunnel(
+        encodingOverride ? { ...connection, clientEncoding: encodingOverride } : connection,
+        deps,
+      );
       if (tunnel.ok !== true) return { ok: false, error: tunnel.error };
-      return { ok: true, target: applyDatabaseTunnel(base, { host: tunnel.host, port: tunnel.port }) };
+      return {
+        ok: true,
+        target: applyDatabaseTunnel(withEncoding, { host: tunnel.host, port: tunnel.port }),
+      };
     },
     [],
   );
@@ -191,7 +207,8 @@ export function useDatabaseWorkbench(
   const loadTables = useCallback(
     async (tabId: string, connection: DatabaseConnection) => {
       patchTab(tabId, { tablesLoading: true, tablesError: undefined });
-      const resolved = await resolveTarget(connection);
+      const tabEncoding = tabsRef.current.find((entry) => entry.id === tabId)?.clientEncoding;
+      const resolved = await resolveTarget(connection, tabEncoding);
       if (resolved.ok !== true) {
         patchTab(tabId, { tablesLoading: false, tablesError: resolved.error });
         return;
@@ -229,7 +246,7 @@ export function useDatabaseWorkbench(
       const connection = connectionsRef.current.find((entry) => entry.id === activeTab.connectionId);
       if (!connection) return;
       // Run through the same path as the toolbar button.
-      const resolved = await resolveTarget(connection);
+      const resolved = await resolveTarget(connection, activeTab.clientEncoding);
       if (resolved.ok !== true) {
         patchTab(tabId, { error: resolved.error });
         return;
@@ -269,7 +286,7 @@ export function useDatabaseWorkbench(
       const connection = connectionsRef.current.find((entry) => entry.id === activeTab.connectionId);
       if (!connection) return;
       patchTab(tabId, { structure: { table, columns: [], loading: true } });
-      const resolved = await resolveTarget(connection);
+      const resolved = await resolveTarget(connection, activeTab.clientEncoding);
       if (resolved.ok !== true) {
         patchTab(tabId, { structure: { table, columns: [], error: resolved.error } });
         return;
@@ -298,8 +315,9 @@ export function useDatabaseWorkbench(
       const seq = (openSeqRef.current.get(tabId) ?? 0) + 1;
       openSeqRef.current.set(tabId, seq);
       patchTab(tabId, { status: 'connecting', error: undefined, errorDetail: undefined });
+      const connectEncoding = tabsRef.current.find((entry) => entry.id === tabId)?.clientEncoding;
       try {
-        const resolved = await resolveTarget(connection);
+        const resolved = await resolveTarget(connection, connectEncoding);
         if (openSeqRef.current.get(tabId) !== seq) return;
         if (resolved.ok !== true) {
           patchTab(tabId, { status: 'error', connected: false, error: resolved.error });
@@ -423,7 +441,7 @@ export function useDatabaseWorkbench(
       if (!connection || connection.readOnly) return false;
       const sql = build(tab);
       if (!sql) return false;
-      const resolved = await resolveTarget(connection);
+      const resolved = await resolveTarget(connection, tab.clientEncoding);
       if (resolved.ok !== true) {
         patchTab(tabId, { error: resolved.error });
         return false;
@@ -536,7 +554,11 @@ export function useDatabaseWorkbench(
   );
 
   const runQuery = useCallback(
-    async (tabId: string, sqlOverride?: string, options?: { maxRows?: number }) => {
+    async (
+      tabId: string,
+      sqlOverride?: string,
+      options?: { maxRows?: number; clientEncoding?: string },
+    ) => {
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
       if (!tab || tab.running) return;
       const sql = (sqlOverride ?? tab.sql).trim();
@@ -555,12 +577,15 @@ export function useDatabaseWorkbench(
         errorDetail: undefined,
         resultSets: undefined,
         activeResultIndex: undefined,
+        executingStatement: null,
       });
       const startedAt = Date.now();
+      const runEncoding = options?.clientEncoding
+        ?? tabsRef.current.find((entry) => entry.id === tabId)?.clientEncoding;
       try {
-        const resolved = await resolveTarget(connection);
+        const resolved = await resolveTarget(connection, runEncoding);
         if (resolved.ok !== true) {
-          patchTab(tabId, { running: false, error: resolved.error });
+          patchTab(tabId, { running: false, executingStatement: null, error: resolved.error });
           return;
         }
         // Statements without their own LIMIT load a full page set so the grid
@@ -569,10 +594,19 @@ export function useDatabaseWorkbench(
 
         if (statements.length === 1) {
           const statement = statements[0];
+          patchTab(tabId, {
+            executingStatement: {
+              index: 1,
+              total: 1,
+              startLine: statement.startLine,
+              endLine: statement.startLine + (statement.sql.match(/\n/g)?.length ?? 0),
+            },
+          });
           const response = await runDatabaseQuery(resolved.target, statement.sql, { maxRows });
           if (response.ok === true && response.result) {
             patchTab(tabId, {
               running: false,
+              executingStatement: null,
               status: 'ready',
               connected: true,
               result: response.result,
@@ -589,6 +623,7 @@ export function useDatabaseWorkbench(
             const bridgeError = response.ok === false ? response.error : undefined;
             patchTab(tabId, {
               running: false,
+              executingStatement: null,
               error: formatDatabaseError(bridgeError),
               errorDetail: bridgeError,
             });
@@ -605,6 +640,14 @@ export function useDatabaseWorkbench(
         let stopReason: string | undefined;
         for (const statement of statements) {
           const statementStartedAt = Date.now();
+          patchTab(tabId, {
+            executingStatement: {
+              index: resultSets.length + 1,
+              total: statements.length,
+              startLine: statement.startLine,
+              endLine: statement.startLine + (statement.sql.match(/\n/g)?.length ?? 0),
+            },
+          });
           const response = await runDatabaseQuery(resolved.target, statement.sql, { maxRows });
           if (response.ok === true && response.result) {
             resultSets.push({
@@ -628,7 +671,7 @@ export function useDatabaseWorkbench(
           stopReason = formatDatabaseError(bridgeError);
           break;
         }
-        patchTab(tabId, { running: false });
+        patchTab(tabId, { running: false, executingStatement: null });
         showResultSet(tabId, resultSets, 0);
         if (stopReason) {
           patchTab(tabId, { error: stopReason, errorDetail: resultSets[resultSets.length - 1]?.errorDetail });
@@ -636,6 +679,7 @@ export function useDatabaseWorkbench(
       } catch (error) {
         patchTab(tabId, {
           running: false,
+          executingStatement: null,
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -658,7 +702,7 @@ export function useDatabaseWorkbench(
       if (!tab) return;
       const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
       if (!connection) return;
-      const resolved = await resolveTarget(connection);
+      const resolved = await resolveTarget(connection, tab.clientEncoding);
       if (resolved.ok !== true) {
         patchTab(tabId, { error: resolved.error });
         return;
@@ -688,6 +732,36 @@ export function useDatabaseWorkbench(
   const rollbackTransaction = useCallback(
     (tabId: string) => controlTransaction(tabId, 'rollback'),
     [controlTransaction],
+  );
+
+  /**
+   * Switches the client charset for one tab: the pooled session is dropped so
+   * the next connection is opened with the new charset, then the current
+   * statement runs again so results are decoded with the new encoding.
+   */
+  const setEncoding = useCallback(
+    async (tabId: string, encoding: string) => {
+      const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (!tab) return;
+      const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
+      patchTab(tabId, {
+        clientEncoding: encoding,
+        status: 'ready',
+        result: undefined,
+        resultSets: undefined,
+        activeResultIndex: undefined,
+        structure: undefined,
+        editMeta: null,
+        error: undefined,
+        errorDetail: undefined,
+      });
+      if (connection) {
+        await closeDatabaseConnection(connection.id).catch(() => undefined);
+      }
+      const sql = tab.sql.trim();
+      if (sql) await runQuery(tabId, sql, { clientEncoding: encoding });
+    },
+    [patchTab, runQuery],
   );
 
   const cancelQuery = useCallback((tabId: string) => {
@@ -824,6 +898,7 @@ export function useDatabaseWorkbench(
     beginTransaction,
     commitTransaction,
     rollbackTransaction,
+    setEncoding,
     cancelQuery,
     reconnect,
     setActiveResultIndex,

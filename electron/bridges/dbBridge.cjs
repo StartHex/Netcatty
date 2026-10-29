@@ -412,6 +412,9 @@ function createMysqlSession(target) {
         dateStrings: false,
         supportBigNumbers: true,
         bigNumberStrings: false,
+        // A client charset on the connection tells both sides how to decode
+        // strings (gbk / gb18030 / big5 / latin1 / utf8mb4, ...).
+        ...(target.clientEncoding ? { charset: target.clientEncoding } : {}),
       });
       connection = instance;
       return instance;
@@ -726,9 +729,16 @@ function createJdbcSession(target) {
       error.code = started.code || "jdbc-unavailable";
       throw error;
     }
+    const extraProps = {
+      ...(target.jdbcProperties ?? {}),
+      ...(target.clientEncoding ? { characterEncoding: target.clientEncoding } : {}),
+    };
     const response = await instance.request("CONNECT", {
       connId,
       url: target.jdbcUrl,
+      ...Object.fromEntries(
+        Object.entries(extraProps).map(([key, value]) => [`prop.${key}`, String(value)]),
+      ),
       user: target.username,
       password: target.password,
       driverClass: target.jdbcDriverClass,

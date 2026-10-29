@@ -2198,3 +2198,11 @@ html[data-theme-transition] *::after {
 @container monitor-main (max-width: 760px) {
   .monitor-header-action-label { display: none; }
 }
+
+/* Statement currently running in a multi-statement script (Database workbench). */
+.sql-running-line {
+  background-color: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+.sql-running-line-gutter {
+  box-shadow: inset 2px 0 0 0 var(--primary);
+}

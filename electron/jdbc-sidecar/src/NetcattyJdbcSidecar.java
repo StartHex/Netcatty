@@ -151,6 +151,14 @@ public final class NetcattyJdbcSidecar {
     Properties properties = new Properties();
     if (user != null) properties.setProperty("user", user);
     if (password != null) properties.setProperty("password", password);
+    // Extra driver properties (characterEncoding, useUnicode, ...) arrive with
+    // a `prop.` prefix so they cannot collide with protocol keys.
+    for (Map.Entry<String, String> entry : params.entrySet()) {
+      String key = entry.getKey();
+      if (key.startsWith("prop.") && key.length() > 5 && entry.getValue() != null) {
+        properties.setProperty(key.substring(5), entry.getValue());
+      }
+    }
     Connection connection = DriverManager.getConnection(url, properties);
     connection.setAutoCommit(true);
     Connection previous = CONNECTIONS.put(connId, connection);

@@ -109,6 +109,12 @@ export interface DatabaseConnection {
   /** Optional JRE home used only by this connection. */
   javaPath?: string;
   jdbcProperties?: Record<string, string>;
+  /**
+   * Client-side text encoding used to decode server strings (`gbk`, `gb18030`,
+   * `big5`, `latin1`, `utf8mb4`, ...). MySQL maps it to the connection charset,
+   * JDBC to the driver `characterEncoding` property.
+   */
+  clientEncoding?: string;
   /** JDBC-only: keep a private in-memory database alive for the session. */
   inMemory?: boolean;
   /** JDBC-only: statements executed right after the connection opens. */
@@ -201,6 +207,7 @@ export interface DbConnectionTarget {
   jdbcDriverPaths?: string[];
   javaPath?: string;
   jdbcProperties?: Record<string, string>;
+  clientEncoding?: string;
   inMemory?: boolean;
   initSql?: string;
   /** Already-resolved SSH jump credentials for this call. */
@@ -283,6 +290,7 @@ export function sanitizeDatabaseConnection(
       : undefined,
     javaPath: NON_EMPTY(input.javaPath),
     jdbcProperties: sanitizeProperties(input.jdbcProperties),
+    clientEncoding: NON_EMPTY(input.clientEncoding),
     inMemory: input.inMemory === true ? true : undefined,
     initSql: NON_EMPTY(input.initSql),
     group: NON_EMPTY(input.group),
@@ -396,6 +404,7 @@ export function databaseConnectionTarget(
     jdbcDriverPaths: connection.jdbcDriverPaths,
     javaPath: connection.javaPath,
     jdbcProperties: connection.jdbcProperties,
+    clientEncoding: connection.clientEncoding,
     inMemory: connection.inMemory,
     initSql: connection.initSql,
   };
