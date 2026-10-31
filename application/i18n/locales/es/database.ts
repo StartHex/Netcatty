@@ -206,6 +206,8 @@ export const esDatabaseMessages: Messages = {
   'databases.workbench.exportCsv': 'Exportar CSV',
   'databases.workbench.format': 'Formatear SQL',
   'databases.workbench.reconnect': 'Reconectar',
+  'databases.workbench.connectionLost': 'Conexión perdida',
+  'databases.workbench.connectionLostHint': 'La sesión estuvo inactiva un minuto y ya no responde. Vuelve a conectar para continuar.',
   'databases.workbench.editorLabel': 'Editor SQL',
   'databases.workbench.placeholder': 'SELECT * FROM table LIMIT 100;',
   'databases.workbench.connecting': 'Conectando a la base de datos…',

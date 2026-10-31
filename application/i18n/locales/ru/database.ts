@@ -206,6 +206,8 @@ export const ruDatabaseMessages: Messages = {
   'databases.workbench.exportCsv': 'Экспорт CSV',
   'databases.workbench.format': 'Форматировать SQL',
   'databases.workbench.reconnect': 'Переподключиться',
+  'databases.workbench.connectionLost': 'Соединение потеряно',
+  'databases.workbench.connectionLostHint': 'Сессия простаивала минуту и больше не отвечает. Переподключитесь, чтобы продолжить.',
   'databases.workbench.editorLabel': 'Редактор SQL',
   'databases.workbench.placeholder': 'SELECT * FROM table LIMIT 100;',
   'databases.workbench.connecting': 'Подключение к базе данных…',

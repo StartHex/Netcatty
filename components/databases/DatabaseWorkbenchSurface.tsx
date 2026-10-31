@@ -122,6 +122,9 @@ function StatusDot({ tab }: { tab: DatabaseTab }) {
   if (tab.status === 'error' || !tab.connected) {
     return <span className="h-1.5 w-1.5 rounded-full bg-destructive" />;
   }
+  if (tab.offline) {
+    return <span className="h-1.5 w-1.5 rounded-full bg-amber-500" title="offline" />;
+  }
   return <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />;
 }
 
@@ -180,6 +183,15 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
   const [matchCursor, setMatchCursor] = useState(0);
   const [highlight, setHighlight] = useState<{ sourceIndex: number; columnIndex: number } | null>(null);
   const { writeClipboardText } = useClipboardBackend();
+
+  // Search / sort / selection are per tab: switching tabs starts clean so a
+  // filter in one database cannot leak into every other tab.
+  useEffect(() => {
+    setSearchQuery('');
+    setSelectedColumns([]);
+    setMatchCursor(0);
+    setHighlight(null);
+  }, [tab.id]);
 
   const executeSql = useCallback(
     (sqlOverride: string | undefined) => {
@@ -742,15 +754,17 @@ const DatabaseTabPane: React.FC<DatabaseTabPaneProps> = ({
           ))}
         </PopoverContent>
       </Popover>
-      {tab.status === 'error' ? (
+      {tab.status === 'error' || tab.offline ? (
         <Button
           size="sm"
-          variant="outline"
+          variant={tab.offline && tab.status !== 'error' ? 'default' : 'outline'}
           className="h-7 text-xs"
           onClick={() => void workbench.reconnect(tab.id)}
         >
           <RotateCw className="mr-1 h-3 w-3" />
-          {t('databases.workbench.reconnect')}
+          {tab.offline && tab.status !== 'error'
+            ? t('databases.workbench.connectionLost')
+            : t('databases.workbench.reconnect')}
         </Button>
       ) : null}
       {headerActions ? <div className="ml-auto flex items-center gap-1">{headerActions}</div> : null}
@@ -1462,6 +1476,9 @@ interface SchemaPanelProps {
 
 const SchemaPanel: React.FC<SchemaPanelProps> = ({ tab, width, onRefresh, onPreview, onShowStructure, t }) => {
   const [tableQuery, setTableQuery] = useState('');
+  useEffect(() => {
+    setTableQuery('');
+  }, [tab.id]);
   const visibleTables = useMemo(() => filterTables(tab.tables ?? [], tableQuery), [tab.tables, tableQuery]);
   const grouped = useMemo(() => {
     const map = new Map<string, DbTableRef[]>();
@@ -1573,6 +1590,9 @@ interface StructurePanelProps {
 const StructurePanel: React.FC<StructurePanelProps> = ({ structure, onClose, onPreview, t }) => {
   const { table, columns, loading, error } = structure;
   const [columnQuery, setColumnQuery] = useState('');
+  useEffect(() => {
+    setColumnQuery('');
+  }, [table.schema, table.name]);
   const visibleColumns = useMemo(
     () => filterTables(columns, columnQuery),
     [columns, columnQuery],

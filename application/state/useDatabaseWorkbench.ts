@@ -9,6 +9,11 @@ import type { DatabaseConnection, DbQueryResult } from '../../domain/models';
 import { buildTablePreviewSql } from '../../domain/database/tablePreview';
 import { splitSqlStatements } from '../../domain/database/sqlStatements';
 import {
+  CONNECTION_PROBE_INTERVAL_MS,
+  CONNECTION_IDLE_PROBE_MS,
+  connectivityProbeSql,
+} from '../../domain/database/probe';
+import {
   buildDeleteStatement,
   buildUpdateStatement,
   canEditRows,
@@ -74,6 +79,8 @@ export interface DatabaseTab {
   editMeta?: { target: EditTarget; columns: DbColumnInfo[] } | null;
   /** Per-tab charset override, applied on top of the connection setting. */
   clientEncoding?: string;
+  /** Set when the idle connectivity probe failed: the session is probably dead. */
+  offline?: boolean;
   /** Multi-statement runs expose which statement is on the wire right now. */
   executingStatement?: { index: number; total: number; startLine: number; endLine: number } | null;
   /**
@@ -154,6 +161,14 @@ export function useDatabaseWorkbench(
   const [tabs, setTabs] = useState<DatabaseTab[]>([]);
   const [activeTabId, setActiveTabIdState] = useState<string | null>(null);
   const tabsRef = useRef<DatabaseTab[]>(tabs);
+
+  const lastActivityRef = useRef(new Map<string, number>());
+  const probingRef = useRef(new Set<string>());
+
+  const touchActivity = useCallback((connectionId: string) => {
+    lastActivityRef.current.set(connectionId, Date.now());
+  }, []);
+
   const connectionsRef = useRef<DatabaseConnection[]>(connections);
   const openSeqRef = useRef(new Map<string, number>());
   tabsRef.current = tabs;
@@ -229,19 +244,26 @@ export function useDatabaseWorkbench(
   const refreshTables = useCallback(
     async (tabId: string) => {
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
+      if (tab) {
+        touchActivity(tab.connectionId);
+        patchTab(tabId, { offline: false });
+      }
       if (!tab) return;
       const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
       if (!connection) return;
       await loadTables(tabId, connection);
     },
-    [loadTables],
+    [loadTables, patchTab, touchActivity],
   );
 
   const previewTable = useCallback(
     async (tabId: string, table: DbTableRef) => {
       const activeTab = tabsRef.current.find((entry) => entry.id === tabId);
       const sql = buildTablePreviewSql(activeTab?.kind, table, activeTab?.maxRows ?? 1000);
-      patchTab(tabId, { sql });
+      // Append the generated statement instead of replacing whatever the user
+      // already wrote; only the new statement runs.
+      const existing = (activeTab?.sql ?? '').replace(/\s+$/, '');
+      patchTab(tabId, { sql: existing ? `${existing}\n\n${sql}` : sql });
       if (!activeTab) return;
       const connection = connectionsRef.current.find((entry) => entry.id === activeTab.connectionId);
       if (!connection) return;
@@ -553,6 +575,42 @@ export function useDatabaseWorkbench(
     [patchTab],
   );
 
+  // A dropped VPN or a server-side idle timeout leaves the pooled session dead
+  // without telling us. Probe idle connections so the tab can show "offline"
+  // before the next query fails.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      for (const tab of tabsRef.current) {
+        if (tab.running || probingRef.current.has(tab.connectionId)) continue;
+        const last = lastActivityRef.current.get(tab.connectionId) ?? now;
+        if (now - last < CONNECTION_IDLE_PROBE_MS) continue;
+        const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
+        if (!connection) continue;
+        probingRef.current.add(tab.connectionId);
+        void (async () => {
+          try {
+            const resolved = await resolveTarget(connection, tab.clientEncoding);
+            if (resolved.ok !== true) {
+              patchTab(tab.id, { offline: true });
+              return;
+            }
+            const response = await runDatabaseQuery(resolved.target, connectivityProbeSql(tab.kind), {
+              maxRows: 1,
+            });
+            patchTab(tab.id, { offline: response.ok !== true });
+          } catch {
+            patchTab(tab.id, { offline: true });
+          } finally {
+            probingRef.current.delete(tab.connectionId);
+            lastActivityRef.current.set(tab.connectionId, Date.now());
+          }
+        })();
+      }
+    }, CONNECTION_PROBE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [patchTab, resolveTarget]);
+
   const runQuery = useCallback(
     async (
       tabId: string,
@@ -561,6 +619,8 @@ export function useDatabaseWorkbench(
     ) => {
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
       if (!tab || tab.running) return;
+      touchActivity(tab.connectionId);
+      if (tab.offline) patchTab(tabId, { offline: false });
       const sql = (sqlOverride ?? tab.sql).trim();
       if (!sql) return;
       const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
@@ -684,7 +744,7 @@ export function useDatabaseWorkbench(
         });
       }
     },
-    [patchTab, resolveEditMeta, resolveTarget, showResultSet],
+    [patchTab, resolveEditMeta, resolveTarget, showResultSet, touchActivity],
   );
 
   const setActiveResultIndex = useCallback(
@@ -700,6 +760,7 @@ export function useDatabaseWorkbench(
     async (tabId: string, action: 'begin' | 'commit' | 'rollback') => {
       const tab = tabsRef.current.find((entry) => entry.id === tabId);
       if (!tab) return;
+      touchActivity(tab.connectionId);
       const connection = connectionsRef.current.find((entry) => entry.id === tab.connectionId);
       if (!connection) return;
       const resolved = await resolveTarget(connection, tab.clientEncoding);
@@ -718,7 +779,7 @@ export function useDatabaseWorkbench(
         errorDetail: undefined,
       });
     },
-    [patchTab, resolveTarget],
+    [patchTab, resolveTarget, touchActivity],
   );
 
   const beginTransaction = useCallback(

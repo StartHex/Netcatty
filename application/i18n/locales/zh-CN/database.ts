@@ -206,6 +206,8 @@ export const zhCNDatabaseMessages: Messages = {
   'databases.workbench.exportCsv': '导出 CSV',
   'databases.workbench.format': '格式化 SQL',
   'databases.workbench.reconnect': '重新连接',
+  'databases.workbench.connectionLost': '连接已断开',
+  'databases.workbench.connectionLostHint': '会话空闲一分钟后已无响应，请重新连接后继续操作。',
   'databases.workbench.editorLabel': 'SQL 编辑器',
   'databases.workbench.placeholder': 'SELECT * FROM table LIMIT 100;',
   'databases.workbench.connecting': '正在连接数据库…',
