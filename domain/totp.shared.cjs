@@ -285,7 +285,7 @@ function pickOtpMenuChoice(promptText) {
   const lines = promptText.split(/\r?\n/);
   let best = null;
   for (const line of lines) {
-    const match = /^\s*[\[(]?(\d{1,2})[\]).:-]?\s+(.+)$/.exec(line);
+    const match = /^\s*(?:\[|\()?(\d{1,2})(?:\]|\)|\.|:|-)?\s+(.+)$/.exec(line);
     if (!match) continue;
     const label = match[2].trim();
     if (!label) continue;
