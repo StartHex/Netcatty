@@ -33,7 +33,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { format as formatSqlText } from 'sql-formatter';
 import { useI18n } from '../../application/i18n/I18nProvider';
@@ -1687,6 +1687,160 @@ interface ResultGridProps {
 }
 
 const ACTION_COLUMN_WIDTH = 32;
+interface ResultRowProps {
+  row: { cells: DbCellValue[]; sourceIndex: number };
+  /** 1-based number shown in the pinned gutter. */
+  rowNumber: number;
+  striped: boolean;
+  template: string;
+  editable: boolean;
+  saving: boolean;
+  selectedColumns: readonly number[];
+  /** Pending edit for this row only, so other rows keep a stable prop set. */
+  editing: { sourceIndex: number; cell: number; draft: string } | null;
+  highlight: { sourceIndex: number; columnIndex: number } | null;
+  t: ReturnType<typeof useI18n>['t'];
+  onDelete: (sourceIndex: number) => void;
+  onCopyCell: (text: string) => void;
+  onPreview: (columnIndex: number, text: string) => void;
+  onOpenMenu: (payload: { x: number; y: number; columnIndex: number; sourceIndex: number }) => void;
+  onBeginEdit: (sourceIndex: number, cell: number, draft: string) => void;
+  onEditDraft: (draft: string) => void;
+  onCommitEdit: () => void;
+  onCancelEdit: () => void;
+}
+
+// Memoised so wheel scrolling only re-diffs rows entering/leaving the window
+// instead of every visible cell.
+const ResultRow = memo(function ResultRow(props: ResultRowProps) {
+  const {
+    row,
+    rowNumber,
+    striped,
+    template,
+    editable,
+    saving,
+    selectedColumns,
+    editing,
+    highlight,
+    t,
+    onDelete,
+    onCopyCell,
+    onPreview,
+    onOpenMenu,
+    onBeginEdit,
+    onEditDraft,
+    onCommitEdit,
+    onCancelEdit,
+  } = props;
+  return (
+        <div
+          className={cn(
+            'group grid h-7 items-center text-xs',
+            striped ? 'bg-secondary/20' : 'bg-transparent',
+          )}
+          style={{ gridTemplateColumns: template }}
+        >
+          <div className="select-none px-2 text-right text-[11px] tabular-nums text-muted-foreground/60">
+            {rowNumber}
+          </div>
+          {editable ? (
+            <div className="flex items-center justify-center">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-5 w-5 p-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                aria-label={t('databases.workbench.deleteRow')}
+                disabled={saving}
+                onClick={() => onDelete(row.sourceIndex)}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ) : null}
+          {row.cells.map((value, cellIndex) => {
+            const isEditing =
+              editing?.cell === cellIndex;
+            const isMatch =
+              highlight?.sourceIndex === row.sourceIndex && highlight?.columnIndex === cellIndex;
+            if (isEditing) {
+              return (
+                <input
+                  key={cellIndex}
+                  autoFocus
+                  className="h-6 w-full rounded border border-primary/60 bg-background px-2 font-mono text-xs outline-none"
+                  value={editing?.draft ?? ''}
+                  disabled={saving}
+                  onChange={(event) => onEditDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      onCommitEdit();
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault();
+                      onCancelEdit();
+                    }
+                  }}
+                  onBlur={onCommitEdit}
+                />
+              );
+            }
+            const text = cellText(value);
+            // Any non-empty cell can be previewed; long values just need it most.
+            const canPreview = value !== null && value !== undefined;
+            return (
+              <div
+                key={cellIndex}
+                className={cn(
+                  'group/cell relative truncate px-3 font-mono',
+                  canPreview && 'pr-7',
+                  value !== null && 'cursor-pointer hover:bg-secondary/40',
+                  value === null && 'italic text-muted-foreground/70',
+                  typeof value === 'number' && 'text-right tabular-nums',
+                  selectedColumns.includes(cellIndex) && 'bg-primary/5',
+                  isMatch && 'bg-amber-400/30 ring-1 ring-inset ring-amber-500/70',
+                )}
+                title={text}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onOpenMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    columnIndex: cellIndex,
+                    sourceIndex: row.sourceIndex,
+                  });
+                }}
+                onDoubleClick={() => {
+                  if (!editable || saving) return;
+                  onBeginEdit(row.sourceIndex, cellIndex, cellText(value));
+                }}
+                onClick={() => {
+                  if (value === null) return;
+                  onCopyCell(String(value));
+                }}
+              >
+                {text}
+                {canPreview ? (
+                  <button
+                    type="button"
+                    aria-label={t('databases.workbench.previewCell')}
+                    title={t('databases.workbench.previewCell')}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-background/80 p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/cell:opacity-100"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPreview(cellIndex, text);
+                    }}
+                  >
+                    <Eye className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+  );
+});
+
 const ROW_NUMBER_WIDTH = 44;
 const ROW_NUMBER_ITEM_HEIGHT = 28;
 // The gutter mirrors the list viewport; render a generous window and clip it.
@@ -1716,7 +1870,74 @@ const ResultGrid: React.FC<ResultGridProps> = ({
   const [editing, setEditing] = useState<{ sourceIndex: number; cell: number; draft: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ sourceIndex: number } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [listScrollTop, setListScrollTop] = useState(0);
+  // Row props must stay referentially stable or the memoised rows re-render on
+  // every scroll tick.
+  const commitEditRef = useRef<() => void>(() => {});
+  const handleDeleteRow = useCallback((sourceIndex: number) => {
+    setPendingDelete({ sourceIndex });
+  }, []);
+  const handleCopyCell = useCallback((text: string) => {
+    onCopyCell?.(text);
+  }, [onCopyCell]);
+  const noopCopyCell = useCallback(() => {}, []);
+  const handlePreviewCell = useCallback((columnIndex: number, value: string) => {
+    setPreview({ columnIndex, value });
+  }, []);
+  const handleOpenMenu = useCallback(
+    (payload: { x: number; y: number; columnIndex: number; sourceIndex: number }) => {
+      setMenu(payload);
+    },
+    [],
+  );
+  const handleBeginEdit = useCallback((sourceIndex: number, cell: number, draft: string) => {
+    setEditing({ sourceIndex, cell, draft });
+  }, []);
+  const handleEditDraft = useCallback((draft: string) => {
+    setEditing((prev) => (prev ? { ...prev, draft } : prev));
+  }, []);
+  const handleCommitEdit = useCallback(() => {
+    commitEditRef.current();
+  }, []);
+  const handleCancelEdit = useCallback(() => {
+    setEditing(null);
+  }, []);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
+  const gutterFrameRef = useRef<number | null>(null);
+  const gutterTopRef = useRef(0);
+  const gutterMetaRef = useRef({ start: 0, count: 0 });
+  const gutterFirstRef = useRef(Number.NaN);
+  gutterMetaRef.current = { start: rowNumberStart, count: rows.length };
+
+  // The gutter is refreshed imperatively: a React render per scroll frame would
+  // re-diff every visible cell and make wheel scrolling feel heavy.
+  const handleListScroll = useCallback((scrollTop: number) => {
+    gutterTopRef.current = scrollTop;
+    if (gutterFrameRef.current !== null) return;
+    gutterFrameRef.current = window.requestAnimationFrame(() => {
+      gutterFrameRef.current = null;
+      const host = gutterRef.current;
+      if (!host) return;
+      const top = gutterTopRef.current;
+      const { start, count } = gutterMetaRef.current;
+      const first = Math.floor(top / ROW_NUMBER_ITEM_HEIGHT);
+      // Fixed child offsets + one transform keeps this to a single style write
+      // per frame; the labels are only rewritten when a row crosses the edge.
+      host.style.transform = `translateY(${first * ROW_NUMBER_ITEM_HEIGHT - top}px)`;
+      if (first === gutterFirstRef.current) return;
+      gutterFirstRef.current = first;
+      for (let offset = 0; offset < ROW_NUMBER_WINDOW; offset += 1) {
+        const node = host.children[offset] as HTMLElement | undefined;
+        if (!node) continue;
+        const index = first + offset;
+        const label = index >= 0 && index < count ? String(start + index + 1) : '';
+        if (node.textContent !== label) node.textContent = label;
+      }
+    });
+  }, []);
+
+  useEffect(() => () => {
+    if (gutterFrameRef.current !== null) window.cancelAnimationFrame(gutterFrameRef.current);
+  }, []);
   const [menu, setMenu] = useState<
     { x: number; y: number; columnIndex: number | null; sourceIndex: number | null } | null
   >(null);
@@ -1801,6 +2022,10 @@ const ResultGrid: React.FC<ResultGridProps> = ({
       onCopyColumns?.([]);
     }
     setMenu(null);
+  };
+
+  commitEditRef.current = () => {
+    void commitEdit();
   };
 
   const commitDelete = async () => {
@@ -1939,114 +2164,30 @@ const ResultGrid: React.FC<ResultGridProps> = ({
             ref={listRef}
             items={rows as { cells: DbCellValue[]; sourceIndex: number }[]}
             itemHeight={ROW_NUMBER_ITEM_HEIGHT}
-            onScroll={setListScrollTop}
+            onScroll={handleListScroll}
             className="min-h-0 flex-1"
             getItemKey={(_row, index) => String(index)}
             renderItem={(row, rowIndex) => (
-              <div
-                className={cn(
-                  'group grid h-7 items-center text-xs',
-                  rowIndex % 2 === 1 ? 'bg-secondary/20' : 'bg-transparent',
-                )}
-                style={{ gridTemplateColumns: template }}
-              >
-                <div className="select-none px-2 text-right text-[11px] tabular-nums text-muted-foreground/60">
-                  {rowNumberStart + rowIndex + 1}
-                </div>
-                {editable ? (
-                  <div className="flex items-center justify-center">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-5 w-5 p-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                      aria-label={t('databases.workbench.deleteRow')}
-                      disabled={saving}
-                      onClick={() => setPendingDelete({ sourceIndex: row.sourceIndex })}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ) : null}
-                {row.cells.map((value, cellIndex) => {
-                  const isEditing =
-                    editing?.sourceIndex === row.sourceIndex && editing?.cell === cellIndex;
-                  const isMatch =
-                    highlight?.sourceIndex === row.sourceIndex && highlight?.columnIndex === cellIndex;
-                  if (isEditing) {
-                    return (
-                      <input
-                        key={cellIndex}
-                        autoFocus
-                        className="h-6 w-full rounded border border-primary/60 bg-background px-2 font-mono text-xs outline-none"
-                        value={editing!.draft}
-                        disabled={saving}
-                        onChange={(event) => setEditing({ ...editing!, draft: event.target.value })}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            void commitEdit();
-                          } else if (event.key === 'Escape') {
-                            event.preventDefault();
-                            setEditing(null);
-                          }
-                        }}
-                        onBlur={() => void commitEdit()}
-                      />
-                    );
-                  }
-                  const text = cellText(value);
-                  // Any non-empty cell can be previewed; long values just need it most.
-                  const canPreview = value !== null && value !== undefined;
-                  return (
-                    <div
-                      key={cellIndex}
-                      className={cn(
-                        'group/cell relative truncate px-3 font-mono',
-                        canPreview && 'pr-7',
-                        value !== null && 'cursor-pointer hover:bg-secondary/40',
-                        value === null && 'italic text-muted-foreground/70',
-                        typeof value === 'number' && 'text-right tabular-nums',
-                        selectedColumns.includes(cellIndex) && 'bg-primary/5',
-                        isMatch && 'bg-amber-400/30 ring-1 ring-inset ring-amber-500/70',
-                      )}
-                      title={text}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        setMenu({
-                          x: event.clientX,
-                          y: event.clientY,
-                          columnIndex: cellIndex,
-                          sourceIndex: row.sourceIndex,
-                        });
-                      }}
-                      onDoubleClick={() => {
-                        if (!editable || !onUpdateCell || saving) return;
-                        setEditing({ sourceIndex: row.sourceIndex, cell: cellIndex, draft: cellText(value) });
-                      }}
-                      onClick={() => {
-                        if (value === null) return;
-                        onCopyCell?.(String(value));
-                      }}
-                    >
-                      {text}
-                      {canPreview ? (
-                        <button
-                          type="button"
-                          aria-label={t('databases.workbench.previewCell')}
-                          title={t('databases.workbench.previewCell')}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-background/80 p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/cell:opacity-100"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setPreview({ columnIndex: cellIndex, value: text });
-                          }}
-                        >
-                          <Eye className="h-3 w-3" />
-                        </button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
+              <ResultRow
+                row={row}
+                rowNumber={rowNumberStart + rowIndex + 1}
+                striped={rowIndex % 2 === 1}
+                template={template}
+                editable={editable}
+                saving={saving}
+                selectedColumns={selectedColumns}
+                editing={editing?.sourceIndex === row.sourceIndex ? editing : null}
+                highlight={highlight}
+                t={t}
+                onDelete={handleDeleteRow}
+                onCopyCell={onCopyCell ? handleCopyCell : noopCopyCell}
+                onPreview={handlePreviewCell}
+                onOpenMenu={handleOpenMenu}
+                onBeginEdit={handleBeginEdit}
+                onEditDraft={handleEditDraft}
+                onCommitEdit={handleCommitEdit}
+                onCancelEdit={handleCancelEdit}
+              />
             )}
           />
         </div>
@@ -2054,23 +2195,19 @@ const ResultGrid: React.FC<ResultGridProps> = ({
         <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-11 border-r border-border/60 bg-background">
           <div className="h-7 border-b border-border/60 bg-secondary/60" />
           <div className="relative h-[calc(100%-1.75rem)] overflow-hidden">
-            {Array.from({ length: ROW_NUMBER_WINDOW }, (_unused, offset) => {
-              const visibleIndex = Math.floor(listScrollTop / ROW_NUMBER_ITEM_HEIGHT) + offset;
-              if (visibleIndex < 0 || visibleIndex >= rows.length) return null;
-              return (
+            <div ref={gutterRef} className="absolute inset-0">
+              {Array.from({ length: ROW_NUMBER_WINDOW }, (_unused, offset) => (
                 <div
-                  key={visibleIndex}
+                  key={offset}
                   className="absolute left-0 right-0 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/60"
                   style={{
-                    top: visibleIndex * ROW_NUMBER_ITEM_HEIGHT - listScrollTop,
+                    top: offset * ROW_NUMBER_ITEM_HEIGHT,
                     height: ROW_NUMBER_ITEM_HEIGHT,
                     lineHeight: `${ROW_NUMBER_ITEM_HEIGHT}px`,
                   }}
-                >
-                  {rowNumberStart + visibleIndex + 1}
-                </div>
-              );
-            })}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>

@@ -110,9 +110,23 @@ function FixedSizeVirtualListInner<T>(
     },
   }), [itemHeight, items.length, onScroll]);
 
+  // Wheel bursts fire many scroll events per frame; coalesce them so React
+  // renders at most once per animation frame.
+  const frameRef = useRef<number | null>(null);
+  const pendingTopRef = useRef(0);
+  useEffect(() => () => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+  }, []);
+
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(event.currentTarget.scrollTop);
-    onScroll?.(event.currentTarget.scrollTop);
+    const top = event.currentTarget.scrollTop;
+    onScroll?.(top);
+    pendingTopRef.current = top;
+    if (frameRef.current !== null) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null;
+      setScrollTop(pendingTopRef.current);
+    });
   }, [onScroll]);
 
   return (
